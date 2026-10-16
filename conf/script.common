@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+#
+# Script contains generic routines to use in the other scripts.
+#
+# List of environment variables used by script (variables may be specified
+# in the file 'conf/env.<tester_configuration_name>' or by hands):
+#
+#  SCRIPT_VERBOSE=y[es]     Setup this option to make the scripts more verbose
+#
+
+
+# Print warning message.
+print_warning()
+{
+    if test "x${SCRIPT_VERBOSE}" = "xy" ||
+       test "x${SCRIPT_VERBOSE}" = "xyes" ; then
+        echo "WARNING: $@"
+    fi
+}
+
+# Print informative message.
+print_info()
+{
+    if test "x${SCRIPT_VERBOSE}" = "xy" ||
+       test "x${SCRIPT_VERBOSE}" = "xyes" ; then
+        echo "INFO: $@"
+    fi
+}
+
+# Print error message.
+print_error()
+{
+    echo "ERROR: $@" >&2
+}
+
+fail() {
+    echo -e "$@" >&2
+    exit 1
+}
+
+trim_cfg_name() {
+    # Get a configuration name without any test specific suffixes
+    local suffixes=(
+        # the order does matter
+        "-eth"
+        "-adsl"
+        "-vdsl"
+        "-mptcp"
+        "_o2"
+    )
+    local name="$1"
+
+    for s in ${suffixes[@]} ; do
+        name=${name%${s}}
+    done
+
+    echo "${name}"
+}
+
+# Define terminal text attributes
+ts_common_init_text_format_attributes() {
+    local ncolors
+
+    # Check if stdout (fd=1) is opened on a terminal
+    test -t 1 || return
+
+    # About terminal capabilities see "man 5 terminfo"
+    # Get maximum number of colors on screen
+    ncolors=$(tput colors)
+
+    if test -n "${ncolors}" && test ${ncolors} -ge 8; then
+        # Reset text format to defaults
+        TFORMAT_RESET="$(tput sgr0)"
+
+        # Text formats
+        TFORMAT_BOLD="$(tput bold)"
+        TFORMAT_UNDERLINE="$(tput smul)"
+        TFORMAT_STANDOUT="$(tput smso)"
+
+        # Text colors
+        TFORMAT_FG_BLACK="$(tput setaf 0)"
+        TFORMAT_FG_RED="$(tput setaf 1)"
+        TFORMAT_FG_GREEN="$(tput setaf 2)"
+        TFORMAT_FG_YELLOW="$(tput setaf 3)"
+        TFORMAT_FG_BLUE="$(tput setaf 4)"
+        TFORMAT_FG_MAGENTA="$(tput setaf 5)"
+        TFORMAT_FG_CYAN="$(tput setaf 6)"
+        TFORMAT_FG_WHITE="$(tput setaf 7)"
+
+        # Background colors
+        TFORMAT_BG_BLACK="$(tput setab 0)"
+        TFORMAT_BG_RED="$(tput setab 1)"
+        TFORMAT_BG_GREEN="$(tput setab 2)"
+        TFORMAT_BG_YELLOW="$(tput setab 3)"
+        TFORMAT_BG_BLUE="$(tput setab 4)"
+        TFORMAT_BG_MAGENTA="$(tput setab 5)"
+        TFORMAT_BG_CYAN="$(tput setab 6)"
+        TFORMAT_BG_WHITE="$(tput setab 7)"
+    fi
+}
+
+#
+# Print a file on the standard output and higlight all inclusions of "warning"s
+# in yellow and "error"s in red (case-insensitive)
+#
+# @param filepath       File to be printed (usually build log)
+#
+ts_common_highlight_errors() {
+    test -f "$1" || return
+
+    echo -e "\n${TFORMAT_FG_GREEN}$(basename "$1")${TFORMAT_RESET}"
+    cat "$1" |
+    sed -e "
+        s/ERROR/${TFORMAT_BOLD}${TFORMAT_FG_RED}&${TFORMAT_RESET}/gi
+        s/WARNING/${TFORMAT_BOLD}${TFORMAT_FG_YELLOW}&${TFORMAT_RESET}/gi
+    "
+}

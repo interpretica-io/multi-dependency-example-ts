@@ -1,0 +1,14 @@
+---
+- include:
+    - cm_base.yml
+    - cm_net.yml
+    - cm_process.yml
+    - cm_local.yml
+    - cm_volatile.yml
+    - cm_l4_port.yml
+    - cm_sys.yml
+    - cm_system.yml
+
+- include:
+    - cs.conf.local
+    - cs.conf.volatile

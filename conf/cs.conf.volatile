@@ -1,0 +1,10 @@
+---
+# - include:
+#     - cm_volatile.yml
+
+- add:
+    - oid: "/volatile:"
+
+- set:
+    - oid: "/volatile:/sockaddr_port:"
+      value: "0"

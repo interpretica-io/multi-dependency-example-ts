@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<trc_db unknown_exp_status="passed_ok">
+  <test name="multi-dependency-example-ts" type="package">
+    <objective>Multi-dependency Example Test Suite</objective>
+    <notes />
+    <iter result="PASSED">
+      <notes />
+      <test name="prologue" type="script">
+        <objective>Test suite prologue</objective>
+        <notes />
+        <iter result="PASSED">
+          <notes />
+        </iter>
+      </test>
+
+      <test name="ring" type="package">
+        <objective>Ring tests</objective>
+        <notes />
+        <iter result="PASSED">
+          <notes />
+          <test name="prologue" type="script">
+            <objective>Ring group prologue</objective>
+            <notes />
+            <iter result="PASSED"><notes /></iter>
+          </test>
+
+          <test name="propagation" type="script">
+            <objective>Ring propagation</objective>
+            <notes>
+              Known issue: the example ships with an always-true defect in
+              every stage, so the value stops after the first stage (1 instead
+              of hops+1). Fix the defects and these flip to PASSED.
+            </notes>
+            <iter result="FAILED">
+              <arg name="entry">cpp</arg>
+              <arg name="hops">5</arg>
+              <notes />
+              <results><result value="FAILED">
+                <verdict>Ring propagated through 1 stage(s), expected 6</verdict>
+              </result></results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">cpp</arg>
+              <arg name="hops">7</arg>
+              <notes />
+              <results><result value="FAILED">
+                <verdict>Ring propagated through 1 stage(s), expected 8</verdict>
+              </result></results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">5</arg>
+              <notes />
+              <results><result value="FAILED">
+                <verdict>Ring propagated through 1 stage(s), expected 6</verdict>
+              </result></results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">7</arg>
+              <notes />
+              <results><result value="FAILED">
+                <verdict>Ring propagated through 1 stage(s), expected 8</verdict>
+              </result></results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">5</arg>
+              <notes />
+              <results><result value="FAILED">
+                <verdict>Ring propagated through 1 stage(s), expected 6</verdict>
+              </result></results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">7</arg>
+              <notes />
+              <results><result value="FAILED">
+                <verdict>Ring propagated through 1 stage(s), expected 8</verdict>
+              </result></results>
+            </iter>
+          </test>
+
+          <test name="reference" type="script">
+            <objective>Ring reference result</objective>
+            <notes>
+              Known issue: the defect returns the first stage's value (~2.6)
+              instead of the full-ring result 20.0735.
+            </notes>
+            <iter result="FAILED">
+              <notes />
+              <results><result value="FAILED">
+                <verdict>Ring result 2.6000, expected 20.0735 (value=1, hops=7)</verdict>
+              </result></results>
+            </iter>
+          </test>
+
+          <test name="epilogue" type="script">
+            <objective>Ring group epilogue</objective>
+            <notes />
+            <iter result="PASSED"><notes /></iter>
+          </test>
+        </iter>
+      </test>
+
+      <test name="web" type="package">
+        <objective>Web tier tests</objective>
+        <notes />
+        <iter result="PASSED">
+          <notes />
+          <test name="prologue" type="script">
+            <objective>Web group prologue</objective>
+            <notes />
+            <iter result="PASSED"><notes /></iter>
+          </test>
+
+          <test name="cycle" type="script">
+            <objective>Web cycle</objective>
+            <notes>
+              Known issue: each node's forward() has an always-true defect, so
+              the request stops at the first node (1 instead of hops+1).
+            </notes>
+            <iter result="FAILED">
+              <arg name="hops">3</arg>
+              <notes />
+              <results><result value="FAILED">
+                <verdict>Web ring propagated through 1 node step(s), expected 4</verdict>
+              </result></results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="hops">5</arg>
+              <notes />
+              <results><result value="FAILED">
+                <verdict>Web ring propagated through 1 node step(s), expected 6</verdict>
+              </result></results>
+            </iter>
+          </test>
+
+          <test name="epilogue" type="script">
+            <objective>Web group epilogue</objective>
+            <notes />
+            <iter result="PASSED"><notes /></iter>
+          </test>
+        </iter>
+      </test>
+
+      <test name="graph" type="package">
+        <objective>Graph tests</objective>
+        <notes />
+        <iter result="PASSED">
+          <notes />
+          <test name="prologue" type="script">
+            <objective>Graph group prologue</objective>
+            <notes />
+            <iter result="PASSED"><notes /></iter>
+          </test>
+
+          <test name="links" type="script">
+            <objective>Graph links</objective>
+            <notes>
+              Linkage is a property of the build, not the arithmetic, so these
+              pass on the as-shipped example (and skip where otool/nm are not
+              available).
+            </notes>
+            <iter result="PASSED">
+              <arg name="relation">rust</arg>
+              <notes />
+            </iter>
+            <iter result="PASSED">
+              <arg name="relation">cpp</arg>
+              <notes />
+            </iter>
+            <iter result="PASSED">
+              <arg name="relation">go-undef</arg>
+              <notes />
+            </iter>
+          </test>
+
+          <test name="epilogue" type="script">
+            <objective>Graph group epilogue</objective>
+            <notes />
+            <iter result="PASSED"><notes /></iter>
+          </test>
+        </iter>
+      </test>
+
+      <test name="epilogue" type="script">
+        <objective>Test suite epilogue</objective>
+        <notes />
+        <iter result="PASSED">
+          <notes />
+        </iter>
+      </test>
+    </iter>
+  </test>
+</trc_db>

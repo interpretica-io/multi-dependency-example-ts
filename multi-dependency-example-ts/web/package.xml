@@ -1,0 +1,96 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>Web tier tests</description>
+
+    <!-- @page mde-web Web Tier Tests
+          @objective Drive the HTTP web tier (gateway-rs/service-go/service-cs)
+                     and verify a request walks the whole cycle.
+
+          @par Test Groups:
+          - @ref mde-web-cycle - one request through the HTTP cycle
+
+          @par Notes:
+          - The three services call each other in a cycle over HTTP on ports
+            8081/8082/8083 (web/contract/services.tab). The gateway is the
+            entry point and the request comes back around to it.
+          - Correct code traces hops+1 node steps in the response body; the
+            injected defect in each node's forward() stops after the first.
+    -->
+
+    <author mailto="maximmenshchikov@gmail.com" />
+
+    <session track_conf="silent">
+        <!-- @page mde-web-prologue Web Group Prologue
+              @objective Prepare the web group.
+
+              @par Scenario:
+              -# No special setup is required.
+        -->
+        <prologue>
+            <script name="prologue">
+                <objective>
+                    Prepare the web group.
+
+                    @md
+                </objective>
+            </script>
+        </prologue>
+
+        <!-- @page mde-web-epilogue Web Group Epilogue
+              @objective Finalize the web group.
+
+              @par Scenario:
+              -# No cleanup actions are required (each test stops its services).
+        -->
+        <epilogue>
+            <script name="epilogue">
+                <objective>
+                    Finalize the web group.
+
+                    @md
+                </objective>
+            </script>
+        </epilogue>
+
+        <!-- @page mde-web-cycle Web Cycle
+              @objective Send one request into the HTTP cycle and count how many
+                         node steps it traces.
+
+              @par Test Parameters:
+              | Parameter | Values | Description                  |
+              |===========|========|==============================|
+              | hops      | 3 / 5  | Hop budget (steps = hops+1)  |
+
+              @par Scenario:
+              -# Parse the hops parameter.
+              -# Locate the example; skip when it is absent, unbuilt, or curl
+                 is not available.
+              -# Start gateway-rs, service-go and service-cs and wait until each
+                 announces its listening URL.
+              -# GET /ring?value=1&hops=H from the gateway.
+              -# Count node trace lines in the response body.
+              -# Record the depth and verdict when it is not hops+1.
+              -# Stop the services.
+
+              @par Expected Results:
+              - Correct web tier: exactly hops+1 node steps are traced.
+              - As-shipped (defective) example: only 1 node step is traced, so
+                the test fails with a known-issue verdict.
+        -->
+        <run name="cycle">
+            <script name="cycle">
+                <objective>
+                    Send one request into the HTTP cycle and count the node
+                    steps it traces (should be hops+1).
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="hops">
+                <value>3</value>
+                <value>5</value>
+            </arg>
+        </run>
+    </session>
+</package>

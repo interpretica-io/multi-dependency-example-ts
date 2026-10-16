@@ -1,0 +1,7 @@
+--opts=device/localhost
+--script=env.localhost
+
+--opts=run.conf.common
+
+--tester-req=!LONG_TERM
+--tester-req=!ULTRA_LONG_TERM

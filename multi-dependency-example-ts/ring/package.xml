@@ -1,0 +1,123 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>Ring tests</description>
+
+    <!-- @page mde-ring Ring Tests
+          @objective Drive the native FFI ring (C++/Rust/Go/C#/Python) and
+                     verify a value propagates through every stage.
+
+          @par Test Groups:
+          - @ref mde-ring-propagation - count the stages a value visits
+          - @ref mde-ring-reference   - the documented cpp 1 7 -> 20.0735 oracle
+
+          @par Notes:
+          - The ring is a cycle cpp -> rust -> go -> cs -> py -> cpp. A demo
+            enters at one stage and a hop counter bounds the walk.
+          - Correct code visits hops+1 stages; the injected always-true defect
+            stops the walk after the first, which both tests catch.
+    -->
+
+    <author mailto="maximmenshchikov@gmail.com" />
+
+    <session track_conf="silent">
+        <!-- @page mde-ring-prologue Ring Group Prologue
+              @objective Prepare the ring group.
+
+              @par Scenario:
+              -# No special setup is required.
+        -->
+        <prologue>
+            <script name="prologue">
+                <objective>
+                    Prepare the ring group.
+
+                    @md
+                </objective>
+            </script>
+        </prologue>
+
+        <!-- @page mde-ring-epilogue Ring Group Epilogue
+              @objective Finalize the ring group.
+
+              @par Scenario:
+              -# No cleanup actions are required.
+        -->
+        <epilogue>
+            <script name="epilogue">
+                <objective>
+                    Finalize the ring group.
+
+                    @md
+                </objective>
+            </script>
+        </epilogue>
+
+        <!-- @page mde-ring-propagation Ring Propagation
+              @objective Count how many stages a value travels through when it
+                         enters the ring from a given language.
+
+              @par Test Parameters:
+              | Parameter | Values          | Description                       |
+              |===========|=================|===================================|
+              | entry     | cpp / rust / py | Which demo enters the ring        |
+              | hops      | 5 / 7           | Hop budget (stages = hops+1)      |
+
+              @par Scenario:
+              -# Parse the entry and hops parameters.
+              -# Locate the example; skip when it is absent or unbuilt.
+              -# Run the matching demo with value=1 and the hop budget.
+              -# Count stage trace lines in its output.
+              -# Record the depth and verdict when it is not hops+1.
+
+              @par Expected Results:
+              - Correct ring: exactly hops+1 stages are traced.
+              - As-shipped (defective) example: only 1 stage is traced, so the
+                test fails with a known-issue verdict.
+        -->
+        <run name="propagation">
+            <script name="propagation">
+                <objective>
+                    Enter the ring from one language and count the stages the
+                    value actually visits (should be hops+1).
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="entry">
+                <value>cpp</value>
+                <value>rust</value>
+                <value>py</value>
+            </arg>
+            <arg name="hops">
+                <value>5</value>
+                <value>7</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-ring-reference Ring Reference Result
+              @objective Check the one documented numeric oracle of the ring.
+
+              @par Scenario:
+              -# Locate the example; skip when it is absent or unbuilt.
+              -# Run cpp-demo with value=1 and hops=7.
+              -# Read the final result line.
+              -# Verdict unless it equals 20.0735 within 1e-3.
+
+              @par Expected Results:
+              - Correct ring: result is 20.0735.
+              - As-shipped (defective) example: result is about 2.6, so the
+                test fails with a known-issue verdict.
+        -->
+        <run name="reference">
+            <script name="reference">
+                <objective>
+                    cpp-demo with value=1 and hops=7 should return 20.0735
+                    (README reference output).
+
+                    @md
+                </objective>
+            </script>
+        </run>
+    </session>
+</package>

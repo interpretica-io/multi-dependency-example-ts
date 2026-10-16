@@ -1,0 +1,35 @@
+/** @mainpage Multi-dependency Example Test Suite
+
+@section mde_overview Overview
+
+This suite tests the
+<a href="https://example.invalid/multi-dependency-example">multi-dependency-example</a>:
+eight small projects in C++, Rust, Go, C# and Python wired into two dependency
+cycles. In the native @b ring each stage exports a C ABI and calls the next
+language, passing a value on until a hop counter runs out. In the @b web tier
+three HTTP services do the same over the network. A value that enters either
+cycle must come back having visited every stage.
+
+The example ships as a corpus for review tools, with one trivial always-true
+defect injected into every source file. The defect short-circuits each stage,
+so a value stops after the very first one. These tests are written against the
+@e correct behaviour, so on the as-shipped example they fail with stable
+known-issue verdicts recorded in the TRC database, and pass once the defects
+are fixed.
+
+@section mde_groups Groups
+
+- @ref mde-ring  - run cpp-demo / rust-demo / the Python demo and count the
+                   stages a value actually travels through.
+- @ref mde-web   - start the three HTTP services and walk the web cycle with a
+                   single request.
+- @ref mde-graph - check that the libraries are linked into the cycle the way
+                   the build intends (no running code involved).
+
+@section mde_running Running
+
+The suite drives an already-built example. Point @c TE_TS_MDE_SRC at its
+checkout (a sibling by default) and build it first with its own @c ./build.sh.
+When the example is missing or unbuilt, every test skips rather than fails.
+
+*/

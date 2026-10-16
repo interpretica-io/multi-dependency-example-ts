@@ -1,0 +1,71 @@
+---
+- register:
+    - oid: "/local/ta"
+      access: "read_create"
+      type: "string"
+    - oid: "/local/tst_if"
+      access: "read_create"
+      type: "string"
+    - oid: "/local/tst_if_ip"
+      access: "read_create"
+      type: "string"
+    - oid: "/local/tst_if_mac"
+      access: "read_create"
+      type: "string"
+    - oid: "/local/addr"
+      access: "read_create"
+      type: "none"
+    - oid: "/local/addr/entry"
+      access: "read_create"
+      type: "none"
+    - oid: "/local/addr/entry/address"
+      access: "read_write"
+      type: "address"
+    - oid: "/local/addr/entry/hostname"
+      access: "read_write"
+      type: "string"
+    - oid: "/local/addr/entry/prefix"
+      access: "read_write"
+      type: "integer"
+
+# The agent runs RPC servers out of a dedicated application rather than out
+# of itself. That application (ta_rpcprovider) links the job library, so a
+# test can start a program on the agent and read what it printed - which is
+# exactly how every test in this suite drives the example's demos and the
+# curl/otool helpers.
+- set:
+    - oid: "/agent:Agt_A/rpcprovider:"
+      value: "${TA_RPCPROVIDER}"
+
+- register:
+    - oid: "/local/conf"
+      access: "read_write"
+      type: "string"
+      volatile: "true"
+    - oid: "/local/conf/commited"
+      access: "read_write"
+      type: "integer"
+      volatile: "true"
+
+- register:
+    - oid: "/local/tmp"
+      access: "read_create"
+      type: "none"
+    - oid: "/local/tmp/perf"
+      access: "read_create"
+      type: "none"
+
+- add:
+    - oid: "/local:/tmp:"
+    - oid: "/local:/tmp:/perf:"
+
+- set:
+    - oid: "/local:/use_static_arp:"
+      value: "0"
+
+- add:
+    - oid: "/local:/addr:"
+
+- set:
+    - oid: "/local:/rpcserver_force_restart:"
+      value: "1"

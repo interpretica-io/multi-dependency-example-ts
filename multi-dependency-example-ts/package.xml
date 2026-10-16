@@ -1,0 +1,86 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>Multi-dependency Example Test Suite</description>
+
+    <!-- @page mde-ts Multi-dependency Example Test Suite
+          @objective Verify that a value still propagates through every stage
+                     of each dependency cycle of the multi-dependency-example.
+
+          @par Test Groups:
+          - @ref mde-ring  - the native FFI ring (C++/Rust/Go/C#/Python)
+          - @ref mde-web   - the HTTP web tier (gateway-rs/service-go/service-cs)
+          - @ref mde-graph - the build-time linkage that makes the cycle possible
+
+          @par Notes:
+          - The suite drives an already-built example located by TE_TS_MDE_SRC.
+            When it is unset, or the example is not built, every group skips.
+          - The example ships with a trivial always-true defect injected into
+            every source file, which stops each cycle after its first stage.
+            The propagation tests are written against the correct behaviour, so
+            on the as-shipped example they fail with known-issue verdicts (see
+            conf/trc.xml); once the defects are fixed they pass.
+    -->
+
+    <author mailto="maximmenshchikov@gmail.com" />
+
+    <session track_conf="silent">
+        <!-- @page mde-ts-prologue Test Suite Prologue
+              @objective Report where the example is and whether it is built.
+
+              @par Scenario:
+              -# Open a session on the agent.
+              -# Log TE_TS_MDE_SRC and whether dist/bin exists.
+        -->
+        <prologue>
+            <script name="prologue">
+                <objective>
+                    Prepare the test environment and report the example under
+                    test.
+
+                    @md
+                </objective>
+            </script>
+        </prologue>
+
+        <!-- @page mde-ts-epilogue Test Suite Epilogue
+              @objective Finalize test execution.
+
+              @par Scenario:
+              -# No cleanup actions are required at suite level.
+        -->
+        <epilogue>
+            <script name="epilogue">
+                <objective>
+                    Finalize test execution.
+
+                    @md
+                </objective>
+            </script>
+        </epilogue>
+
+        <!-- @page mde-ring Ring Tests
+              @objective Drive the native FFI ring and check propagation.
+              @see @ref mde-ring-propagation
+              @see @ref mde-ring-reference
+        -->
+        <run>
+            <package name="ring" />
+        </run>
+
+        <!-- @page mde-web Web Tier Tests
+              @objective Drive the HTTP web tier and check propagation.
+              @see @ref mde-web-cycle
+        -->
+        <run>
+            <package name="web" />
+        </run>
+
+        <!-- @page mde-graph Graph Tests
+              @objective Check the build-time linkage of the ring libraries.
+              @see @ref mde-graph-links
+        -->
+        <run>
+            <package name="graph" />
+        </run>
+    </session>
+</package>

@@ -1,0 +1,95 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>Graph tests</description>
+
+    <!-- @page mde-graph Graph Tests
+          @objective Verify the build-time linkage that makes the ring's cyclic
+                     dependency graph possible.
+
+          @par Test Groups:
+          - @ref mde-graph-links - load-time edges and the undefined symbol
+
+          @par Notes:
+          - A cyclic dependency cannot be linked directly. The example breaks
+            the cycle by late-binding Python and C#, and by leaving cpp_weight
+            undefined in libgocore until dyld resolves it at process start.
+          - These are properties of the build, read from the libraries' Mach-O
+            metadata, so the arithmetic defect does not affect them: this group
+            passes on the as-shipped example (and skips where otool/nm are not
+            available, e.g. a Linux build container).
+    -->
+
+    <author mailto="maximmenshchikov@gmail.com" />
+
+    <session track_conf="silent">
+        <!-- @page mde-graph-prologue Graph Group Prologue
+              @objective Prepare the graph group.
+
+              @par Scenario:
+              -# No special setup is required.
+        -->
+        <prologue>
+            <script name="prologue">
+                <objective>
+                    Prepare the graph group.
+
+                    @md
+                </objective>
+            </script>
+        </prologue>
+
+        <!-- @page mde-graph-epilogue Graph Group Epilogue
+              @objective Finalize the graph group.
+
+              @par Scenario:
+              -# No cleanup actions are required.
+        -->
+        <epilogue>
+            <script name="epilogue">
+                <objective>
+                    Finalize the graph group.
+
+                    @md
+                </objective>
+            </script>
+        </epilogue>
+
+        <!-- @page mde-graph-links Graph Links
+              @objective Check the load-time edges of the ring and the one
+                         symbol that must stay undefined.
+
+              @par Test Parameters:
+              | Parameter | Values               | Description                 |
+              |===========|======================|=============================|
+              | relation  | rust / cpp / go-undef | Which linkage fact to check |
+
+              @par Scenario:
+              -# Parse the relation parameter.
+              -# Locate the example; skip when it is absent, unbuilt, or the
+                 Mach-O tools (otool/nm) are not available.
+              -# rust: otool -L librustcore references libgocore and libcscore.
+              -# cpp:  otool -L libcppcore references librustcore and libpycore.
+              -# go-undef: nm -u libgocore lists cpp_weight.
+
+              @par Expected Results:
+              - All relations hold for a correctly built example, regardless of
+                the injected arithmetic defect.
+        -->
+        <run name="links">
+            <script name="links">
+                <objective>
+                    Check the ring's load-time edges and the undefined
+                    cpp_weight symbol that breaks the build-time cycle.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="relation">
+                <value>rust</value>
+                <value>cpp</value>
+                <value>go-undef</value>
+            </arg>
+        </run>
+    </session>
+</package>
