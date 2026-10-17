@@ -1,0 +1,199 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>Memory map tests</description>
+
+    <!-- @page mde-memmap Memory Map Tests
+          @objective ELF images and live mappings of the example: segment
+                     and section sizes, W^X in the files and in the running
+                     services, and the RAM budget of the ring
+                     (tsf-memorymap).
+
+          @par Test Groups:
+          - @ref mde-memmap-elf  - ELF image of every binary and library, readelf cross-check, W^X
+          - @ref mde-memmap-proc - live mappings of every web service, W^X
+          - @ref mde-memmap-ram  - RAM budget of the ring libraries
+
+          @par Notes:
+          - The W^X audits have known-bad controls built on the agent: a
+            program linked with an executable stack and a W+X segment (gcc),
+            and a python3 process that maps an RWX page.
+          - Go and .NET NativeAOT runtimes have mappings of their own; they
+            are charted and reported, not treated as errors.
+    -->
+
+    <author mailto="maximmenshchikov@gmail.com" />
+
+    <session track_conf="silent">
+        <!-- @page mde-memmap-prologue Memory Map Group Prologue
+              @objective Record the tools the group uses.
+
+              @par Scenario:
+              -# Remove /tmp/mde-memmap-* on the agent.
+              -# Record whether readelf, gcc, python3, pgrep and curl are
+                 there, and the readelf version.
+        -->
+        <prologue>
+            <script name="prologue">
+                <objective>
+                    Record the tools the memory map group uses.
+
+                    @md
+                </objective>
+            </script>
+        </prologue>
+
+        <!-- @page mde-memmap-epilogue Memory Map Group Epilogue
+              @objective Remove the known-bad controls.
+
+              @par Scenario:
+              -# Remove /tmp/mde-memmap-* on the agent.
+        -->
+        <epilogue>
+            <script name="epilogue">
+                <objective>
+                    Remove the known-bad controls built on the agent.
+
+                    @md
+                </objective>
+            </script>
+        </epilogue>
+
+        <!-- @page mde-memmap-elf ELF Image of a Binary or Library
+              @objective Parse the ELF image, cross-check it with readelf,
+                         and audit it for W^X.
+
+              @par Test Parameters:
+              | Parameter    | Values | Description                          |
+              |==============|========|======================================|
+              | artifact     | cpp-demo / rust-demo / gateway-rs / service-go / service-cs / libcppcore / librustcore / libgocore / libcscore / libpycore | Binary (dist/bin) or ring library (dist/lib) |
+              | min_severity | high / critical | Lowest finding severity that fails |
+
+              @par Scenario:
+              -# Read the image with tapi_memmap_elf_read(); log class,
+                 machine, type, entry, segments and sections.
+              -# It must have a PT_LOAD segment and be EXEC or DYN.
+              -# Chart PT_LOAD memory/file sizes and allocated section sizes.
+              -# readelf -lW: every PT_LOAD (address, sizes, flags) must
+                 agree with the parser.
+              -# W^X audit (memmap.wx-segment, memmap.exec-stack).
+              -# Control: gcc -no-pie -Wl,-N -z execstack; the audit must
+                 report what readelf shows was planted; drop it.
+              -# Gate on min_severity.
+
+              @par Expected Results:
+              - Views agree, no W^X: pass. An artifact not built: skipped.
+        -->
+        <run name="elf">
+            <script name="elf">
+                <objective>
+                    ELF image of one artifact of the example: charts,
+                    readelf cross-check, W^X audit with a planted control.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="artifact">
+                <value>cpp-demo</value>
+                <value>rust-demo</value>
+                <value>gateway-rs</value>
+                <value>service-go</value>
+                <value>service-cs</value>
+                <value>libcppcore</value>
+                <value>librustcore</value>
+                <value>libgocore</value>
+                <value>libcscore</value>
+                <value>libpycore</value>
+            </arg>
+            <arg name="min_severity">
+                <value>high</value>
+                <value>critical</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-memmap-proc Live Mappings of a Web Service
+              @objective Read and audit the memory map of one running
+                         service of the web tier.
+
+              @par Test Parameters:
+              | Parameter    | Values | Description                          |
+              |==============|========|======================================|
+              | service      | gateway-rs / service-go / service-cs | Service to read |
+              | min_severity | high / critical | Lowest finding severity that fails |
+
+              @par Scenario:
+              -# Start the web tier and send one walk through it.
+              -# Find the service (pgrep -x) and read its mappings.
+              -# Chart mapped, resident bytes and mappings per kind (file,
+                 heap, stack, vDSO, anonymous) and the RWX count.
+              -# Resident total must agree with VmRSS (20% or 8 MB); the
+                 mapping count with /proc/PID/maps (10%); the service's own
+                 binary must be mapped executable.
+              -# W^X audit (memmap.wx-mapping, memmap.exec-writable-stack).
+              -# Control: a python3 process with an RWX mmap must be
+                 reported; drop it.
+              -# Gate on min_severity.
+
+              @par Expected Results:
+              - No W+X mapping: pass.
+        -->
+        <run name="proc">
+            <script name="proc">
+                <objective>
+                    Live memory map of one web service: charts by kind,
+                    two-view checks, W^X audit with a live RWX control.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="service">
+                <value>gateway-rs</value>
+                <value>service-go</value>
+                <value>service-cs</value>
+            </arg>
+            <arg name="min_severity">
+                <value>high</value>
+                <value>critical</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-memmap-ram RAM Budget of the Ring
+              @objective How much of a RAM budget the ring libraries take.
+
+              @par Test Parameters:
+              | Parameter | Values  | Description               |
+              |===========|=========|===========================|
+              | budget_mb | 16 / 64 | RAM region size, MB       |
+
+              @par Scenario:
+              -# Place every ring library's PT_LOAD segments in the region
+                 with tapi_memmap_ram_usage(); used + overflow must equal the
+                 PT_LOAD memory, used + free the region.
+              -# Chart the footprint per library and what the budget has
+                 left after each; compare the total with MemAvailable.
+              -# A ring larger than the budget is memmap.ram-budget (medium).
+              -# Control: a region half the size of a library must overflow.
+              -# Gate at high.
+
+              @par Expected Results:
+              - Accounting adds up: pass in both iterations (the 16 MB
+                budget may record a medium finding).
+        -->
+        <run name="ram">
+            <script name="ram">
+                <objective>
+                    RAM budget of the ring libraries: footprint, what is
+                    left, and an overflow control.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="budget_mb">
+                <value>16</value>
+                <value>64</value>
+            </arg>
+        </run>
+    </session>
+</package>

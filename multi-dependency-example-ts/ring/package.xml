@@ -4,32 +4,49 @@
 
     <!-- @page mde-ring Ring Tests
           @objective Drive the native FFI ring (C++/Rust/Go/C#/Python) and
-                     verify a value propagates through every stage.
+                     verify a value propagates through every stage, each
+                     stage computing exactly what the reference model says.
 
           @par Test Groups:
-          - @ref mde-ring-propagation - count the stages a value visits
-          - @ref mde-ring-reference   - the documented cpp 1 7 -> 20.0735 oracle
+          - @ref mde-ring-propagation  - the whole walk against the model
+          - @ref mde-ring-reference    - the documented cpp 1 7 -> 20.0735 oracle
+          - @ref mde-ring-sweep        - hops 0..12 in one test, model vs observed
+          - @ref mde-ring-determinism  - N identical runs, byte-identical traces
+          - @ref mde-ring-entry_matrix - every entry with awkward values,
+                                         self-consistency of every step
 
           @par Notes:
           - The ring is a cycle cpp -> rust -> go -> cs -> py -> cpp. A demo
-            enters at one stage and a hop counter bounds the walk.
+            enters at one stage (cpp-demo at Rust, rust-demo and the Python
+            demo at C++) and a hop counter bounds the walk.
           - Correct code visits hops+1 stages; the injected always-true defect
-            stops the walk after the first, which both tests catch.
+            stops the walk after the first, which propagation, reference and
+            sweep catch. determinism and entry_matrix check properties that
+            hold whatever the depth, so they pass on the defective example.
+          - The C# stage binds dlsym through [DllImport("libSystem.dylib")],
+            which only exists on macOS: on Linux a walk that reaches cs_step
+            may crash; that is reported as the finding ring.crash about the
+            stage, never as a test error.
     -->
 
     <author mailto="maximmenshchikov@gmail.com" />
 
     <session track_conf="silent">
         <!-- @page mde-ring-prologue Ring Group Prologue
-              @objective Prepare the ring group.
+              @objective Record what the ring group is about to drive.
 
               @par Scenario:
-              -# No special setup is required.
+              -# Locate the example; when it is not built, say so and succeed
+                 (the tests skip on their own).
+              -# Record the agent's OS/arch and the library extension.
+              -# Record the size of every ring library (chart).
+              -# Tell the NativeAOT C# stage from its C stand-in.
+              -# Record which demos can run and the python3 version (chart).
         -->
         <prologue>
             <script name="prologue">
                 <objective>
-                    Prepare the ring group.
+                    Record the ring libraries, demos and Python of the agent.
 
                     @md
                 </objective>
@@ -53,32 +70,51 @@
         </epilogue>
 
         <!-- @page mde-ring-propagation Ring Propagation
-              @objective Count how many stages a value travels through when it
-                         enters the ring from a given language.
+              @objective Enter the ring from one language and check the whole
+                         walk: stage count first, then every step against the
+                         reference model.
 
               @par Test Parameters:
-              | Parameter | Values          | Description                       |
-              |===========|=================|===================================|
-              | entry     | cpp / rust / py | Which demo enters the ring        |
-              | hops      | 5 / 7           | Hop budget (stages = hops+1)      |
+              | Parameter    | Values               | Description                       |
+              |==============|======================|===================================|
+              | entry        | cpp / rust / py      | Which demo enters the ring        |
+              | hops         | 0 / 1 / 3 / 5 / 7 / 10 | Hop budget (stages = hops+1)    |
+              | value        | 1 / 2.5              | Value passed in                   |
+              | min_severity | critical / medium    | Lowest finding severity that fails |
 
               @par Scenario:
-              -# Parse the entry and hops parameters.
-              -# Locate the example; skip when it is absent or unbuilt.
-              -# Run the matching demo with value=1 and the hop budget.
-              -# Count stage trace lines in its output.
-              -# Record the depth and verdict when it is not hops+1.
+              -# Locate the example; skip when it is absent, unbuilt, or the
+                 demo cannot run (python3 with ctypes for the Python demo).
+              -# Known-bad controls: a model trace with a planted wrong value
+                 and a missing last step must give ring.formula and
+                 ring.depth; a shell killed by SIGSEGV must give ring.crash.
+              -# Run the demo, capturing its whole stdout, exit code and wall
+                 time (measured on the agent).
+              -# Predict the walk with the model (cpp-demo enters at Rust,
+                 rust-demo and the Python demo at C++).
+              -# Verdict "Ring propagated through N stage(s), expected M"
+                 when the count is wrong (first, without stopping).
+              -# Report a non-zero exit as ring.crash about the stage that was
+                 running; compare the trace with the model (ring.depth,
+                 ring.order, ring.hop-counter, ring.handoff, ring.formula,
+                 ring.value, ring.result).
+              -# Chart model vs observed values and hop counters per step,
+                 the per-step residuals, and a summary point; artifacts with
+                 observed and model results and a trace fingerprint.
+              -# Gate the report by min_severity.
 
               @par Expected Results:
-              - Correct ring: exactly hops+1 stages are traced.
-              - As-shipped (defective) example: only 1 stage is traced, so the
-                test fails with a known-issue verdict.
+              - Correct ring: hops+1 stages, no findings.
+              - As-shipped (defective) example: hops=0 passes; otherwise two
+                verdicts, "Ring propagated through 1 stage(s), expected H+1"
+                then "security check ring.depth failed for <entry>/walk"
+                (rust/walk for cpp-demo, cpp/walk for rust and py).
         -->
         <run name="propagation">
             <script name="propagation">
                 <objective>
-                    Enter the ring from one language and count the stages the
-                    value actually visits (should be hops+1).
+                    Enter the ring from one language and check every step of
+                    the walk against the reference model.
 
                     @md
                 </objective>
@@ -90,34 +126,201 @@
                 <value>py</value>
             </arg>
             <arg name="hops">
+                <value>0</value>
+                <value>1</value>
+                <value>3</value>
                 <value>5</value>
                 <value>7</value>
+                <value>10</value>
+            </arg>
+            <arg name="value">
+                <value>1</value>
+                <value>2.5</value>
+            </arg>
+            <arg name="min_severity">
+                <value>critical</value>
+                <value>medium</value>
             </arg>
         </run>
 
         <!-- @page mde-ring-reference Ring Reference Result
-              @objective Check the one documented numeric oracle of the ring.
+              @objective Check the one documented numeric oracle of the ring,
+                         and cross-check the model against it.
 
               @par Scenario:
               -# Locate the example; skip when it is absent or unbuilt.
-              -# Run cpp-demo with value=1 and hops=7.
-              -# Read the final result line.
-              -# Verdict unless it equals 20.0735 within 1e-3.
+              -# The model must give 20.0735 for cpp-demo 1 7 (else the model
+                 is wrong: test failure, not a DUT verdict).
+              -# Known-bad control of the trace comparison.
+              -# Run cpp-demo with value=1 and hops=7, read the trace and the
+                 result line.
+              -# Verdict "Ring result X, expected 20.0735 (value=1, hops=7)"
+                 when it differs by more than 1e-3 (first, without stopping).
+              -# Compare the trace with the model; chart and gate at medium.
 
               @par Expected Results:
-              - Correct ring: result is 20.0735.
-              - As-shipped (defective) example: result is about 2.6, so the
-                test fails with a known-issue verdict.
+              - Correct ring: result is 20.0735 and the trace is the model's.
+              - As-shipped (defective) example: "Ring result 2.6000, expected
+                20.0735 (value=1, hops=7)" then "security check ring.depth
+                failed for rust/walk".
         -->
         <run name="reference">
             <script name="reference">
                 <objective>
                     cpp-demo with value=1 and hops=7 should return 20.0735
-                    (README reference output).
+                    (README reference output) and trace the model's walk.
 
                     @md
                 </objective>
             </script>
+        </run>
+
+        <!-- @page mde-ring-sweep Ring Hop Sweep
+              @objective Sweep the hop budget of cpp-demo over 0..12 and draw
+                         observed depth and result against the model's.
+
+              @par Test Parameters:
+              | Parameter    | Values   | Description                        |
+              |==============|==========|====================================|
+              | value        | 1 / 2.5  | Value passed in                    |
+              | min_severity | critical | Lowest finding severity that fails |
+
+              @par Scenario:
+              -# Locate the example; skip when cpp-demo cannot run.
+              -# Known-bad control of the trace comparison.
+              -# For hops 0..12: run cpp-demo, predict, compare into the
+                 report, check the observed depth never decreases
+                 (ring.monotonic), note the first budget that differs from
+                 the model in depth or result (or crashes).
+              -# One MI artifact: depth (observed, model), result (observed,
+                 model) and wall time over hops.
+              -# Verdict "Ring sweep diverges from the model first at hops=N"
+                 (first, without stopping), then gate the report.
+
+              @par Expected Results:
+              - Correct ring: every budget matches, no verdict.
+              - As-shipped (defective) example: "Ring sweep diverges from the
+                model first at hops=1" then "security check ring.depth failed
+                for rust/walk".
+        -->
+        <run name="sweep">
+            <script name="sweep">
+                <objective>
+                    Run cpp-demo for hops 0..12 and compare depth and result
+                    with the model at every budget.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="value">
+                <value>1</value>
+                <value>2.5</value>
+            </arg>
+            <arg name="min_severity">
+                <value>critical</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-ring-determinism Ring Determinism
+              @objective Run the same demo with the same input N times and
+                         require byte-identical traces.
+
+              @par Test Parameters:
+              | Parameter | Values          | Description             |
+              |===========|=================|=========================|
+              | entry     | cpp / rust / py | Which demo to repeat    |
+              | runs      | 5 / 20          | How many times          |
+
+              @par Scenario:
+              -# Locate the example; skip when the demo cannot run.
+              -# Known-bad controls: a one-byte change of a trace must change
+                 its fingerprint (ring.nondeterministic); a planted crash
+                 must give ring.crash.
+              -# Run the demo (value=1, hops=7) N times; fingerprint stdout
+                 (FNV-1a 64) and compare fingerprint, parsed depth and result
+                 with run 0.
+              -# Chart wall time per run (latency series) and its min/mean/max
+                 (MI aggregations).
+              -# Gate at high: ring.nondeterministic, ring.crash.
+
+              @par Expected Results:
+              - Every run prints the same bytes: PASSED, on the defective
+                example as well.
+        -->
+        <run name="determinism">
+            <script name="determinism">
+                <objective>
+                    Repeat one demo N times and require identical traces.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="entry">
+                <value>cpp</value>
+                <value>rust</value>
+                <value>py</value>
+            </arg>
+            <arg name="runs">
+                <value>5</value>
+                <value>20</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-ring-entry_matrix Ring Entry Matrix
+              @objective Enter the ring with awkward values and check every
+                         traced step is self-consistent.
+
+              @par Test Parameters:
+              | Parameter    | Values          | Description                        |
+              |==============|=================|====================================|
+              | entry        | cpp / rust / py | Which demo enters the ring         |
+              | hops         | 3 / 7           | Hop budget                         |
+              | min_severity | high            | Lowest finding severity that fails |
+
+              @par Scenario:
+              -# Locate the example; skip when the demo cannot run.
+              -# Known-bad controls of the comparison and the crash detector.
+              -# For value in {0, 1, -1, 1e6, 3.14159}: run the demo, compare
+                 with the model; keep ring.formula, ring.handoff,
+                 ring.hop-counter and ring.order at their severity and the
+                 model-relative findings (depth, value, result) as info.
+              -# Check the entry: first stage is the demo's entry stage
+                 (ring.entry-stage), it received the given value
+                 (ring.entry-value) and hop budget (ring.entry-hops); the
+                 printed result equals the last step's output
+                 (ring.result-consistency); a crash is ring.crash.
+              -# Chart first-stage output and result per value, observed vs
+                 model, and the depth per value.
+              -# Gate by min_severity.
+
+              @par Expected Results:
+              - Self-consistency holds whatever the depth: PASSED, on the
+                defective example as well.
+        -->
+        <run name="entry_matrix">
+            <script name="entry_matrix">
+                <objective>
+                    Enter the ring from every demo with a set of awkward values
+                    and check every step is self-consistent.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="entry">
+                <value>cpp</value>
+                <value>rust</value>
+                <value>py</value>
+            </arg>
+            <arg name="hops">
+                <value>3</value>
+                <value>7</value>
+            </arg>
+            <arg name="min_severity">
+                <value>high</value>
+            </arg>
         </run>
     </session>
 </package>

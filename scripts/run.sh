@@ -44,7 +44,10 @@ fi
 if [ "$is_docker" == "1" ] ; then
     export TE_DOCKER_FILE_DIR="${TS_TOPDIR}/scripts/docker/build"
     export TE_DOCKER_TAG="multi-dependency-example-ts-build"
-    export TE_DOCKER_MOUNT_PATHS="${TS_TOPDIR}:${TE_BASE}"
+    # The sibling directory as well as the suite and TE: conf/external.yml
+    # may point a library's url at a local checkout, and git clones a
+    # filesystem path only if that path exists inside the container too.
+    export TE_DOCKER_MOUNT_PATHS="${TS_TOPDIR}:${TE_BASE}:${TS_TOPDIR}/.."
     # Mount the example under test at the same path inside the container, so
     # the absolute paths the tests build resolve there too. TE_DOCKER_MOUNT_PATHS
     # is a colon-separated list of paths, each self-mounted. Only add it when it
@@ -58,7 +61,13 @@ if [ "$is_docker" == "1" ] ; then
         esac
     fi
     export TE_DOCKER_WORK_DIR="$(pwd)"
-    export TE_DOCKER_ENV="TE_BASE:TS_TOPDIR:TE_TS_MDE_SRC"
+    # git refuses a repository owned by another uid, and everything under
+    # a bind mount may be; the Builder clones the external repositories
+    # under build/, so mark every directory safe through the environment.
+    export GIT_CONFIG_COUNT=1
+    export GIT_CONFIG_KEY_0="safe.directory"
+    export GIT_CONFIG_VALUE_0="*"
+    export TE_DOCKER_ENV="TE_BASE:TS_TOPDIR:TE_TS_MDE_SRC:GIT_CONFIG_COUNT:GIT_CONFIG_KEY_0:GIT_CONFIG_VALUE_0:TSF_AI_KEY:TSF_AI_PROVIDER:TSF_AI_MODEL:TE_TS_MDE_BUILD"
     ${TS_TOPDIR}/scripts/docker_env.sh ${TS_TOPDIR}/scripts/run.sh $@
     exit $?
 fi
@@ -134,6 +143,14 @@ TS_CONF_DIRS+="\"${TS_TOPDIR}\"/conf:"
 TS_DEFAULT_OPTS=
 
 TS_DEFAULT_OPTS+="--conf-dirs=${TS_CONF_DIRS} "
+# The example has to be native to the host the agent runs on: build a
+# private copy when the tree holds binaries for another OS.
+TE_TS_MDE_SRC="$("${TS_TOPDIR}/scripts/build-dut.sh" "${TE_TS_MDE_SRC}" \
+                 "${TE_BUILD}/mde-$(uname -s)-$(uname -m)")"
+export TE_TS_MDE_SRC
+echo "Example under test: ${TE_TS_MDE_SRC}"
+
+TS_DEFAULT_OPTS+="--external=external.yml "
 TS_DEFAULT_OPTS+="--export=TE_TS_MDE_SRC=${TE_TS_MDE_SRC} "
 TS_DEFAULT_OPTS+="--build-parallel "
 TS_DEFAULT_OPTS+="--trc-db=\"${TS_TOPDIR}\"/conf/trc.xml "
@@ -146,12 +163,21 @@ export TE_TS_SRC="${TS_TOPDIR}/multi-dependency-example-ts"
 
 eval "${TE_BASE}/dispatcher.sh ${TS_DEFAULT_OPTS} ${TS_OPTS} " \
     "--script=scripts/ta-def"
-if [ "$?" == "0" ] ; then
+RUN_RC=$?
+if [ "${RUN_RC}" == "0" ] ; then
     echo OK
 else
     echo FAIL
 fi
 
+# Every report the run can produce, next to the raw log (reports/index.html).
+if [ "${TE_TS_MDE_REPORTS:-1}" != "0" ] ; then
+    "${TS_TOPDIR}/scripts/reports.sh" "${RUNDIR}"
+fi
+
 mkdir -p ${TS_TOPDIR}/meson-logs
 rm -rf ${TS_TOPDIR}/meson-logs/*
-cp -R /tmp/te_ws*/build/meson-logs/* ${TS_TOPDIR}/meson-logs/
+# Several runs leave several /tmp/te_ws*: take the newest one.
+TE_WS_LAST="$(ls -dt /tmp/te_ws*/build/meson-logs 2>/dev/null | head -n 1)"
+test -z "${TE_WS_LAST}" || cp -R "${TE_WS_LAST}"/* ${TS_TOPDIR}/meson-logs/
+test "${RUN_RC}" == "0"

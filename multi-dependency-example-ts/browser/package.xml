@@ -1,0 +1,241 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>Browser tests</description>
+
+    <!-- @page mde-browser Browser Tests
+          @objective Drive the web tier from a real browser (Chromium through
+                     tsf-playwright) and check what the browser saw: the
+                     walk's node lines, the traffic it made, and where a
+                     planted canary went.
+
+          @par Test Groups:
+          - @ref mde-browser-walk_page     - walk the cycle in Chromium, keep a screenshot, a HAR and a trace
+          - @ref mde-browser-canary        - a canary value must stay within the web tier's own hosts
+          - @ref mde-browser-network_shape - every answer the browser captured has the expected shape
+          - @ref mde-browser-pw_project    - a 'playwright test' project with a control run from TE
+
+          @par Notes:
+          - The agent needs Node.js, the playwright package in
+            /opt/playwright and Chromium in /opt/playwright/browsers;
+            without them every test skips with the reason.
+          - Correct code walks hops+1 node steps; the injected always-true
+            defect in forward() makes every node answer only for itself.
+          - walk_page leaves /tmp/mde-browser-walk-h<H>.{png,txt,har,trace.zip}
+            on the agent on purpose; the AI group reads the screenshot.
+    -->
+
+    <author mailto="maximmenshchikov@gmail.com" />
+
+    <session track_conf="silent">
+        <!-- @page mde-browser-prologue Browser Group Prologue
+              @objective Inventory the browser stack of the agent.
+
+              @par Scenario:
+              -# Check Node.js, the playwright package, the browsers,
+                 @playwright/test, npx, curl and python3 on the agent.
+              -# Log the versions found and chart the inventory.
+        -->
+        <prologue>
+            <script name="prologue">
+                <objective>
+                    Inventory the browser stack of the agent.
+
+                    @md
+                </objective>
+            </script>
+        </prologue>
+
+        <!-- @page mde-browser-epilogue Browser Group Epilogue
+              @objective Finalize the browser group.
+
+              @par Scenario:
+              -# No cleanup actions are required; the evidence files stay.
+        -->
+        <epilogue>
+            <script name="epilogue">
+                <objective>
+                    Finalize the browser group.
+
+                    @md
+                </objective>
+            </script>
+        </epilogue>
+
+        <!-- @page mde-browser-walk_page Browser Walk
+              @objective Walk the web tier's cycle in Chromium and count the
+                         node steps the page shows, keeping every piece of
+                         evidence the browser can leave.
+
+              @par Test Parameters:
+              | Parameter | Values    | Description                        |
+              |===========|===========|====================================|
+              | hops      | 0 / 2 / 5 | Hop budget (node steps = hops+1)   |
+
+              @par Scenario:
+              -# Start the web tier and Chromium with network capture, a HAR
+                 and a Playwright trace.
+              -# Open http://127.0.0.1:8081/ring?value=1&hops=H and expect a
+                 gateway-rs node line in the page.
+              -# Read the page text, count its node lines, keep it at
+                 /tmp/mde-browser-walk-hH.txt.
+              -# Read the navigation timing in the page (status, duration,
+                 body size).
+              -# Fetch the same URL with curl and compare the node count, the
+                 value line and the body size with the browser's.
+              -# Keep a screenshot at /tmp/mde-browser-walk-hH.png and check
+                 it is a PNG of the viewport's width.
+              -# Read the network log: exactly one /ring request answered
+                 200.
+              -# Keep the trace zip at /tmp/mde-browser-walk-hH.trace.zip and
+                 the HAR at /tmp/mde-browser-walk-hH.har; log path, size and
+                 SHA-256 of each; compare the HAR's entries with the log.
+              -# Chart load time, body size, evidence sizes, node steps vs
+                 expected.
+              -# Verdict unless the page shows hops+1 node steps.
+
+              @par Expected Results:
+              - Correct web tier: hops+1 node steps for every hops.
+              - As-shipped (defective) example: hops=0 passes; hops=2 and 5
+                fail with "Browser walk traced 1 node step(s), expected N".
+        -->
+        <run name="walk_page">
+            <script name="walk_page">
+                <objective>
+                    Walk the web tier's cycle in Chromium and count the node
+                    steps the page shows (should be hops+1).
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="hops">
+                <value>0</value>
+                <value>2</value>
+                <value>5</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-browser-canary Browser Canary
+              @objective A canary value carried by the walk must show up only
+                         in traffic to the web tier's own hosts.
+
+              @par Test Parameters:
+              | Parameter    | Values          | Description                  |
+              |==============|=================|==============================|
+              | min_severity | high / critical | Lowest finding that fails    |
+
+              @par Scenario:
+              -# Start the web tier and Chromium with network capture.
+              -# Walk the cycle with value=31337.4242 (the canary) and wait
+                 for the network to settle.
+              -# Count the canary with the runner's network_grep and in the
+                 network_dump; the two counts must agree, and the canary must
+                 appear in the web tier's traffic at all.
+              -# Every other host whose traffic carries the canary is a
+                 critical browser.canary-leak finding.
+              -# Known-bad control: make the page fetch
+                 http://localhost:18098/?c=31337.4242 (a decoy python
+                 http.server); the audit must report that leak.
+              -# Chart requests and canary hits per host.
+
+              @par Expected Results:
+              - The canary stays within 127.0.0.1:8081..8083: pass.
+        -->
+        <run name="canary">
+            <script name="canary">
+                <objective>
+                    A canary value carried by the walk must show up only in
+                    traffic to the web tier's own hosts.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="min_severity">
+                <value>high</value>
+                <value>critical</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-browser-network_shape Browser Network Shape
+              @objective Every answer of the web tier the browser captured has
+                         the expected shape.
+
+              @par Test Parameters:
+              | Parameter    | Values            | Description                  |
+              |==============|===================|==============================|
+              | requests     | 3 / 8             | Walks made, each with its own value and hop budget |
+              | min_severity | medium / critical | Lowest finding that fails    |
+
+              @par Scenario:
+              -# Start the web tier and Chromium with network capture.
+              -# Walk the cycle @p requests times.
+              -# Known-bad control: open a path the gateway does not serve.
+              -# For every captured HTTP entry check: status 200, content type
+                 text/plain, Content-Length equal to the body, a body that is
+                 a node trace with a value= line.
+              -# The log holds exactly @p requests /ring requests.
+              -# The control's 404 must have been reported (then dropped).
+              -# Chart status codes, body sizes and goto times per request,
+                 and answers per status class.
+
+              @par Expected Results:
+              - Every answer is a 200 text/plain trace: pass.
+        -->
+        <run name="network_shape">
+            <script name="network_shape">
+                <objective>
+                    Every answer of the web tier the browser captured has the
+                    expected shape.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="requests">
+                <value>3</value>
+                <value>8</value>
+            </arg>
+            <arg name="min_severity">
+                <value>medium</value>
+                <value>critical</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-browser-pw_project Playwright Test Project
+              @objective Run a ready 'playwright test' project on the agent
+                         and check that its outcome is exactly the expected
+                         one: the gateway test passes, the control fails.
+
+              @par Scenario:
+              -# Skip unless @playwright/test and npx are on the agent.
+              -# Write a project (config + one spec file with two tests) to
+                 /tmp/mde-browser-pw-project, its node_modules a link to
+                 /opt/playwright/node_modules: "gateway answers for itself"
+                 (hops=0, one node line) and the control "control: a
+                 deliberately wrong expectation fails" (expects no node
+                 line on the same page).
+              -# Start the web tier and run 'playwright test' through
+                 tapi_playwright_run_spec().
+              -# The counts must add up to the two tests written; exactly
+                 one must pass and one fail, and the failed one must be the
+                 control.
+
+              @par Expected Results:
+              - 1 passed, 1 failed, and the failure is
+                "walk.spec.cjs > control: a deliberately wrong expectation
+                fails". The test passes; it does not depend on the injected
+                defect (hops > 0 walks are checked by walk_page).
+        -->
+        <run name="pw_project">
+            <script name="pw_project">
+                <objective>
+                    Run the walks as a ready 'playwright test' project on the
+                    agent and read back its counts.
+
+                    @md
+                </objective>
+            </script>
+        </run>
+    </session>
+</package>

@@ -4,32 +4,43 @@
 
     <!-- @page mde-web Web Tier Tests
           @objective Drive the HTTP web tier (gateway-rs/service-go/service-cs)
-                     and verify a request walks the whole cycle.
+                     and verify a request walks the whole cycle, each node
+                     computing its own formula, under the shared contract.
 
           @par Test Groups:
-          - @ref mde-web-cycle - one request through the HTTP cycle
+          - @ref mde-web-cycle      - one request through the HTTP cycle, every
+                                      body line against the model
+          - @ref mde-web-latency    - K requests per hop budget, latency charts
+          - @ref mde-web-contract   - services.tab vs the running tier
+          - @ref mde-web-robustness - malformed requests, the service survives
 
           @par Notes:
           - The three services call each other in a cycle over HTTP on ports
             8081/8082/8083 (web/contract/services.tab). The gateway is the
             entry point and the request comes back around to it.
+          - Node formulas: gateway-rs rust_step(v, 0) = (v*1.5+1)*1.04,
+            service-go (v+5)*1.04, service-cs (v*0.5+4)*1.01.
           - Correct code traces hops+1 node steps in the response body; the
             injected defect in each node's forward() stops after the first.
+            latency, contract and robustness check what holds regardless.
     -->
 
     <author mailto="maximmenshchikov@gmail.com" />
 
     <session track_conf="silent">
         <!-- @page mde-web-prologue Web Group Prologue
-              @objective Prepare the web group.
+              @objective Record what the web group needs.
 
               @par Scenario:
-              -# No special setup is required.
+              -# Locate the example; when it is not built, say so and succeed.
+              -# Record the service binaries and the contract file (chart).
+              -# Record curl, ss and lsof availability and curl's version.
+              -# Record whether 8081/8082/8083 are already busy (chart).
         -->
         <prologue>
             <script name="prologue">
                 <objective>
-                    Prepare the web group.
+                    Record the web tier binaries, contract, tools and ports.
 
                     @md
                 </objective>
@@ -53,43 +64,179 @@
         </epilogue>
 
         <!-- @page mde-web-cycle Web Cycle
-              @objective Send one request into the HTTP cycle and count how many
-                         node steps it traces.
+              @objective Send one request into the HTTP cycle and check every
+                         node step it traces against the model.
 
               @par Test Parameters:
-              | Parameter | Values | Description                  |
-              |===========|========|==============================|
-              | hops      | 3 / 5  | Hop budget (steps = hops+1)  |
+              | Parameter    | Values                | Description                        |
+              |==============|=======================|====================================|
+              | hops         | 0 / 1 / 2 / 5 / 8     | Hop budget (steps = hops+1)        |
+              | min_severity | critical / medium     | Lowest finding severity that fails |
 
               @par Scenario:
-              -# Parse the hops parameter.
               -# Locate the example; skip when it is absent, unbuilt, or curl
                  is not available.
-              -# Start gateway-rs, service-go and service-cs and wait until each
-                 announces its listening URL.
-              -# GET /ring?value=1&hops=H from the gateway.
-              -# Count node trace lines in the response body.
-              -# Record the depth and verdict when it is not hops+1.
-              -# Stop the services.
+              -# Known-bad control: a planted body with a wrong gateway step
+                 must give web.formula.
+              -# Start gateway-rs, service-go and service-cs (chart their
+                 start-up times).
+              -# GET /ring?value=1&hops=H from the gateway; a non-200 status is
+                 web.status.
+              -# Verdict "The gateway returned no node trace - is it serving?"
+                 when the body has no node line.
+              -# Verdict "Web ring propagated through N node step(s), expected
+                 M" when the count is wrong (first, without stopping).
+              -# Compare every body line with the model: web.depth,
+                 web.order (gateway-rs -> service-go -> service-cs ->
+                 gateway-rs), web.hop-counter, web.handoff, web.formula,
+                 web.value, web.unreachable, web.result.
+              -# Charts: value, hop counter and node per step (model vs
+                 observed), steps per node, a summary point.
+              -# Gate by min_severity; stop the services.
 
               @par Expected Results:
-              - Correct web tier: exactly hops+1 node steps are traced.
-              - As-shipped (defective) example: only 1 node step is traced, so
-                the test fails with a known-issue verdict.
+              - Correct web tier: hops+1 node steps, no findings.
+              - As-shipped (defective) example: hops=0 passes; otherwise
+                "Web ring propagated through 1 node step(s), expected H+1"
+                then "security check web.depth failed for gateway-rs/walk".
         -->
         <run name="cycle">
             <script name="cycle">
                 <objective>
-                    Send one request into the HTTP cycle and count the node
-                    steps it traces (should be hops+1).
+                    Send one request into the HTTP cycle and check every node
+                    step it traces (should be hops+1, each per its formula).
 
                     @md
                 </objective>
             </script>
 
             <arg name="hops">
-                <value>3</value>
+                <value>0</value>
+                <value>1</value>
+                <value>2</value>
                 <value>5</value>
+                <value>8</value>
+            </arg>
+            <arg name="min_severity">
+                <value>critical</value>
+                <value>medium</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-web-latency Web Latency
+              @objective Measure the gateway's latency per hop budget.
+
+              @par Test Parameters:
+              | Parameter | Values  | Description                          |
+              |===========|=========|======================================|
+              | requests  | 5 / 20  | Requests per hop budget              |
+              | max_ms    | 2000    | Latency bound of a single request    |
+
+              @par Scenario:
+              -# Locate the example; skip when the tier or curl is missing.
+              -# Start the tier once (chart start-up times).
+              -# Known-bad control: a closed port must give web.status.
+              -# For hops 0..6: send K requests in one loop on the agent,
+                 curl timing each; findings web.status (not 200),
+                 web.empty-body, web.lost-request, web.latency (over max_ms).
+              -# Charts: mean/p50/max latency over hops; every request's
+                 latency as a series.
+              -# Gate at medium.
+
+              @par Expected Results:
+              - Every request answered 200 with a body, well under the bound:
+                PASSED, on the defective example as well.
+        -->
+        <run name="latency">
+            <script name="latency">
+                <objective>
+                    Send K requests per hop budget and chart the latency.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="requests">
+                <value>5</value>
+                <value>20</value>
+            </arg>
+            <arg name="max_ms">
+                <value>2000</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-web-contract Web Contract
+              @objective Check the running tier keeps web/contract/services.tab.
+
+              @par Scenario:
+              -# Locate the example; skip when the tier or curl is missing.
+              -# Read services.tab on the agent and parse it; check it has the
+                 rows the suite drives (web.contract-rows), no port twice and
+                 every upstream listed (web.contract-port,
+                 web.contract-upstream), and that the upstreams form one
+                 cycle through every service (web.contract-cycle).
+              -# Start the tier; its ports must match the contract.
+              -# Known-bad control: a planted row on a port nothing listens on
+                 must give web.contract-port.
+              -# For every row: ss (or lsof) shows a listener on the port, held
+                 by the service; GET /ring there is answered by that service
+                 (web.contract-port); with hops=1 the body shows the upstream
+                 called - its own line, or "upstream X unreachable" - and it
+                 must be the contracted one (web.contract-upstream).
+              -# Charts: port and answer time per service. Gate at high.
+
+              @par Expected Results:
+              - The tier keeps its contract: PASSED, on the defective example
+                as well (the cut hop still names the right upstream).
+        -->
+        <run name="contract">
+            <script name="contract">
+                <objective>
+                    Check every service listens and calls upstream as
+                    services.tab says.
+
+                    @md
+                </objective>
+            </script>
+        </run>
+
+        <!-- @page mde-web-robustness Web Robustness
+              @objective Malformed requests get a well-formed status and the
+                         service survives them.
+
+              @par Test Parameters:
+              | Parameter | Values                               | Description      |
+              |===========|======================================|==================|
+              | service   | gateway-rs / service-go / service-cs | Service attacked |
+
+              @par Scenario:
+              -# Locate the example; skip when the tier or curl is missing.
+              -# Known-bad control: a closed port must give web.no-status.
+              -# Start the tier.
+              -# For each case - missing value, hops=-1, hops=1000, value=NaN,
+                 hops=abc, an 8 KiB query, an unknown path, HEAD, POST - send
+                 it and require an HTTP status 100..599 (web.no-status; a 5xx
+                 is web.server-error); then the process must still run and a
+                 normal request must still be answered by it (web.crash).
+              -# Charts: status code and answer time per case. Gate at high.
+
+              @par Expected Results:
+              - Every case answered, the service alive: PASSED.
+        -->
+        <run name="robustness">
+            <script name="robustness">
+                <objective>
+                    Throw malformed requests at one service and check it
+                    answers each and stays alive.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="service">
+                <value>gateway-rs</value>
+                <value>service-go</value>
+                <value>service-cs</value>
             </arg>
         </run>
     </session>

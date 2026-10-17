@@ -1,0 +1,259 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>Binary hardening tests</description>
+
+    <!-- @page mde-binary Binary Hardening Tests
+          @objective How every binary of the example was built: hardening
+                     flags, what the code still calls, what it links
+                     (tsf-cybersec: tapi_binscan, tapi_objdump).
+
+          @par Test Groups:
+          - @ref mde-binary-hardening        - one artifact against the binscan policy, cross-checked with readelf
+          - @ref mde-binary-hardening_matrix - all ten artifacts in one matrix
+          - @ref mde-binary-disasm_defect    - the injected defect, seen in the machine code
+          - @ref mde-binary-linked_libs      - what each artifact links, against an allow-list
+
+          @par Notes:
+          - Every audit runs next to a known-bad control built on the agent
+            (no hardening, a planted dead call, unexpected libraries). A
+            control that is not found fails the test with its own verdict.
+          - Findings go into one report per test; the @c min_severity
+            parameter decides what fails it, so each test runs both as a
+            hardening gate and as a smoke check.
+    -->
+
+    <author mailto="maximmenshchikov@gmail.com" />
+
+    <session track_conf="silent">
+        <!-- @page mde-binary-prologue Binary Group Prologue
+              @objective Record the tools of the group and the artifacts
+                         that are built.
+
+              @par Scenario:
+              -# Check readelf, objdump, gcc, cc and sha256sum on the agent.
+              -# Record which of the ten artifacts are built.
+        -->
+        <prologue>
+            <script name="prologue">
+                <objective>
+                    Record the tools of the group and the built artifacts.
+
+                    @md
+                </objective>
+            </script>
+        </prologue>
+
+        <!-- @page mde-binary-epilogue Binary Group Epilogue
+              @objective Remove the controls a stopped test may have left.
+
+              @par Scenario:
+              -# Remove /tmp/mde-binary-* control sources and binaries.
+        -->
+        <epilogue>
+            <script name="epilogue">
+                <objective>
+                    Remove the control binaries left on the agent.
+
+                    @md
+                </objective>
+            </script>
+        </epilogue>
+
+        <!-- @page mde-binary-hardening Hardening of One Artifact
+              @objective Read how one artifact was built with tapi_binscan,
+                         check it against the default policy, and confirm
+                         the reading with readelf on the agent.
+
+              @par Test Parameters:
+              | Parameter    | Values                          | Description                         |
+              |==============|=================================|=====================================|
+              | artifact     | cpp-demo / rust-demo / gateway-rs / service-go / service-cs / libpycore / libcscore / libgocore / librustcore / libcppcore | Artifact to scan |
+              | min_severity | high / critical                 | Lowest finding severity that fails  |
+
+              @par Scenario:
+              -# Locate the artifact; skip when it is not built.
+              -# Record its size and SHA-256.
+              -# tapi_binscan_inspect() and tapi_binscan_check() with the
+                 default policy.
+              -# Read PIE, interpreter, GNU_STACK, RELRO, BIND_NOW, canary and
+                 fortify symbols and the NEEDED count with readelf; every
+                 disagreement with binscan is a @c binary.view-mismatch.
+              -# Chart each property for both views (1/0, relro 0/1/2), the
+                 other binscan properties and the time each view took.
+              -# Known-bad control: build a binary with -fno-stack-protector
+                 -z execstack -no-pie -Wl,-z,norelro; expect
+                 binary.not-pie, binary.no-nx, binary.no-relro and
+                 binary.no-canary for it; drop its findings.
+              -# Gate on @c min_severity.
+
+              @par Expected Results:
+              - Go builds position-dependent executables by default, so
+                service-go fails at @c high with binary.not-pie; the other
+                artifacts carry only lower findings (no canary in Rust, Go
+                and NativeAOT code, partial RELRO, RPATH/RUNPATH into
+                dist/lib) and pass. Everything passes at @c critical.
+        -->
+        <run name="hardening">
+            <script name="hardening">
+                <objective>
+                    Check how one artifact was built, with a known-bad
+                    control and a readelf cross-check.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="artifact">
+                <value>cpp-demo</value>
+                <value>rust-demo</value>
+                <value>gateway-rs</value>
+                <value>service-go</value>
+                <value>service-cs</value>
+                <value>libpycore</value>
+                <value>libcscore</value>
+                <value>libgocore</value>
+                <value>librustcore</value>
+                <value>libcppcore</value>
+            </arg>
+            <arg name="min_severity">
+                <value>high</value>
+                <value>critical</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-binary-hardening_matrix Hardening Matrix
+              @objective Scan all ten artifacts in one pass and chart a
+                         line per hardening property over the artifacts.
+
+              @par Test Parameters:
+              | Parameter    | Values          | Description                        |
+              |==============|=================|====================================|
+              | min_severity | high / critical | Lowest finding severity that fails |
+
+              @par Scenario:
+              -# Scan every built artifact with tapi_binscan_check(); read
+                 BIND_NOW with readelf and compare the views.
+              -# One TEST_ARTIFACT row per artifact: PIE, RELRO, BIND_NOW, NX,
+                 canary, fortify, NEEDED count.
+              -# Chart pie/relro/bindnow/nx/canary/fortify over the artifact
+                 index (keys x0..x9 name the artifacts), findings per
+                 artifact and scan time per artifact.
+              -# Known-bad control as in @ref mde-binary-hardening.
+              -# Gate on @c min_severity.
+
+              @par Expected Results:
+              - Fails at @c high with binary.not-pie for service-go; passes at
+                @c critical.
+        -->
+        <run name="hardening_matrix">
+            <script name="hardening_matrix">
+                <objective>
+                    Scan all ten artifacts and chart the hardening matrix.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="min_severity">
+                <value>high</value>
+                <value>critical</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-binary-disasm_defect Injected Defect in Machine Code
+              @objective Find, in the disassembly of each ring stage, whether
+                         the call to the next stage survived the build.
+
+              @par Test Parameters:
+              | Parameter    | Values            | Description                        |
+              |==============|===================|====================================|
+              | min_severity | medium / critical | Lowest finding severity that fails |
+
+              @par Scenario:
+              -# Known-bad control: build a library with two copies of the
+                 ring step at -O2, one with an always-true early return and
+                 one without. The first must be reported as
+                 @c binary.dead-call, the second must not.
+              -# Disassemble cpp_step (libcppcore), rust_step (librustcore),
+                 main.go_step (libgocore) and py_step (libpycore) with
+                 tapi_objdump; a function that is not found is skipped.
+              -# Count instructions, calls, and calls or tail jumps to the
+                 next stage (rust_step, go_step, cs_step,
+                 PyObject_CallFunction). None is a @c binary.dead-call
+                 (medium) about lib:function.
+              -# For the C++ and Rust stages, the dynamic import table must
+                 agree (@c binary.view-mismatch otherwise).
+              -# Chart instructions, calls and reaches per function, and
+                 the objdump time per function.
+              -# Gate on @c min_severity.
+
+              @par Expected Results:
+              - Correct build: every stage reaches the next one; pass.
+              - As-shipped (defective) example: cpp_step, rust_step and
+                main.go_step have no call to the next stage left, so the
+                test fails at @c medium with binary.dead-call; it passes at
+                @c critical.
+        -->
+        <run name="disasm_defect">
+            <script name="disasm_defect">
+                <objective>
+                    Hunt for the always-true defect in the machine code of
+                    the ring stages.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="min_severity">
+                <value>medium</value>
+                <value>critical</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-binary-linked_libs Linked Libraries
+              @objective Check what each artifact links against an
+                         allow-list and against the documented ring links.
+
+              @par Test Parameters:
+              | Parameter    | Values      | Description                        |
+              |==============|=============|====================================|
+              | min_severity | low / high  | Lowest finding severity that fails |
+
+              @par Scenario:
+              -# Known-bad control: build a binary with
+                 no-as-needed linking of libresolv and libutil; expect
+                 @c binary.unexpected-lib for libresolv; drop its findings.
+              -# For every built artifact, take the NEEDED list from
+                 tapi_binscan; anything outside libc, libm, libstdc++,
+                 libgcc_s, libpython3.x, libdl, libpthread, ld-linux and the
+                 ring libraries is a @c binary.unexpected-lib (low).
+              -# Every documented build-time ring link missing from NEEDED
+                 is a @c binary.missing-ring-link (low).
+              -# readelf must read the same NEEDED list
+                 (@c binary.view-mismatch otherwise).
+              -# Chart needed / unexpected / ring links per artifact.
+              -# Gate on @c min_severity.
+
+              @par Expected Results:
+              - At @c high: pass unless the views disagree.
+              - At @c low: fails if an artifact links outside the allow-list
+                (e.g. a NativeAOT runtime dependency) or a ring link was
+                dropped by an as-needed linker because the only call that
+                used it was compiled away.
+        -->
+        <run name="linked_libs">
+            <script name="linked_libs">
+                <objective>
+                    Check what every artifact links against an allow-list.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="min_severity">
+                <value>low</value>
+                <value>high</value>
+            </arg>
+        </run>
+    </session>
+</package>

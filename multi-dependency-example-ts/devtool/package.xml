@@ -1,0 +1,267 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>Devtool tests</description>
+
+    <!-- @page mde-devtool Devtool Tests
+          @objective Rebuild parts of the example on the agent with
+                     tsf-devtool (tapi_cc, tapi_make) and check the
+                     compilers, the build and make deeply.
+
+          @par Test Groups:
+          - @ref mde-devtool-compile_probe  - sanitizer/hardening feature probes
+          - @ref mde-devtool-rebuild_pycore - rebuild the Python shim, warnings
+                                              and exports
+          - @ref mde-devtool-make_stub      - make's incremental semantics on
+                                              the C# stage's C stub
+          - @ref mde-devtool-reproducible   - two identical builds must be
+                                              identical
+
+          @par Notes:
+          - Every check stands next to a control: a probe between plain C
+            and a syntax error, an export check next to a hidden-visibility
+            build, a warning counter next to planted warnings, a
+            reproducibility check next to a build that embeds its path.
+          - Each test removes its build directory under /tmp on the agent.
+    -->
+
+    <author mailto="maximmenshchikov@gmail.com" />
+
+    <session track_conf="silent">
+        <!-- @page mde-devtool-prologue Devtool Group Prologue
+              @objective Record the compilers and build tools on the agent.
+
+              @par Scenario:
+              -# For cc, gcc, clang, c++, g++, clang++, make, ld and
+                 python3-config: the path and the first version line, as
+                 artifacts.
+              -# Chart the number of compilers found and the availability of
+                 each tool. Never skip.
+        -->
+        <prologue>
+            <script name="prologue">
+                <objective>
+                    Record the compilers and build tools on the agent.
+
+                    @md
+                </objective>
+            </script>
+        </prologue>
+
+        <!-- @page mde-devtool-epilogue Devtool Group Epilogue
+              @objective Finalize the devtool group.
+
+              @par Scenario:
+              -# No cleanup actions are required.
+        -->
+        <epilogue>
+            <script name="epilogue">
+                <objective>
+                    Finalize the devtool group.
+
+                    @md
+                </objective>
+            </script>
+        </epilogue>
+
+        <!-- @page mde-devtool-compile_probe Compiler Feature Probe
+              @objective Probe whether a compiler supports a sanitizer or a
+                         hardening feature with tapi_cc_check_snippet(),
+                         between a positive and a negative control.
+
+              @par Test Parameters:
+              | Parameter | Values                                                    | Description     |
+              |===========|===========================================================|=================|
+              | feature   | asan / ubsan / fuzzer / stack-protector / fortify / pie / cfi | Feature probed |
+              | cc        | clang / gcc                                               | Compiler        |
+
+              @par Scenario:
+              -# Skip when the compiler is missing; record its version.
+              -# Positive control: plain C must build.
+              -# Negative control: a syntax error must not build.
+              -# For features that announce themselves with a macro (asan,
+                 stack-protector, fortify, pie): record whether it is on by
+                 default, and check the probe fails with the feature turned
+                 off.
+              -# Probe the feature with its flags.
+              -# Chart the probe results and compile times, and a point
+                 "supported".
+              -# Supported: pass. Not supported where it is expected (asan,
+                 ubsan, stack-protector, fortify, pie on both; fuzzer, cfi on
+                 clang): verdict. Not supported and not expected (fuzzer, cfi
+                 on gcc): skip.
+
+              @par Expected Results:
+              - clang: every feature passes.
+              - gcc: fuzzer and cfi skip, every other feature passes.
+        -->
+        <run name="compile_probe">
+            <script name="compile_probe">
+                <objective>
+                    Probe a compiler feature on the agent between a positive
+                    and a negative control.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="feature">
+                <value>asan</value>
+                <value>ubsan</value>
+                <value>fuzzer</value>
+                <value>stack-protector</value>
+                <value>fortify</value>
+                <value>pie</value>
+                <value>cfi</value>
+            </arg>
+            <arg name="cc">
+                <value>clang</value>
+                <value>gcc</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-devtool-rebuild_pycore Rebuild the Python Shim
+              @objective Rebuild python/src/pycore.c on the agent with
+                         python3-config flags and -Wall -Wextra, count the
+                         warnings, and compare the result with the shipped
+                         libpycore.
+
+              @par Test Parameters:
+              | Parameter    | Values      | Description                |
+              |==============|=============|============================|
+              | cc           | clang / gcc | Compiler                   |
+              | opt          | O0 / O2     | Optimization level         |
+              | min_severity | high        | Lowest severity that fails |
+
+              @par Scenario:
+              -# Locate the example; skip when it, the compiler,
+                 python3-config or binutils are missing.
+              -# Build the shim with tapi_cc_do(); verdict if it does not
+                 build. Record time, size and sha256.
+              -# One build.warning (low) finding per warning kind.
+              -# Exports (nm -D, py_*) must include py_step and py_weight and
+                 equal the shipped library's (build.export-mismatch, high);
+                 NEEDED must equal the shipped library's
+                 (build.needed-mismatch, low).
+              -# Known-bad controls: a -fvisibility=hidden build must give
+                 build.export-mismatch; a source with an unused parameter and
+                 an unused variable must give build.warning.
+              -# Chart build time, size, warnings and warnings per kind; gate.
+
+              @par Expected Results:
+              - Pass on every iteration; warnings, if any, are low findings.
+        -->
+        <run name="rebuild_pycore">
+            <script name="rebuild_pycore">
+                <objective>
+                    Rebuild the Python shim with warnings on and compare it
+                    with the shipped library.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="cc">
+                <value>clang</value>
+                <value>gcc</value>
+            </arg>
+            <arg name="opt">
+                <value>O0</value>
+                <value>O2</value>
+            </arg>
+            <arg name="min_severity">
+                <value>high</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-devtool-make_stub Make the C Stub
+              @objective Build csharp/stub/cscore_stub.c with a tiny Makefile
+                         through tapi_make and check make's incremental
+                         semantics.
+
+              @par Test Parameters:
+              | Parameter | Values      | Description          |
+              |===========|=============|======================|
+              | cc        | clang / gcc | Compiler passed as CC |
+
+              @par Scenario:
+              -# Locate the example; skip without make, the compiler or the
+                 stub's source.
+              -# Copy the stub and write a Makefile into a temporary
+                 directory on the agent.
+              -# First build runs the recipe and produces the library.
+              -# Second build does nothing ("up to date") and leaves the
+                 library's mtime and hash as they were.
+              -# A dry run of the up-to-date tree shows no recipe.
+              -# After touching the source, a dry run shows the recipe but
+                 leaves the library unchanged; a real build runs it and
+                 changes the library.
+              -# make -B runs the recipe on an up-to-date target.
+              -# The library exports cs_step and cs_weight.
+              -# Chart the duration of every make call and whether it ran the
+                 recipe.
+
+              @par Expected Results:
+              - Pass.
+        -->
+        <run name="make_stub">
+            <script name="make_stub">
+                <objective>
+                    Build the C stub with make and check incremental
+                    rebuilds, dry runs and -B.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="cc">
+                <value>clang</value>
+                <value>gcc</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-devtool-reproducible Reproducible Build
+              @objective Build python/src/pycore.c twice with identical flags
+                         into two directories and check the results are
+                         identical.
+
+              @par Test Parameters:
+              | Parameter    | Values      | Description                |
+              |==============|=============|============================|
+              | cc           | clang / gcc | Compiler                   |
+              | min_severity | medium      | Lowest severity that fails |
+
+              @par Scenario:
+              -# Locate the example; skip without the compiler,
+                 python3-config, readelf or sha256sum.
+              -# Build the shim into a/ and b/ with -O2 and
+                 -ffile-prefix-map over the example root.
+              -# Compare sha256 and readelf -S section sizes; any difference
+                 is build.not-reproducible (medium).
+              -# Known-bad control: the same tiny source built with -g from
+                 two directories without a prefix map must differ.
+              -# Chart build times, section sizes and a point "identical";
+                 both hashes as artifacts; gate.
+
+              @par Expected Results:
+              - Pass: the shim builds reproducibly.
+        -->
+        <run name="reproducible">
+            <script name="reproducible">
+                <objective>
+                    Build the Python shim twice and check the two results are
+                    identical.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="cc">
+                <value>clang</value>
+                <value>gcc</value>
+            </arg>
+            <arg name="min_severity">
+                <value>medium</value>
+            </arg>
+        </run>
+    </session>
+</package>

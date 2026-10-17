@@ -1,0 +1,260 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>HTTP audits of the web tier</description>
+
+    <!-- @page mde-http HTTP Tests
+          @objective Audit the HTTP services of the web tier (gateway-rs,
+                     service-go, service-cs) with tsf-http: what they send
+                     back, what they let a client do, how they treat paths
+                     they do not serve, and how they hold up under load.
+
+          @par Test Groups:
+          - @ref mde-http-headers    - security headers and the /ring contract
+          - @ref mde-http-methods    - methods a node answers
+          - @ref mde-http-redirects  - unknown paths, catch-alls and redirects
+          - @ref mde-http-load_curve - latency and throughput vs concurrency
+
+          @par Notes:
+          - Every audit first runs against a tapi_http_server endpoint that
+            is wrong on purpose (known-bad control); a control that is not
+            reported fails the test with its own verdict.
+          - The tier is started with tsapi_mde_web_start() and stopped in
+            cleanup whatever happens.
+    -->
+
+    <author mailto="maximmenshchikov@gmail.com" />
+
+    <session track_conf="silent">
+        <!-- @page mde-http-prologue HTTP Group Prologue
+              @objective Report the tools the group needs.
+
+              @par Scenario:
+              -# Check curl and python3 on the agent and log their versions.
+              -# Chart which of them are present.
+        -->
+        <prologue>
+            <script name="prologue">
+                <objective>
+                    Report the tools of the HTTP group.
+
+                    @md
+                </objective>
+            </script>
+        </prologue>
+
+        <!-- @page mde-http-epilogue HTTP Group Epilogue
+              @objective Finalize the HTTP group.
+
+              @par Scenario:
+              -# No cleanup actions are required.
+        -->
+        <epilogue>
+            <script name="epilogue">
+                <objective>
+                    Finalize the HTTP group.
+
+                    @md
+                </objective>
+            </script>
+        </epilogue>
+
+        <!-- @page mde-http-headers Response Headers and the /ring Contract
+              @objective Read the GET /ring response of one node as a
+                         security posture (tapi_http_headers_check) and as a
+                         contract (status, Content-Type, Content-Length, node
+                         trace depth).
+
+              @par Test Parameters:
+              | Parameter    | Values                               | Description                    |
+              |==============|======================================|================================|
+              | service      | gateway-rs / service-go / service-cs | Node of the tier to ask        |
+              | min_severity | medium / critical                    | Lowest severity that fails     |
+
+              @par Scenario:
+              -# Start a tapi_http_server with no security headers, audit
+                 it and expect http.no-csp, http.no-nosniff, http.framable;
+                 drop the control's findings.
+              -# Start the web tier.
+              -# GET /ring with hops 0..5; check status 200, Content-Type
+                 text/plain, hops=0 traces exactly one node; chart response
+                 time, header count, body size, node lines vs hops+1.
+              -# Run tapi_http_headers_check() on the hops=5 response.
+              -# Report http.walk-depth (high) unless the body traces 6
+                 nodes.
+              -# Save the body with curl to /tmp/mde-http-headers-SERVICE.body
+                 and compare its byte count with Content-Length.
+              -# Gate the report at min_severity.
+
+              @par Expected Results:
+              - The toy tier sends none of the security headers: http.no-csp
+                (medium), http.no-nosniff, http.framable (low),
+                http.no-referrer-policy (info).
+              - As shipped every node answers only for itself:
+                http.walk-depth (high).
+              - min_severity=critical passes; min_severity=medium fails with
+                the header findings.
+        -->
+        <run name="headers">
+            <script name="headers">
+                <objective>
+                    Audit the response headers of a node and check the
+                    /ring contract.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="service">
+                <value>gateway-rs</value>
+                <value>service-go</value>
+                <value>service-cs</value>
+            </arg>
+            <arg name="min_severity">
+                <value>medium</value>
+                <value>critical</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-http-methods Methods a Node Answers
+              @objective Find out which methods a node answers on /ring: only
+                         GET, HEAD and OPTIONS belong to a read-only service.
+
+              @par Test Parameters:
+              | Parameter    | Values                               | Description                    |
+              |==============|======================================|================================|
+              | service      | gateway-rs / service-go / service-cs | Node of the tier to ask        |
+              | min_severity | medium / critical                    | Lowest severity that fails     |
+
+              @par Scenario:
+              -# Start a tapi_http_server that answers TRACE and advertises
+                 PUT and DELETE; probe it; expect http.trace-enabled and
+                 http.changing-method-allowed; drop the control's findings.
+              -# Start the web tier and run tapi_http_methods_probe() and
+                 tapi_http_methods_check() on /ring?hops=0.
+              -# GET must be 200; HEAD must agree with GET.
+              -# Send POST, PUT, DELETE, PATCH; a 2xx is
+                 http.unsafe-method-accepted (low).
+              -# Cross-check Allow (when sent) against what was answered.
+              -# Chart status, allowed (2xx) and advertised per method.
+              -# Gate the report at min_severity.
+
+              @par Expected Results:
+              - gateway-rs and service-go route by path only: TRACE is
+                answered (http.trace-enabled, medium), as are the
+                state-changing methods.
+              - service-cs (MapGet) answers GET only; HEAD/OPTIONS are 405.
+              - min_severity=critical passes; min_severity=medium fails on
+                gateway-rs and service-go.
+        -->
+        <run name="methods">
+            <script name="methods">
+                <objective>
+                    Find out which methods a node of the tier answers.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="service">
+                <value>gateway-rs</value>
+                <value>service-go</value>
+                <value>service-cs</value>
+            </arg>
+            <arg name="min_severity">
+                <value>medium</value>
+                <value>critical</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-http-redirects Unknown Paths and Redirects
+              @objective Check that a node answers 404 for paths it does not
+                         serve, does not redirect off-host, and that the
+                         redirect chain tapi_http reports is consistent.
+
+              @par Test Parameters:
+              | Parameter    | Values                               | Description                    |
+              |==============|======================================|================================|
+              | service      | gateway-rs / service-go / service-cs | Node of the tier to ask        |
+              | min_severity | medium / critical                    | Lowest severity that fails     |
+
+              @par Scenario:
+              -# Start a plain tapi_http_server: /redirect must read
+                 302 -> 200 when followed and 302 + Location when not.
+              -# Ask the control for a garbage path: it answers 200, so
+                 http.catch-all must be reported; drop it.
+              -# Start the web tier; ask the node for /ring, a garbage path,
+                 /, /ring/extra, /.env and /RING following redirects.
+              -# A 2xx on a path the node does not serve is http.catch-all
+                 (medium); a redirect off-host is http.open-redirect (high).
+              -# Chart status, chain length and time per path.
+              -# Gate the report at min_severity.
+
+              @par Expected Results:
+              - All three nodes answer 404 for unknown paths and never
+                redirect: the test passes. /RING is recorded only (Kestrel
+                routes case-insensitively).
+        -->
+        <run name="redirects">
+            <script name="redirects">
+                <objective>
+                    Ask a node for paths it does not serve and follow what it
+                    answers.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="service">
+                <value>gateway-rs</value>
+                <value>service-go</value>
+                <value>service-cs</value>
+            </arg>
+            <arg name="min_severity">
+                <value>medium</value>
+                <value>critical</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-http-load_curve Load Curve
+              @objective Drive gateway-rs with 48 GET /ring requests,
+                         concurrency at a time, and draw latency and
+                         throughput.
+
+              @par Test Parameters:
+              | Parameter   | Values     | Description                         |
+              |=============|============|=====================================|
+              | concurrency | 1 / 4 / 16 | Parallel curl clients per batch     |
+
+              @par Scenario:
+              -# Start the web tier and warm it up with one request.
+              -# Run 48/concurrency batches of concurrency parallel curl
+                 processes on the agent; each prints its status and time.
+              -# Every request must be reported and answered 200
+                 (http.load-lost / http.load-errors, high).
+              -# The tier must still answer afterwards (http.load-crash,
+                 critical).
+              -# Chart latency per request, mean and max per batch,
+                 throughput (RPS), errors.
+              -# Gate the report at high.
+
+              @par Expected Results:
+              - No errors at any concurrency; latency grows with it.
+        -->
+        <run name="load_curve">
+            <script name="load_curve">
+                <objective>
+                    Draw latency and throughput of the web tier against the
+                    number of parallel clients.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="concurrency">
+                <value>1</value>
+                <value>4</value>
+                <value>16</value>
+            </arg>
+        </run>
+    </session>
+</package>

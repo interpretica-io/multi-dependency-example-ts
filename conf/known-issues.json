@@ -1,0 +1,117 @@
+[
+ {
+  "test": "ring/propagation",
+  "verdict": "^Ring propagated through|ring\\.depth|ring\\.result",
+  "note": "DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model."
+ },
+ {
+  "test": "ring/reference",
+  "verdict": "^Ring result|ring\\.depth",
+  "note": "DUT: cpp-demo 1 7 returns 2.6 instead of the README oracle 20.0735 - the walk stops at the first stage."
+ },
+ {
+  "test": "ring/sweep",
+  "verdict": "^Ring sweep diverges|ring\\.depth",
+  "note": "DUT: the observed depth stays 1 for every hop budget; the model diverges from hops=1."
+ },
+ {
+  "test": "ring/entry_matrix",
+  "verdict": "ring\\.formula",
+  "note": "DUT on Linux: python/ring_stage.py looks go_weight up with ctypes.CDLL(None), which does not see RTLD_LOCAL libraries on glibc, so the C++ stage multiplies by a weight that is not py_weight - its step no longer matches its own formula. macOS is not affected."
+ },
+ {
+  "test": "web/cycle",
+  "verdict": "^Web ring propagated|web\\.depth",
+  "note": "DUT: each node's forward() is short-circuited by the injected defect, so a request stops at the gateway."
+ },
+ {
+  "test": "browser/walk_page",
+  "verdict": "^Browser walk traced",
+  "note": "DUT: the same web-tier defect seen through Chromium."
+ },
+ {
+  "test": "mqtt/ring_bus",
+  "verdict": "ring\\.depth",
+  "note": "DUT: the ring trace carried over MQTT round-trips exactly, and shows the 1-stage walk."
+ },
+ {
+  "test": "http/headers",
+  "verdict": "http\\.walk-depth|http\\.no-csp",
+  "note": "DUT: the walk depth defect seen in the HTTP body; the toy services also send no security headers."
+ },
+ {
+  "test": "http/methods",
+  "verdict": "http\\.trace-enabled",
+  "note": "DUT: gateway-rs and service-go route by path only and answer TRACE."
+ },
+ {
+  "test": "binary/disasm_defect",
+  "verdict": "binary\\.dead-call",
+  "note": "DUT: the call to the next stage is compiled away (if (5) / if true): the defect is visible in the machine code."
+ },
+ {
+  "test": "binary/hardening",
+  "verdict": "binary\\.",
+  "note": "DUT build posture: Go builds service-go non-PIE, and the Rust/Go link steps leave relative RUNPATHs."
+ },
+ {
+  "test": "binary/hardening_matrix",
+  "verdict": "binary\\.",
+  "note": "DUT build posture: see binary/hardening."
+ },
+ {
+  "test": "binary/linked_libs",
+  "verdict": "binary\\.missing-ring-link",
+  "note": "DUT: the README's documented link edges are missing because the defect made the calls dead and the linker dropped the libraries."
+ },
+ {
+  "test": "graph/links",
+  "verdict": "does not link|graph\\.missing-edge",
+  "note": "DUT: with the next-stage calls compiled away, libcppcore no longer NEEDs librustcore and librustcore no longer NEEDs libgocore."
+ },
+ {
+  "test": "graph/cycle_closure",
+  "verdict": "graph\\.cycle-edge-missing",
+  "note": "DUT: the load-time cycle is broken by the same dropped edges."
+ },
+ {
+  "test": "memmap/proc",
+  "verdict": "memmap\\.wx-mapping",
+  "note": "Environment: the amd64 container runs under Rosetta on Apple silicon; the translator's code cache is mapped W+X in every process. Re-check on native amd64."
+ },
+ {
+  "test": "net/vpn_tree",
+  "verdict": "/agent/vpn subtree is not registered",
+  "note": "tsf-tunnel: ta_vpn links a static tapi_cfg_vpn, which is built shared only (build_lib_static = false), so the agent half cannot be linked into any agent."
+ },
+ {
+  "test": "net/ipsec_builder",
+  "verdict": "/agent/vpn subtree is not registered",
+  "note": "tsf-tunnel: see net/vpn_tree."
+ },
+ {
+  "test": "net/wg_tunnel",
+  "verdict": "/agent/vpn subtree is not registered",
+  "note": "tsf-tunnel: see net/vpn_tree."
+ },
+ {
+  "test": "iot/frames_802154",
+  "verdict": "MIC|accepted a frame|header",
+  "note": "tsf-802154: at MIC-only security levels tapi_802154_unsecure() never verifies the tag (no EVP_CipherFinal_ex), and tapi_802154_secure() restarts the MAC between header and payload, so the header is not authenticated."
+ },
+ {
+  "test": "iot/sdr",
+  "verdict": "capture that does not exist|rtl_433",
+  "note": "tsf-sdr: rtl_433 22.11 exits 0 after failing to open a file; tapi_sdr_decode() checks the exit status only, so a missing capture reads as an empty one."
+ },
+ {
+  "test": "kernel/modules",
+  "verdict": "tapi_kmod_list cannot parse",
+  "note": "tsf-kernel: /proc/modules prints '-' as the use count of modules that cannot be unloaded; the parser wants a number and fails the whole list."
+ },
+ {
+  "test": "container/ring_inside",
+  "verdict": "ring\\.depth|container\\.missing-runtime",
+  "note": "DUT: inside every image the ring shows the same 1-stage walk as on the agent (injected defect). An image without libpython3 (libpycore embeds CPython) reports container.missing-runtime instead."
+ }
+]

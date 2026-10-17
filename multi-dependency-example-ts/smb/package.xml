@@ -1,0 +1,133 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>SMB tests: the example served and read back over SMB</description>
+
+    <!-- @page mde-smb SMB Tests
+          @objective Serve the built example over SMB and read it back, and
+                     audit the SMB server the module stands up.
+
+          @par Test Groups:
+          - @ref mde-smb-serve_dist   - dist served read-only, every lib round-tripped
+          - @ref mde-smb-server_audit - the SMB server's posture, with a control
+
+          @par Notes:
+          - The DUT has no SMB of its own; SMB is an evidence channel for the
+            built artifacts and the infrastructure the module stands up.
+          - Both tests need Samba tooling on the agent (smbclient, and a
+            smbd able to serve a usershare). When no SMB server answers and
+            the agent has passwordless sudo, the prologue starts an smbd of
+            the suite's own (loopback only, /tmp/mde-smb) with an account for
+            the agent user, and lets that user serve usershares; the epilogue
+            undoes it. The tests skip cleanly when it is still absent or
+            cannot serve.
+    -->
+
+    <author mailto="maximmenshchikov@gmail.com" />
+
+    <session track_conf="silent">
+        <!-- @page mde-smb-prologue SMB Group Prologue
+              @objective Make sure an SMB server answers on the agent and
+                         that the agent user may serve a usershare.
+
+              @par Scenario:
+              -# If nothing answers on 127.0.0.1:445 and sudo -n works, start
+                 an smbd of the suite's own with a minimal configuration in
+                 /tmp/mde-smb (interfaces = lo, SMB2+, signing required, no
+                 anonymous IPC, guests mapped to nobody), and add the agent
+                 user to its passdb with a random password (/tmp/mde-smb/cred).
+              -# If net usershare is refused, give the agent user an ACL entry
+                 on the usershare directory.
+              -# List every change in /tmp/mde-smbd.started.
+        -->
+        <prologue>
+            <script name="prologue">
+                <objective>
+                    Prepare the smb group.
+
+                    @md
+                </objective>
+            </script>
+        </prologue>
+
+        <!-- @page mde-smb-epilogue SMB Group Epilogue
+              @objective Undo what the prologue changed.
+
+              @par Scenario:
+              -# Remove the usershares the tests serve, if left behind.
+              -# Stop the suite's smbd and remove /tmp/mde-smb, and take back
+                 the usershare directory ACL - only what
+                 /tmp/mde-smbd.started lists.
+        -->
+        <epilogue>
+            <script name="epilogue">
+                <objective>
+                    Finalize the smb group.
+
+                    @md
+                </objective>
+            </script>
+        </epilogue>
+
+        <!-- @page mde-smb-serve_dist Serve dist Over SMB
+              @objective Serve dist read-only, copy every ring library back
+                         and sha256-compare it against the original.
+
+              @par Scenario:
+              -# Serve $TE_TS_MDE_SRC/dist as a read-only usershare.
+              -# Reach it with a null session, or else with the account the
+                 group prologue made.
+              -# List it over smbclient.
+              -# Copy every ring library off the share.
+              -# Compare the sha256 of each copy to the original on disk.
+              -# A write to the read-only share must be refused (control).
+
+              @par Expected Results:
+              - Every library round-trips byte-exact, and the write is
+                refused. Skipped when the agent has no Samba or cannot serve.
+        -->
+        <run name="serve_dist">
+            <script name="serve_dist">
+                <objective>
+                    Serve dist over SMB and round-trip every library.
+
+                    @md
+                </objective>
+            </script>
+        </run>
+
+        <!-- @page mde-smb-server_audit SMB Server Audit
+              @objective Read the SMB server's posture, with a guest-ok share
+                         as a known-bad control where the server allows it.
+
+              @par Test Parameters:
+              | Parameter    | Values            | Description             |
+              |==============|===================|=========================|
+              | min_severity | medium / critical | Failing threshold       |
+
+              @par Scenario:
+              -# Plant a guest-ok control share if the server allows guests.
+              -# Read the server's posture over the wire.
+              -# Where the control was planted, assert it was caught, then
+                 drop its findings.
+              -# Gate on the server's own posture.
+
+              @par Expected Results:
+              - The server's posture has no finding at or above the threshold
+                on a hardened default Samba; the control, when feasible, is
+                caught so the audit is not blind.
+        -->
+        <run name="server_audit">
+            <script name="server_audit">
+                <objective>
+                    The posture of the SMB server, with a control.
+
+                    @md
+                </objective>
+            </script>
+            <arg name="min_severity">
+                <value>medium</value>
+                <value>critical</value>
+            </arg>
+        </run>
+    </session>
+</package>

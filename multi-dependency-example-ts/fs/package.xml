@@ -1,0 +1,258 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>Filesystem tests</description>
+
+    <!-- @page mde-fs Filesystem Tests
+          @objective The example tree on disk: permissions, secrets at
+                     rest, integrity across a run, the mounts it lives on
+                     and their health (tsf-fs).
+
+          @par Test Groups:
+          - @ref mde-fs-perm_audit - permissions of dist and the source tree
+          - @ref mde-fs-secrets    - keys, AWS key ids, weak hashes, accounts
+          - @ref mde-fs-integrity  - nothing in dist may change during a run
+          - @ref mde-fs-mounts     - mount options, enforcement, protections
+          - @ref mde-fs-health     - space, inodes, errors, deleted-open files
+
+          @par Notes:
+          - tsf-fs reports issues; this group ranks every fs.* check (see
+            fs_common.h) and the min_severity parameter, where there is
+            one, decides what fails.
+          - Every audit has a known-bad control planted under
+            /tmp/mde-fs-*-ctl on the agent; the prologue and the epilogue
+            remove them.
+    -->
+
+    <author mailto="maximmenshchikov@gmail.com" />
+
+    <session track_conf="silent">
+        <!-- @page mde-fs-prologue Filesystem Group Prologue
+              @objective Clean up after an earlier run and record the size
+                         of the built tree.
+
+              @par Scenario:
+              -# Remove /tmp/mde-fs-* on the agent.
+              -# Record the size and the file count of dist.
+        -->
+        <prologue>
+            <script name="prologue">
+                <objective>
+                    Remove leftovers of an earlier run and record the size
+                    of the built tree.
+
+                    @md
+                </objective>
+            </script>
+        </prologue>
+
+        <!-- @page mde-fs-epilogue Filesystem Group Epilogue
+              @objective Remove the control directories.
+
+              @par Scenario:
+              -# Remove /tmp/mde-fs-* on the agent.
+        -->
+        <epilogue>
+            <script name="epilogue">
+                <objective>
+                    Remove the control directories the tests planted.
+
+                    @md
+                </objective>
+            </script>
+        </epilogue>
+
+        <!-- @page mde-fs-perm_audit Permission Audit
+              @objective Audit the permissions of the built tree and the
+                         source tree, with a planted known-bad control.
+
+              @par Test Parameters:
+              | Parameter    | Values            | Description                        |
+              |==============|===================|====================================|
+              | min_severity | medium / critical | Lowest finding severity that fails |
+
+              @par Scenario:
+              -# Walk dist and check permissions (setuid/setgid, world-writable,
+                 no sticky bit, device nodes, sensitive paths).
+              -# Walk the source tree (dist, .git, target, obj pruned) and
+                 check it the same way.
+              -# List file capabilities of dist (getcap).
+              -# Compare the mode of cpp-demo from the walk with stat.
+              -# Every built binary must have execute bits.
+              -# Chart entries per type, findings per directory, walk times.
+              -# Plant a world-writable file, an open directory and a setuid
+                 copy of /bin/true; the audit must flag each; drop them.
+              -# Gate on min_severity.
+
+              @par Expected Results:
+              - A clean build tree: pass in both iterations.
+        -->
+        <run name="perm_audit">
+            <script name="perm_audit">
+                <objective>
+                    Permission audit of the example tree with a planted
+                    world-writable / setuid control.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="min_severity">
+                <value>medium</value>
+                <value>critical</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-fs-secrets Secrets at Rest
+              @objective Find private keys, AWS key ids and weak password
+                         hashes in the example tree and the agent accounts.
+
+              @par Test Parameters:
+              | Parameter    | Values          | Description                        |
+              |==============|=================|====================================|
+              | min_severity | high / critical | Lowest finding severity that fails |
+
+              @par Scenario:
+              -# Count the files under the example.
+              -# Find private keys (tsf-fs), AWS key ids and MD5-crypt hashes
+                 (grep), and look for the control marker, which must not be
+                 there yet.
+              -# Audit the accounts of the agent.
+              -# Chart files scanned against findings, findings per directory.
+              -# Plant a PEM key, the example AWS key id, an MD5-crypt hash
+                 and the marker; run every scanner on them and on a synthetic
+                 shadow entry; each must be found; drop them.
+              -# Gate on min_severity.
+
+              @par Expected Results:
+              - No secrets in the example: pass.
+        -->
+        <run name="secrets">
+            <script name="secrets">
+                <objective>
+                    Secrets at rest in the example tree, with planted
+                    key/AWS/hash/marker controls.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="min_severity">
+                <value>high</value>
+                <value>critical</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-fs-integrity Integrity of dist Across a Run
+              @objective Nothing in dist may change while the example runs.
+
+              @par Test Parameters:
+              | Parameter | Values     | Description                               |
+              |===========|============|===========================================|
+              | workload  | ring / web | Ring demos, or the web tier and 20 requests |
+
+              @par Scenario:
+              -# Take the manifest of dist (paths, modes, sizes, SHA-256).
+              -# Round-trip it through its text form; save it on the engine.
+              -# Compare the digest of cpp-demo with sha256sum.
+              -# Run the workload; take the manifest again; every difference
+                 is a finding (modified is critical, the rest high).
+              -# Control: copy a library, baseline it, change one byte; it
+                 must be reported as modified.
+              -# Chart files hashed, bytes hashed and time per manifest.
+              -# Gate at high.
+
+              @par Expected Results:
+              - dist unchanged: pass.
+        -->
+        <run name="integrity">
+            <script name="integrity">
+                <objective>
+                    Baseline dist, run the example, re-check: nothing may
+                    change; a one-byte change must be caught.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="workload">
+                <value>ring</value>
+                <value>web</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-fs-mounts Mounts Under the Example
+              @objective Mount options of the example's filesystem and of
+                         the usual mount points, and their enforcement.
+
+              @par Test Parameters:
+              | Parameter    | Values          | Description                        |
+              |==============|=================|====================================|
+              | min_severity | high / critical | Lowest finding severity that fails |
+
+              @par Scenario:
+              -# Read the mount table; chart mounts by kind and option.
+              -# Find the mount of the example; df must agree; chart its
+                 options; noexec there is a finding.
+              -# Check the mount options of /tmp, /dev/shm, /proc, ...
+              -# Probe noexec and read-only enforcement; check link and dump
+                 protections.
+              -# Control: a synthetic mount table with a bare /media mount
+                 must be reported for nosuid, nodev and noexec.
+              -# Gate on min_severity.
+
+              @par Expected Results:
+              - No high findings in a usual container: pass.
+        -->
+        <run name="mounts">
+            <script name="mounts">
+                <objective>
+                    Mount options, their enforcement and the filesystem
+                    protections under the example.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="min_severity">
+                <value>high</value>
+                <value>critical</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-fs-health Filesystem Health
+              @objective Space, inodes, errors and deleted files held open
+                         under the example.
+
+              @par Test Parameters:
+              | Parameter | Values  | Description                           |
+              |===========|=========|=======================================|
+              | threshold | 90 / 95 | Usage percent reported as a finding   |
+
+              @par Scenario:
+              -# Control: at a 0% threshold the space check must report.
+              -# Compare the size of the example's filesystem with df.
+              -# Chart space and inode usage of every mount holding files.
+              -# Report filesystems above the threshold and error counters.
+              -# With the web tier running, list deleted files held open.
+              -# Gate at high.
+
+              @par Expected Results:
+              - Enough space, no errors: pass.
+        -->
+        <run name="health">
+            <script name="health">
+                <objective>
+                    Filesystem health under the example: space, inodes,
+                    errors, deleted files held open.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="threshold">
+                <value>90</value>
+                <value>95</value>
+            </arg>
+        </run>
+    </session>
+</package>

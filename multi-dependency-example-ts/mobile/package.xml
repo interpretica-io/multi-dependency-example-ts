@@ -1,0 +1,205 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>Mobile tests</description>
+
+    <!-- @page mde-mobile Mobile Tests
+          @objective Check that the device control stacks (tsf-android,
+                     tsf-apple, tsf-appium) are really integrated into the
+                     suite's agent - their Configurator subtrees served, their
+                     RPCs linked and answering - and use them as far as the
+                     agent allows.
+
+          @par Test Groups:
+          - @ref mde-mobile-stack_presence - the stack's Configurator model is registered and served
+          - @ref mde-mobile-devices        - the devices the stack sees, cross-checked with the native tool
+          - @ref mde-mobile-rpc_roundtrip  - the stack's RPCs answer; a full round trip through a stand-in
+
+          @par Notes:
+          - The container has no Android or iOS device and no Appium
+            server, so devices skips with the reason after charting a
+            count of 0; rpc_roundtrip uses the stand-in servers tsf-android
+            and tsf-appium install (tsf-apple has none).
+    -->
+
+    <author mailto="maximmenshchikov@gmail.com" />
+
+    <session track_conf="silent">
+        <!-- @page mde-mobile-prologue Mobile Group Prologue
+              @objective Inventory the device control stacks of the agent.
+
+              @par Scenario:
+              -# Look for the /agent/android, /agent/apple and /agent/appium
+                 subtrees, the adb, idevice_id and appium tools, and the
+                 stand-in servers in the installation; chart it.
+        -->
+        <prologue>
+            <script name="prologue">
+                <objective>
+                    Inventory the device control stacks of the agent.
+
+                    @md
+                </objective>
+            </script>
+        </prologue>
+
+        <!-- @page mde-mobile-epilogue Mobile Group Epilogue
+              @objective Finalize the mobile group.
+
+              @par Scenario:
+              -# No cleanup actions are required.
+        -->
+        <epilogue>
+            <script name="epilogue">
+                <objective>
+                    Finalize the mobile group.
+
+                    @md
+                </objective>
+            </script>
+        </epilogue>
+
+        <!-- @page mde-mobile-stack_presence Stack Presence
+              @objective Every object of the stack's Configurator model is
+                         registered and the agent serves the subtree.
+
+              @par Test Parameters:
+              | Parameter    | Values                  | Description                  |
+              |==============|=========================|==============================|
+              | stack        | android / apple / appium | Device control stack        |
+              | min_severity | high / critical         | Lowest finding that fails    |
+
+              @par Scenario:
+              -# Look up every object of cm_<stack>.yml; a missing one is a
+                 high mobile.object-unregistered finding.
+              -# Known-bad control: look up /agent/<stack>/mde-no-such-node,
+                 which must be reported missing (then dropped).
+              -# Synchronize /agent:Agt_A/<stack>: and require its root
+                 instance (critical mobile.subtree-missing otherwise: the
+                 ta_<stack>_conf library is not linked into the agent).
+              -# Count the instances below the root, level by level.
+              -# Read the leaves with documented defaults: the adb server
+                 address (127.0.0.1:5037), the Appium server URL
+                 (http://127.0.0.1:4723) and its status.
+              -# Chart model objects, registered objects, instances per level
+                 and the synchronization time.
+
+              @par Expected Results:
+              - All three stacks are linked into the agent: pass.
+        -->
+        <run name="stack_presence">
+            <script name="stack_presence">
+                <objective>
+                    Every object of the stack's Configurator model is
+                    registered and the agent serves the subtree.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="stack">
+                <value>android</value>
+                <value>apple</value>
+                <value>appium</value>
+            </arg>
+            <arg name="min_severity">
+                <value>high</value>
+                <value>critical</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-mobile-devices Devices
+              @objective List the devices a stack sees and read their
+                         properties without installing anything.
+
+              @par Test Parameters:
+              | Parameter | Values                   | Description             |
+              |===========|==========================|=========================|
+              | stack     | android / apple / appium | Device control stack    |
+
+              @par Scenario:
+              -# List through the TAPI: tapi_android_devices(),
+                 tapi_apple_list() (devices and simulators),
+                 tapi_appium_server_ready().
+              -# Cross-check with the native tool when it is there and safe
+                 to ask: adb devices (only if an adb server already runs),
+                 idevice_id -l, the Appium server's /status.
+              -# Chart the count and the time to list.
+              -# Nothing attached: skip with the reason.
+              -# Otherwise read model, OS version and state of each device;
+                 for Android the Configurator's model must equal the RPC's.
+
+              @par Expected Results:
+              - In the container: skipped, "No Android device is attached to
+                the agent", "No iOS device or simulator is visible to the
+                agent", "No Appium server is ready on the agent".
+        -->
+        <run name="devices">
+            <script name="devices">
+                <objective>
+                    List the devices a stack sees and read their properties
+                    without installing anything.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="stack">
+                <value>android</value>
+                <value>apple</value>
+                <value>appium</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-mobile-rpc_roundtrip RPC Round Trip
+              @objective The stack's RPCs are linked into the RPC server and
+                         answer; through a stand-in server the Configurator
+                         and the RPCs agree.
+
+              @par Test Parameters:
+              | Parameter    | Values                   | Description               |
+              |==============|==========================|===========================|
+              | stack        | android / apple / appium | Device control stack      |
+              | min_severity | high / critical          | Lowest finding that fails |
+
+              @par Scenario:
+              -# Linkage probe with nothing to talk to: android_shell to
+                 127.0.0.1:1, apple_terminate on a device (refused by rpcs_apple
+                 with EOPNOTSUPP), appium_source on 127.0.0.1:1. RPC-ERPCNOTSUPP
+                 is a critical mobile.rpc-not-linked finding.
+              -# android: start tsf-android's fake adb server, point the agent
+                 at it, compare model/version/SDK from the Configurator with
+                 getprop over the RPC; push a file, cat it on the device, pull
+                 it back and compare SHA-256. Control: a missing property must
+                 differ from the model.
+              -# appium: start tsf-appium's fake server, create a session
+                 through the subtree, find/type/tap/read over the RPCs, check
+                 the server recorded the tap. Control: a text not on the screen
+                 must be reported missing.
+              -# Restore the server address; chart every call's latency.
+
+              @par Expected Results:
+              - All three stacks answer; android and appium round trips agree:
+                pass.
+        -->
+        <run name="rpc_roundtrip">
+            <script name="rpc_roundtrip">
+                <objective>
+                    The stack's RPCs are linked into the RPC server and
+                    answer.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="stack">
+                <value>android</value>
+                <value>apple</value>
+                <value>appium</value>
+            </arg>
+            <arg name="min_severity">
+                <value>high</value>
+                <value>critical</value>
+            </arg>
+        </run>
+    </session>
+</package>

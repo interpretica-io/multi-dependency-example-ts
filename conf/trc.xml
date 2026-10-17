@@ -1,195 +1,2277 @@
-<?xml version="1.0" encoding="UTF-8" ?>
+<?xml version="1.0" ?>
 <trc_db unknown_exp_status="passed_ok">
   <test name="multi-dependency-example-ts" type="package">
-    <objective>Multi-dependency Example Test Suite</objective>
-    <notes />
+    <objective/>
+    <notes/>
     <iter result="PASSED">
-      <notes />
+      <notes/>
       <test name="prologue" type="script">
-        <objective>Test suite prologue</objective>
-        <notes />
-        <iter result="PASSED">
-          <notes />
-        </iter>
+        <objective/>
+        <notes/>
       </test>
-
       <test name="ring" type="package">
-        <objective>Ring tests</objective>
-        <notes />
+        <objective/>
+        <notes/>
         <iter result="PASSED">
-          <notes />
+          <notes/>
           <test name="prologue" type="script">
-            <objective>Ring group prologue</objective>
-            <notes />
-            <iter result="PASSED"><notes /></iter>
+            <objective/>
+            <notes/>
           </test>
-
           <test name="propagation" type="script">
-            <objective>Ring propagation</objective>
-            <notes>
-              Known issue: the example ships with an always-true defect in
-              every stage, so the value stops after the first stage (1 instead
-              of hops+1). Fix the defects and these flip to PASSED.
-            </notes>
+            <objective/>
+            <notes/>
             <iter result="FAILED">
               <arg name="entry">cpp</arg>
-              <arg name="hops">5</arg>
-              <notes />
-              <results><result value="FAILED">
-                <verdict>Ring propagated through 1 stage(s), expected 6</verdict>
-              </result></results>
+              <arg name="hops">1</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 2</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
             </iter>
             <iter result="FAILED">
               <arg name="entry">cpp</arg>
-              <arg name="hops">7</arg>
-              <notes />
-              <results><result value="FAILED">
-                <verdict>Ring propagated through 1 stage(s), expected 8</verdict>
-              </result></results>
+              <arg name="hops">1</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 2</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
             </iter>
             <iter result="FAILED">
-              <arg name="entry">rust</arg>
-              <arg name="hops">5</arg>
-              <notes />
-              <results><result value="FAILED">
-                <verdict>Ring propagated through 1 stage(s), expected 6</verdict>
-              </result></results>
+              <arg name="entry">cpp</arg>
+              <arg name="hops">1</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 2</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
             </iter>
             <iter result="FAILED">
-              <arg name="entry">rust</arg>
-              <arg name="hops">7</arg>
-              <notes />
-              <results><result value="FAILED">
-                <verdict>Ring propagated through 1 stage(s), expected 8</verdict>
-              </result></results>
+              <arg name="entry">cpp</arg>
+              <arg name="hops">1</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 2</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
             </iter>
             <iter result="FAILED">
-              <arg name="entry">py</arg>
-              <arg name="hops">5</arg>
-              <notes />
-              <results><result value="FAILED">
-                <verdict>Ring propagated through 1 stage(s), expected 6</verdict>
-              </result></results>
-            </iter>
-            <iter result="FAILED">
-              <arg name="entry">py</arg>
-              <arg name="hops">7</arg>
-              <notes />
-              <results><result value="FAILED">
-                <verdict>Ring propagated through 1 stage(s), expected 8</verdict>
-              </result></results>
-            </iter>
-          </test>
-
-          <test name="reference" type="script">
-            <objective>Ring reference result</objective>
-            <notes>
-              Known issue: the defect returns the first stage's value (~2.6)
-              instead of the full-ring result 20.0735.
-            </notes>
-            <iter result="FAILED">
-              <notes />
-              <results><result value="FAILED">
-                <verdict>Ring result 2.6000, expected 20.0735 (value=1, hops=7)</verdict>
-              </result></results>
-            </iter>
-          </test>
-
-          <test name="epilogue" type="script">
-            <objective>Ring group epilogue</objective>
-            <notes />
-            <iter result="PASSED"><notes /></iter>
-          </test>
-        </iter>
-      </test>
-
-      <test name="web" type="package">
-        <objective>Web tier tests</objective>
-        <notes />
-        <iter result="PASSED">
-          <notes />
-          <test name="prologue" type="script">
-            <objective>Web group prologue</objective>
-            <notes />
-            <iter result="PASSED"><notes /></iter>
-          </test>
-
-          <test name="cycle" type="script">
-            <objective>Web cycle</objective>
-            <notes>
-              Known issue: each node's forward() has an always-true defect, so
-              the request stops at the first node (1 instead of hops+1).
-            </notes>
-            <iter result="FAILED">
+              <arg name="entry">cpp</arg>
               <arg name="hops">3</arg>
-              <notes />
-              <results><result value="FAILED">
-                <verdict>Web ring propagated through 1 node step(s), expected 4</verdict>
-              </result></results>
+              <arg name="value">1</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 4</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">cpp</arg>
+              <arg name="hops">3</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 4</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">cpp</arg>
+              <arg name="hops">3</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 4</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">cpp</arg>
+              <arg name="hops">3</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 4</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">cpp</arg>
+              <arg name="hops">5</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 6</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">cpp</arg>
+              <arg name="hops">5</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 6</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">cpp</arg>
+              <arg name="hops">5</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 6</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">cpp</arg>
+              <arg name="hops">5</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 6</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">cpp</arg>
+              <arg name="hops">7</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 8</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">cpp</arg>
+              <arg name="hops">7</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 8</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">cpp</arg>
+              <arg name="hops">7</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 8</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">cpp</arg>
+              <arg name="hops">7</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 8</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">cpp</arg>
+              <arg name="hops">10</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 11</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">cpp</arg>
+              <arg name="hops">10</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 11</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">cpp</arg>
+              <arg name="hops">10</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 11</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">cpp</arg>
+              <arg name="hops">10</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 11</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">0</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.result failed for cpp/result</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">0</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.result failed for cpp/result</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">0</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.result failed for cpp/result</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">0</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.result failed for cpp/result</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">1</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 2</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">1</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 2</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">1</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 2</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">1</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 2</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">3</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 4</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">3</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 4</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">3</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 4</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">3</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 4</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">5</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 6</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">5</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 6</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">5</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 6</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">5</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 6</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">7</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 8</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">7</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 8</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">7</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 8</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">7</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 8</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">10</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 11</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">10</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 11</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">10</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 11</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">10</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 11</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">0</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.result failed for cpp/result</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">0</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.result failed for cpp/result</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">0</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.result failed for cpp/result</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">0</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.result failed for cpp/result</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">1</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 2</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">1</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 2</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">1</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 2</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">1</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 2</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">3</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 4</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">3</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 4</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">3</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 4</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">3</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 4</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">5</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 6</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">5</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 6</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">5</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 6</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">5</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 6</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">7</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 8</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">7</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 8</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">7</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 8</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">7</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 8</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">10</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 11</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">10</arg>
+              <arg name="value">1</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 11</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">10</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 11</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">10</arg>
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the injected always-true defect stops the walk after the entry stage (1 stage instead of hops+1). At hops=0 from the rust and py demos the walk is a single C++ step, and on Linux that step multiplies by a py_weight that is not 1.05 (see ring/entry_matrix), so the result differs from the model.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring propagated through 1 stage(s), expected 11</verdict>
+                  <verdict>security check ring.depth failed for cpp/walk</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="reference" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <notes>DUT: cpp-demo 1 7 returns 2.6 instead of the README oracle 20.0735 - the walk stops at the first stage.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring result 2.6000, expected 20.0735 (value=1, hops=7)</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="sweep" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <arg name="value">1</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the observed depth stays 1 for every hop budget; the model diverges from hops=1.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring sweep diverges from the model first at hops=1</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="value">2.5</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: the observed depth stays 1 for every hop budget; the model diverges from hops=1.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Ring sweep diverges from the model first at hops=1</verdict>
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="determinism" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="entry_matrix" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">3</arg>
+              <arg name="min_severity">high</arg>
+              <notes>DUT on Linux: python/ring_stage.py looks go_weight up with ctypes.CDLL(None), which does not see RTLD_LOCAL libraries on glibc, so the C++ stage multiplies by a weight that is not py_weight - its step no longer matches its own formula. macOS is not affected.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.formula failed for v=0/cpp/step0:cpp</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">rust</arg>
+              <arg name="hops">7</arg>
+              <arg name="min_severity">high</arg>
+              <notes>DUT on Linux: python/ring_stage.py looks go_weight up with ctypes.CDLL(None), which does not see RTLD_LOCAL libraries on glibc, so the C++ stage multiplies by a weight that is not py_weight - its step no longer matches its own formula. macOS is not affected.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.formula failed for v=0/cpp/step0:cpp</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">3</arg>
+              <arg name="min_severity">high</arg>
+              <notes>DUT on Linux: python/ring_stage.py looks go_weight up with ctypes.CDLL(None), which does not see RTLD_LOCAL libraries on glibc, so the C++ stage multiplies by a weight that is not py_weight - its step no longer matches its own formula. macOS is not affected.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.formula failed for v=0/cpp/step0:cpp</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="entry">py</arg>
+              <arg name="hops">7</arg>
+              <arg name="min_severity">high</arg>
+              <notes>DUT on Linux: python/ring_stage.py looks go_weight up with ctypes.CDLL(None), which does not see RTLD_LOCAL libraries on glibc, so the C++ stage multiplies by a weight that is not py_weight - its step no longer matches its own formula. macOS is not affected.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.formula failed for v=0/cpp/step0:cpp</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="web" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="cycle" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <arg name="hops">1</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: each node's forward() is short-circuited by the injected defect, so a request stops at the gateway.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Web ring propagated through 1 node step(s), expected 2</verdict>
+                  <verdict>security check web.depth failed for gateway-rs/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="hops">1</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: each node's forward() is short-circuited by the injected defect, so a request stops at the gateway.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Web ring propagated through 1 node step(s), expected 2</verdict>
+                  <verdict>security check web.depth failed for gateway-rs/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="hops">2</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: each node's forward() is short-circuited by the injected defect, so a request stops at the gateway.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Web ring propagated through 1 node step(s), expected 3</verdict>
+                  <verdict>security check web.depth failed for gateway-rs/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="hops">2</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: each node's forward() is short-circuited by the injected defect, so a request stops at the gateway.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Web ring propagated through 1 node step(s), expected 3</verdict>
+                  <verdict>security check web.depth failed for gateway-rs/walk</verdict>
+                </result>
+              </results>
             </iter>
             <iter result="FAILED">
               <arg name="hops">5</arg>
-              <notes />
-              <results><result value="FAILED">
-                <verdict>Web ring propagated through 1 node step(s), expected 6</verdict>
-              </result></results>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: each node's forward() is short-circuited by the injected defect, so a request stops at the gateway.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Web ring propagated through 1 node step(s), expected 6</verdict>
+                  <verdict>security check web.depth failed for gateway-rs/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="hops">5</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: each node's forward() is short-circuited by the injected defect, so a request stops at the gateway.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Web ring propagated through 1 node step(s), expected 6</verdict>
+                  <verdict>security check web.depth failed for gateway-rs/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="hops">8</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>DUT: each node's forward() is short-circuited by the injected defect, so a request stops at the gateway.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Web ring propagated through 1 node step(s), expected 9</verdict>
+                  <verdict>security check web.depth failed for gateway-rs/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="hops">8</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: each node's forward() is short-circuited by the injected defect, so a request stops at the gateway.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Web ring propagated through 1 node step(s), expected 9</verdict>
+                  <verdict>security check web.depth failed for gateway-rs/walk</verdict>
+                </result>
+              </results>
             </iter>
           </test>
-
+          <test name="latency" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="contract" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="robustness" type="script">
+            <objective/>
+            <notes/>
+          </test>
           <test name="epilogue" type="script">
-            <objective>Web group epilogue</objective>
-            <notes />
-            <iter result="PASSED"><notes /></iter>
+            <objective/>
+            <notes/>
           </test>
         </iter>
       </test>
-
       <test name="graph" type="package">
-        <objective>Graph tests</objective>
-        <notes />
+        <objective/>
+        <notes/>
         <iter result="PASSED">
-          <notes />
+          <notes/>
           <test name="prologue" type="script">
-            <objective>Graph group prologue</objective>
-            <notes />
-            <iter result="PASSED"><notes /></iter>
+            <objective/>
+            <notes/>
           </test>
-
           <test name="links" type="script">
-            <objective>Graph links</objective>
-            <notes>
-              Linkage is a property of the build, not the arithmetic, so these
-              pass on the as-shipped example (and skip where otool/nm are not
-              available).
-            </notes>
-            <iter result="PASSED">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
               <arg name="relation">rust</arg>
-              <notes />
+              <notes>DUT: with the next-stage calls compiled away, libcppcore no longer NEEDs librustcore and librustcore no longer NEEDs libgocore.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>librustcore does not link libgocore</verdict>
+                  <verdict>security check graph.missing-edge failed for cpp-&gt;rust</verdict>
+                </result>
+              </results>
             </iter>
-            <iter result="PASSED">
+            <iter result="FAILED">
               <arg name="relation">cpp</arg>
-              <notes />
+              <notes>DUT: with the next-stage calls compiled away, libcppcore no longer NEEDs librustcore and librustcore no longer NEEDs libgocore.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>libcppcore does not link librustcore</verdict>
+                  <verdict>security check graph.missing-edge failed for cpp-&gt;rust</verdict>
+                </result>
+              </results>
             </iter>
-            <iter result="PASSED">
+            <iter result="FAILED">
+              <arg name="relation">go</arg>
+              <notes>DUT: with the next-stage calls compiled away, libcppcore no longer NEEDs librustcore and librustcore no longer NEEDs libgocore.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check graph.missing-edge failed for cpp-&gt;rust</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
               <arg name="relation">go-undef</arg>
-              <notes />
+              <notes>DUT: with the next-stage calls compiled away, libcppcore no longer NEEDs librustcore and librustcore no longer NEEDs libgocore.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check graph.missing-edge failed for cpp-&gt;rust</verdict>
+                </result>
+              </results>
             </iter>
           </test>
-
+          <test name="symbols" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="cycle_closure" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <arg name="view">full</arg>
+              <notes>DUT: the load-time cycle is broken by the same dropped edges.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check graph.cycle-edge-missing failed for cpp-&gt;rust</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
           <test name="epilogue" type="script">
-            <objective>Graph group epilogue</objective>
-            <notes />
-            <iter result="PASSED"><notes /></iter>
+            <objective/>
+            <notes/>
           </test>
         </iter>
       </test>
-
-      <test name="epilogue" type="script">
-        <objective>Test suite epilogue</objective>
-        <notes />
+      <test name="package" type="package">
+        <objective/>
+        <notes/>
         <iter result="PASSED">
-          <notes />
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="inventory" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="ensure_rollback" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="dut_runtime_deps" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
         </iter>
+      </test>
+      <test name="devtool" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="compile_probe" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="rebuild_pycore" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="make_stub" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="reproducible" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="kernel" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="posture" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="kmsg_window" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="resources" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="modules" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <arg name="min_severity">high</arg>
+              <notes>tsf-kernel: /proc/modules prints '-' as the use count of modules that cannot be unloaded; the parser wants a number and fails the whole list.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>tapi_kmod_list cannot parse /proc/modules: EINVAL</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="min_severity">critical</arg>
+              <notes>tsf-kernel: /proc/modules prints '-' as the use count of modules that cannot be unloaded; the parser wants a number and fails the whole list.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>tapi_kmod_list cannot parse /proc/modules: EINVAL</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="ktrace" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="fs" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="perm_audit" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="secrets" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="integrity" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="mounts" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="health" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="memmap" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="elf" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="proc" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <arg name="service">gateway-rs</arg>
+              <arg name="min_severity">high</arg>
+              <notes>Environment: the amd64 container runs under Rosetta on Apple silicon; the translator's code cache is mapped W+X in every process. Re-check on native amd64.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check memmap.wx-mapping failed for gateway-rs</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="service">service-go</arg>
+              <arg name="min_severity">high</arg>
+              <notes>Environment: the amd64 container runs under Rosetta on Apple silicon; the translator's code cache is mapped W+X in every process. Re-check on native amd64.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check memmap.wx-mapping failed for service-go</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="service">service-cs</arg>
+              <arg name="min_severity">high</arg>
+              <notes>Environment: the amd64 container runs under Rosetta on Apple silicon; the translator's code cache is mapped W+X in every process. Re-check on native amd64.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check memmap.wx-mapping failed for service-cs</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="ram" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="binary" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="hardening" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <arg name="artifact">service-go</arg>
+              <arg name="min_severity">high</arg>
+              <notes>DUT build posture: Go builds service-go non-PIE, and the Rust/Go link steps leave relative RUNPATHs.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check binary.not-pie failed for /Users/mmenshikov/src/midair-platform/multi-dependency-example-ts/build/mde-Linux-x86_64/dist/bin/service-go</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="artifact">service-cs</arg>
+              <arg name="min_severity">high</arg>
+              <notes>DUT build posture: Go builds service-go non-PIE, and the Rust/Go link steps leave relative RUNPATHs.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check binary.runpath-relative failed for /Users/mmenshikov/src/midair-platform/multi-dependency-example-ts/build/mde-Linux-x86_64/dist/bin/service-cs</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="artifact">libcscore</arg>
+              <arg name="min_severity">high</arg>
+              <notes>DUT build posture: Go builds service-go non-PIE, and the Rust/Go link steps leave relative RUNPATHs.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check binary.runpath-relative failed for /Users/mmenshikov/src/midair-platform/multi-dependency-example-ts/build/mde-Linux-x86_64/dist/lib/libcscore.so</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="hardening_matrix" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <arg name="min_severity">high</arg>
+              <notes>DUT build posture: see binary/hardening.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check binary.not-pie failed for /Users/mmenshikov/src/midair-platform/multi-dependency-example-ts/build/mde-Linux-x86_64/dist/bin/service-go</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="disasm_defect" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the call to the next stage is compiled away (if (5) / if true): the defect is visible in the machine code.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check binary.dead-call failed for libcppcore:cpp_step</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="linked_libs" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <arg name="min_severity">low</arg>
+              <notes>DUT: the README's documented link edges are missing because the defect made the calls dead and the linker dropped the libraries.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check binary.missing-ring-link failed for cpp-demo/libcppcore</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="exposure" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="listeners" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="reachability" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="egress" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="sniff" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="frida" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="http" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="headers" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <arg name="service">gateway-rs</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the walk depth defect seen in the HTTP body; the toy services also send no security headers.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check http.walk-depth failed for http://127.0.0.1:8081/ring?value=1&amp;hops=5</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="service">service-go</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the walk depth defect seen in the HTTP body; the toy services also send no security headers.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check http.walk-depth failed for http://127.0.0.1:8082/ring?value=1&amp;hops=5</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="service">service-cs</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: the walk depth defect seen in the HTTP body; the toy services also send no security headers.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check http.walk-depth failed for http://127.0.0.1:8083/ring?value=1&amp;hops=5</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="methods" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <arg name="service">gateway-rs</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: gateway-rs and service-go route by path only and answer TRACE.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check http.trace-enabled failed for http://127.0.0.1:8081/ring?value=1&amp;hops=0</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="service">service-go</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>DUT: gateway-rs and service-go route by path only and answer TRACE.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check http.trace-enabled failed for http://127.0.0.1:8082/ring?value=1&amp;hops=0</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="redirects" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="load_curve" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="tls" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="front" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="client_check" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="cert_matrix" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="time" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="shim_check" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="ring_under_time" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="cert_expiry_travel" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="web_under_time" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="mqtt" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="ring_bus" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <arg name="qos">0</arg>
+              <arg name="hops">1</arg>
+              <notes>DUT: the ring trace carried over MQTT round-trips exactly, and shows the 1-stage walk.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="qos">0</arg>
+              <arg name="hops">5</arg>
+              <notes>DUT: the ring trace carried over MQTT round-trips exactly, and shows the 1-stage walk.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="qos">1</arg>
+              <arg name="hops">1</arg>
+              <notes>DUT: the ring trace carried over MQTT round-trips exactly, and shows the 1-stage walk.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="qos">1</arg>
+              <arg name="hops">5</arg>
+              <notes>DUT: the ring trace carried over MQTT round-trips exactly, and shows the 1-stage walk.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="qos">2</arg>
+              <arg name="hops">1</arg>
+              <notes>DUT: the ring trace carried over MQTT round-trips exactly, and shows the 1-stage walk.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="qos">2</arg>
+              <arg name="hops">5</arg>
+              <notes>DUT: the ring trace carried over MQTT round-trips exactly, and shows the 1-stage walk.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="broker_audit" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="retained" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="smb" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="serve_dist" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="server_audit" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="printing" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="ring_report_job" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="print_audit" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="caps" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="cwmp" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="inform_codec" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="acs_session" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="connection_request" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="container" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="ring_inside" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <arg name="image">debian:bookworm-slim</arg>
+              <arg name="hops">1</arg>
+              <notes>DUT: inside every image the ring shows the same 1-stage walk as on the agent (injected defect). An image without libpython3 (libpycore embeds CPython) reports container.missing-runtime instead.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="image">debian:bookworm-slim</arg>
+              <arg name="hops">5</arg>
+              <notes>DUT: inside every image the ring shows the same 1-stage walk as on the agent (injected defect). An image without libpython3 (libpycore embeds CPython) reports container.missing-runtime instead.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="image">ubuntu:24.04</arg>
+              <arg name="hops">1</arg>
+              <notes>DUT: inside every image the ring shows the same 1-stage walk as on the agent (injected defect). An image without libpython3 (libpycore embeds CPython) reports container.missing-runtime instead.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="image">ubuntu:24.04</arg>
+              <arg name="hops">5</arg>
+              <notes>DUT: inside every image the ring shows the same 1-stage walk as on the agent (injected defect). An image without libpython3 (libpycore embeds CPython) reports container.missing-runtime instead.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="image">python:3.11-slim-bookworm</arg>
+              <arg name="hops">1</arg>
+              <notes>DUT: inside every image the ring shows the same 1-stage walk as on the agent (injected defect). An image without libpython3 (libpycore embeds CPython) reports container.missing-runtime instead.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="image">python:3.11-slim-bookworm</arg>
+              <arg name="hops">5</arg>
+              <notes>DUT: inside every image the ring shows the same 1-stage walk as on the agent (injected defect). An image without libpython3 (libpycore embeds CPython) reports container.missing-runtime instead.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>security check ring.depth failed for rust/walk</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="posture" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="copy_roundtrip" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="emu" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="qmp_lifecycle" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="snapshot" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="serial_console" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="fuzz" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="ring_abi" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="replay" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="iot" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="frames_802154" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <arg name="security">mic32</arg>
+              <arg name="hops">1</arg>
+              <arg name="min_severity">high</arg>
+              <notes>tsf-802154: at MIC-only security levels tapi_802154_unsecure() never verifies the tag (no EVP_CipherFinal_ex), and tapi_802154_secure() restarts the MAC between header and payload, so the header is not authenticated.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>tapi_802154_unsecure() accepted a frame with a flipped payload bit: the MIC was not verified</verdict>
+                  <verdict>The MIC does not cover the frame header: two frames differing only in the sequence number got the same MIC</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="security">mic32</arg>
+              <arg name="hops">1</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>tsf-802154: at MIC-only security levels tapi_802154_unsecure() never verifies the tag (no EVP_CipherFinal_ex), and tapi_802154_secure() restarts the MAC between header and payload, so the header is not authenticated.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>tapi_802154_unsecure() accepted a frame with a flipped payload bit: the MIC was not verified</verdict>
+                  <verdict>The MIC does not cover the frame header: two frames differing only in the sequence number got the same MIC</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="security">mic32</arg>
+              <arg name="hops">5</arg>
+              <arg name="min_severity">high</arg>
+              <notes>tsf-802154: at MIC-only security levels tapi_802154_unsecure() never verifies the tag (no EVP_CipherFinal_ex), and tapi_802154_secure() restarts the MAC between header and payload, so the header is not authenticated.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>tapi_802154_unsecure() accepted a frame with a flipped payload bit: the MIC was not verified</verdict>
+                  <verdict>The MIC does not cover the frame header: two frames differing only in the sequence number got the same MIC</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="security">mic32</arg>
+              <arg name="hops">5</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>tsf-802154: at MIC-only security levels tapi_802154_unsecure() never verifies the tag (no EVP_CipherFinal_ex), and tapi_802154_secure() restarts the MAC between header and payload, so the header is not authenticated.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>tapi_802154_unsecure() accepted a frame with a flipped payload bit: the MIC was not verified</verdict>
+                  <verdict>The MIC does not cover the frame header: two frames differing only in the sequence number got the same MIC</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="frames_lorawan" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="sdr" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <arg name="seconds">2</arg>
+              <arg name="min_severity">medium</arg>
+              <notes>tsf-sdr: rtl_433 22.11 exits 0 after failing to open a file; tapi_sdr_decode() checks the exit status only, so a missing capture reads as an empty one.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>tapi_sdr_decode() took a capture that does not exist for an empty one: rtl_433 reported the failed open but exited with status 0</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="seconds">2</arg>
+              <arg name="min_severity">critical</arg>
+              <notes>tsf-sdr: rtl_433 22.11 exits 0 after failing to open a file; tapi_sdr_decode() checks the exit status only, so a missing capture reads as an empty one.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>tapi_sdr_decode() took a capture that does not exist for an empty one: rtl_433 reported the failed open but exited with status 0</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="can_bus" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="bluetooth" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="net" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="vpn_tree" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <notes>tsf-tunnel: ta_vpn links a static tapi_cfg_vpn, which is built shared only (build_lib_static = false), so the agent half cannot be linked into any agent.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>The /agent/vpn subtree is not registered - ta_vpn was not linked into the agent or cm_vpn.yml not loaded</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="wifi_tree" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="wg_tunnel" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <notes>tsf-tunnel: see net/vpn_tree.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>The /agent/vpn subtree is not registered</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="ipsec_builder" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <notes>tsf-tunnel: see net/vpn_tree.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>The /agent/vpn subtree is not registered</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="bench" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="jtag_dummy" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="flash_emulated" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="power_window" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="power_switch" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="browser" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="walk_page" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <arg name="hops">2</arg>
+              <notes>DUT: the same web-tier defect seen through Chromium.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Browser walk traced 1 node step(s), expected 3</verdict>
+                </result>
+              </results>
+            </iter>
+            <iter result="FAILED">
+              <arg name="hops">5</arg>
+              <notes>DUT: the same web-tier defect seen through Chromium.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>Browser walk traced 1 node step(s), expected 6</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="canary" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="network_shape" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="pw_project" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="mobile" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="stack_presence" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="devices" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="rpc_roundtrip" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="ai" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="grade_trace" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="grade_screenshot" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="stream" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="dummy" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="greeting" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="greeting_agent" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
+      <test name="epilogue" type="script">
+        <objective/>
+        <notes/>
       </test>
     </iter>
   </test>

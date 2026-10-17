@@ -1,0 +1,248 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (C) 2026 Maxim Menshikov
+#
+# External TE repositories (passed to dispatcher.sh with --external).
+# builder.conf binds their libraries to platforms with TE_EXT_REPO_USE.
+#
+# Every tsf-* module of the catalog is declared: the suite exercises each
+# of them against the multi-dependency-example, or skips with a reason
+# when the agent lacks the tool or the hardware the module drives.
+#
+# While a library is being developed, point its url at a local checkout
+# and set ref to the branch you are on.
+
+repositories:
+  # Foundations: running a tool on an agent, compilers and make. Everything else is built on it.
+  - name: tsf_devtool
+    url: https://github.com/interpretica-io/tsf-devtool.git
+    ref: main
+    libs:
+      - tapi_devtool
+
+  # The agent's kernel: modules, /proc and /sys, posture, kmsg windows, resources, tracing.
+  - name: tsf_kernel
+    url: https://github.com/interpretica-io/tsf-kernel.git
+    ref: main
+    libs:
+      - tapi_kernel
+
+  # The finding model every audit shares, plus binscan/netexpose/egress/sniffrules/objdump/frida.
+  - name: tsf_cybersec
+    url: https://github.com/interpretica-io/tsf-cybersec.git
+    ref: main
+    libs:
+      - tapi_cybersec
+
+  # Tools on the agent behind one package-manager API, with ensure and rollback.
+  - name: tsf_package
+    url: https://github.com/interpretica-io/tsf-package.git
+    ref: main
+    libs:
+      - tapi_package
+
+  # Docker/containerd/LXC as a tapi_job extension and the container posture audit.
+  - name: tsf_container
+    url: https://github.com/interpretica-io/tsf-container.git
+    ref: main
+    libs:
+      - tapi_container
+
+  # QEMU guests over QMP: start, snapshot, wait for a port, screendump.
+  - name: tsf_emu
+    url: https://github.com/interpretica-io/tsf-emu.git
+    ref: main
+    libs:
+      - tapi_emu
+
+  # A process under a clock that is not the machine's (libfaketime).
+  - name: tsf_time
+    url: https://github.com/interpretica-io/tsf-time.git
+    ref: main
+    libs:
+      - tapi_time
+
+  # Filesystem posture: permissions, mounts, integrity baselines, secrets, health.
+  - name: tsf_fs
+    url: https://github.com/interpretica-io/tsf-fs.git
+    ref: main
+    libs:
+      - tapi_fs
+
+  # Memory maps: ELF images, RAM budget, process mappings, W^X.
+  - name: tsf_memorymap
+    url: https://github.com/interpretica-io/tsf-memorymap.git
+    ref: main
+    libs:
+      - tapi_memmap
+
+  # Fuzzing campaigns, sanitizer identities, crash replay and seeds.
+  - name: tsf_fuzz
+    url: https://github.com/interpretica-io/tsf-fuzz.git
+    ref: main
+    libs:
+      - tapi_fuzz
+
+  # TLS endpoints, certificates, and a defect server for clients.
+  - name: tsf_tls
+    url: https://github.com/interpretica-io/tsf-tls.git
+    ref: main
+    libs:
+      - tapi_tls
+
+  # HTTP requests, redirects, security headers, allowed methods, defect server.
+  - name: tsf_http
+    url: https://github.com/interpretica-io/tsf-http.git
+    ref: main
+    libs:
+      - tapi_http
+
+  # MQTT publish/subscribe, a broker on the agent, and a broker audit.
+  - name: tsf_mqtt
+    url: https://github.com/interpretica-io/tsf-mqtt.git
+    ref: main
+    libs:
+      - tapi_mqtt
+
+  # SMB shares, serving one from the agent, and a server audit.
+  - name: tsf_smb
+    url: https://github.com/interpretica-io/tsf-smb.git
+    ref: main
+    libs:
+      - tapi_smb
+
+  # Print queues, IPP and a print-system audit.
+  - name: tsf_printing
+    url: https://github.com/interpretica-io/tsf-printing.git
+    ref: main
+    libs:
+      - tapi_print
+
+  # WireGuard and IPsec through the /agent/vpn Configurator subtree.
+  - name: tsf_tunnel
+    url: https://github.com/interpretica-io/tsf-tunnel.git
+    ref: main
+    libs:
+      - tapi_cfg_vpn
+      - ta_vpn
+
+  # TR-069: the agent plays the ACS for a CPE.
+  - name: tsf_cwmp
+    url: https://github.com/interpretica-io/tsf-cwmp.git
+    ref: main
+    libs:
+      - tapi_cwmp
+
+  # Wi-Fi through the /agent/wifi Configurator subtree.
+  - name: tsf_wifi
+    url: https://github.com/interpretica-io/tsf-wifi.git
+    ref: main
+    libs:
+      - tapi_cfg_wifi
+      - ta_wifi
+
+  # Bluetooth: discovery, HCI capture, audit.
+  - name: tsf_bluetooth
+    url: https://github.com/interpretica-io/tsf-bluetooth.git
+    ref: main
+    libs:
+      - tapi_bt
+
+  # IEEE 802.15.4 frames, AES-CCM* and an audit.
+  - name: tsf_802154
+    url: https://github.com/interpretica-io/tsf-802154.git
+    ref: main
+    libs:
+      - tapi_802154
+
+  # LoRaWAN frames, MIC, keys and an audit.
+  - name: tsf_lorawan
+    url: https://github.com/interpretica-io/tsf-lorawan.git
+    ref: main
+    libs:
+      - tapi_lorawan
+
+  # Software defined radio: record, decode, compare, replay.
+  - name: tsf_sdr
+    url: https://github.com/interpretica-io/tsf-sdr.git
+    ref: main
+    libs:
+      - tapi_sdr
+
+  # CAN / CAN FD and a UDS probe.
+  - name: tsf_can
+    url: https://github.com/interpretica-io/tsf-can.git
+    ref: main
+    libs:
+      - tapi_can
+
+  # JTAG/SWD through OpenOCD.
+  - name: tsf_jtag
+    url: https://github.com/interpretica-io/tsf-jtag.git
+    ref: main
+    libs:
+      - tapi_jtag
+
+  # Writing firmware by whatever path the device takes, and reading it back.
+  - name: tsf_flash
+    url: https://github.com/interpretica-io/tsf-flash.git
+    ref: main
+    libs:
+      - tapi_flash
+
+  # Bench instruments, energy profilers and power switching.
+  - name: tsf_power
+    url: https://github.com/interpretica-io/tsf-power.git
+    ref: main
+    libs:
+      - tapi_power
+
+  # Android device control (agent-side RPCs).
+  - name: tsf_android
+    url: https://github.com/interpretica-io/tsf-android.git
+    ref: main
+    libs:
+      - ta_android
+      - ta_android_conf
+      - rpcs_android
+      - tapi_android
+
+  # iOS device and simulator control (agent-side RPCs).
+  - name: tsf_apple
+    url: https://github.com/interpretica-io/tsf-apple.git
+    ref: main
+    libs:
+      - ta_apple
+      - ta_apple_conf
+      - rpcs_apple
+      - tapi_apple
+
+  # Mobile UI automation through Appium (agent-side RPCs).
+  - name: tsf_appium
+    url: https://github.com/interpretica-io/tsf-appium.git
+    ref: main
+    libs:
+      - ta_appium
+      - ta_appium_conf
+      - rpcs_appium
+      - tapi_appium
+
+  # Browser control through Playwright, network capture, HAR and traces.
+  - name: tsf_playwright
+    url: https://github.com/interpretica-io/tsf-playwright.git
+    ref: main
+    libs:
+      - tapi_playwright
+
+  # The worked example of the TE_EXT_REPO machinery.
+  - name: tsf_dummy
+    url: https://github.com/interpretica-io/tsf-dummy.git
+    ref: main
+    libs:
+      - tapi_dummy
+
+  # Asking an AI provider from the agent, as a grader over evidence.
+  - name: tsf_ai
+    url: https://github.com/interpretica-io/tsf-ai.git
+    ref: main
+    libs:
+      - tapi_ai

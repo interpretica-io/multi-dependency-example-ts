@@ -1,0 +1,216 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>TLS audits of the deployment</description>
+
+    <!-- @page mde-tls TLS Tests
+          @objective Audit the TLS side of the deployment with tsf-tls: a TLS
+                     endpoint put in front of the web tier, the TLS clients
+                     of the agent, and the certificates the suite makes.
+
+          @par Test Groups:
+          - @ref mde-tls-front        - version scan and certificate audit
+          - @ref mde-tls-client_check - do the clients check certificates?
+          - @ref mde-tls-cert_matrix  - generated certificates read back
+
+          @par Notes:
+          - The web tier speaks plain HTTP; the TLS endpoint audited by
+            @ref mde-tls-front is a python3 ssl terminator forwarding to
+            gateway-rs, or an openssl s_server.
+          - Expired certificates are dated with faketime: OpenSSL 3.0 of
+            Debian bookworm cannot backdate a certificate by itself.
+    -->
+
+    <author mailto="maximmenshchikov@gmail.com" />
+
+    <session track_conf="silent">
+        <!-- @page mde-tls-prologue TLS Group Prologue
+              @objective Report the tools the group needs.
+
+              @par Scenario:
+              -# Check openssl, curl, python3, faketime and log versions.
+              -# Chart which of them are present.
+        -->
+        <prologue>
+            <script name="prologue">
+                <objective>
+                    Report the tools of the TLS group.
+
+                    @md
+                </objective>
+            </script>
+        </prologue>
+
+        <!-- @page mde-tls-epilogue TLS Group Epilogue
+              @objective Finalize the TLS group.
+
+              @par Scenario:
+              -# No cleanup actions are required.
+        -->
+        <epilogue>
+            <script name="epilogue">
+                <objective>
+                    Finalize the TLS group.
+
+                    @md
+                </objective>
+            </script>
+        </epilogue>
+
+        <!-- @page mde-tls-front TLS Endpoint Audit
+              @objective Audit a TLS endpoint with tapi_tls_check_server()
+                         and cross-check what it reports.
+
+              @par Test Parameters:
+              | Parameter    | Values                   | Description                         |
+              |==============|==========================|=====================================|
+              | endpoint     | gateway_front / s_server | python3 TLS front of gateway-rs, or openssl s_server -www |
+              | min_severity | high / critical          | Lowest severity that fails          |
+
+              @par Scenario:
+              -# Known-bad controls: a tapi_tls_server certificate for the
+                 wrong name must give tls.name-mismatch; a certificate dated
+                 400 days back with faketime must give
+                 tls.certificate-expired. Drop the controls' findings.
+              -# Make a localhost certificate signed by a test authority
+                 (tapi_tls_server_make_cert).
+              -# Start the endpoint (gateway_front: the web tier plus the
+                 python3 front on 34520; s_server: tapi_tls_server on 34521).
+              -# Scan the versions; chart accepted versions (1/0).
+              -# tapi_tls_check_server() with the default policy and
+                 expected_name=localhost; the scan and the policy check must
+                 agree on obsolete versions.
+              -# Probe once: the newest accepted version is negotiated, the
+                 chain verifies, the served certificate is the generated one
+                 (SHA-256 of the DER), names, 2048-bit key, 365 days left.
+              -# gateway_front: curl with the test authority gets
+                 /ring?hops=0 from gateway-rs through the front; curl
+                 without it is refused.
+              -# Chart days to expiry, key size, scan and check time.
+              -# Gate the report at min_severity.
+
+              @par Expected Results:
+              - Both endpoints accept TLS 1.2 and 1.3 only and serve a valid
+                certificate: no findings, the test passes.
+        -->
+        <run name="front">
+            <script name="front">
+                <objective>
+                    Audit a TLS endpoint of the deployment and cross-check
+                    the audit.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="endpoint">
+                <value>gateway_front</value>
+                <value>s_server</value>
+            </arg>
+            <arg name="min_severity">
+                <value>high</value>
+                <value>critical</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-tls-client_check TLS Clients Offered Bad Certificates
+              @objective Offer curl and python3 urllib a certificate that is
+                         wrong in one way and find out whether they complete
+                         the handshake anyway.
+
+              @par Test Parameters:
+              | Parameter    | Values                             | Description                |
+              |==============|====================================|============================|
+              | defect       | self_signed / expired / wrong_name | What is wrong with the certificate |
+              | min_severity | high / critical                    | Lowest severity that fails |
+
+              @par Scenario:
+              -# For expired: make a certificate 400 days in the past with
+                 faketime (skip without faketime).
+              -# For each client (curl, python3 urllib, curl -k): start a
+                 tapi_tls_server with the defect (one connection), run the
+                 client trusting the test authority (or the certificate
+                 itself for expired), stop the server and read whether the
+                 handshake completed. A handshake the server saw finish but
+                 after which the client did not get the page (curl checks
+                 the host name only after the handshake, exit 60) counts as
+                 a refusal.
+              -# tapi_tls_check_client(): an accepted connection is
+                 tls.client-accepts-DEFECT (critical).
+              -# Known-bad control: curl -k must be reported; drop it.
+              -# Chart outcome, exit status and run time per client.
+              -# Gate the report at min_severity.
+
+              @par Expected Results:
+              - curl and python3 refuse every defect: the test passes.
+        -->
+        <run name="client_check">
+            <script name="client_check">
+                <objective>
+                    Find out whether the TLS clients of the agent check the
+                    certificate they are offered.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="defect">
+                <value>self_signed</value>
+                <value>expired</value>
+                <value>wrong_name</value>
+            </arg>
+            <arg name="min_severity">
+                <value>high</value>
+                <value>critical</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-tls-cert_matrix Certificate Matrix
+              @objective Make certificates of each key type and validity and
+                         read them back with tapi_tls_cert.
+
+              @par Test Parameters:
+              | Parameter | Values                   | Description              |
+              |===========|==========================|==========================|
+              | key       | rsa2048 / rsa4096 / ec256 | Key type and size       |
+              | days      | 1 / 30 / 825             | Validity, days           |
+
+              @par Scenario:
+              -# Make a self-signed certificate for mde-matrix.local and
+                 *.mde-matrix.local with openssl req.
+              -# Read it back with tapi_tls_cert_read().
+              -# Check the key size, the names (one-label wildcard only),
+                 self-signed, not expired.
+              -# The fingerprint must be the SHA-256 of the DER; the public
+                 key must be the one of the generated private key.
+              -# notAfter - notBefore must be days x 86400 s (+-60 s).
+              -# tapi_tls_cert_checkend() at 0, days/2, days-1h, days+1h,
+                 days+1d and 2 x days+1d must flip exactly at expiry.
+              -# Chart key bits, validity, key generation time and the
+                 checkend sweep.
+
+              @par Expected Results:
+              - Every check holds for every combination.
+        -->
+        <run name="cert_matrix">
+            <script name="cert_matrix">
+                <objective>
+                    Make a certificate and check every fact tapi_tls_cert
+                    reads back.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="key">
+                <value>rsa2048</value>
+                <value>rsa4096</value>
+                <value>ec256</value>
+            </arg>
+            <arg name="days">
+                <value>1</value>
+                <value>30</value>
+                <value>825</value>
+            </arg>
+        </run>
+    </session>
+</package>

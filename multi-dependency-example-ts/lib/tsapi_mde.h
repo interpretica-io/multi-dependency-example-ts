@@ -15,6 +15,7 @@
 #define __TSAPI_MDE_H__
 
 #include "te_config.h"
+#include "te_compiler.h"
 #include "te_defs.h"
 #include "te_errno.h"
 #include "te_string.h"
@@ -105,6 +106,140 @@ extern te_errno tsapi_mde_run(tsapi_mde_session *session,
                               const char *count_re,
                               const char *value_re,
                               tsapi_mde_run_result *out);
+
+/** What running a command through the shell told us. */
+typedef struct tsapi_mde_sh_result {
+    bool              started;  /**< The shell was started at all. */
+    tapi_job_status_t status;   /**< Its exit status, if it finished. */
+    te_string         out;      /**< Everything it printed on stdout. */
+    te_string         err;      /**< Everything it printed on stderr. */
+} tsapi_mde_sh_result;
+
+/** Static initializer for #tsapi_mde_sh_result. */
+#define TSAPI_MDE_SH_RESULT_INIT \
+    { .out = TE_STRING_INIT, .err = TE_STRING_INIT }
+
+/**
+ * Run a shell command on the agent and capture both output streams whole.
+ *
+ * For the checks that need the text rather than a count: a trace to parse
+ * line by line, a listing to compare, a hash to keep as evidence.
+ *
+ * @param[in]  session    Session.
+ * @param[in]  timeout_ms Grace period for the command to finish.
+ * @param[out] res        Result; release with tsapi_mde_sh_result_free().
+ * @param[in]  fmt        Command line format, run with @c "sh -c".
+ * @param[in]  ...        Format arguments.
+ *
+ * @return Status code. A non-zero exit of the command is not an error here.
+ */
+extern te_errno tsapi_mde_sh(tsapi_mde_session *session, int timeout_ms,
+                             tsapi_mde_sh_result *res, const char *fmt, ...)
+    TE_LIKE_PRINTF(4, 5);
+
+/**
+ * Whether a shell command ran and exited with status 0.
+ *
+ * @param res   Result of tsapi_mde_sh().
+ *
+ * @return @c true on a clean exit.
+ */
+static inline bool
+tsapi_mde_sh_ok(const tsapi_mde_sh_result *res)
+{
+    return res->started && res->status.type == TAPI_JOB_STATUS_EXITED &&
+           res->status.value == 0;
+}
+
+/**
+ * Release a shell result.
+ *
+ * @param res   Result.
+ */
+extern void tsapi_mde_sh_result_free(tsapi_mde_sh_result *res);
+
+/**
+ * Whether a program can be found through @c PATH on the agent.
+ *
+ * @param session   Session.
+ * @param program   Program name.
+ *
+ * @return @c true if @c "command -v" finds it.
+ */
+extern bool tsapi_mde_have(tsapi_mde_session *session, const char *program);
+
+/** Where the parts of the built example are. */
+typedef struct tsapi_mde_dut {
+    char *root;     /**< TE_TS_MDE_SRC. */
+    char *bin;      /**< root/dist/bin. */
+    char *lib;      /**< root/dist/lib. */
+    char *python;   /**< root/python. */
+    const char *dylib_ext; /**< "so" or "dylib", as the agent builds them. */
+} tsapi_mde_dut;
+
+/** The executables the example builds, under dist/bin. */
+extern const char * const tsapi_mde_dut_bins[];
+/** Number of entries in #tsapi_mde_dut_bins. */
+extern const unsigned int tsapi_mde_dut_n_bins;
+/** The ring libraries, without the extension, in build order. */
+extern const char * const tsapi_mde_dut_libs[];
+/** Number of entries in #tsapi_mde_dut_libs. */
+extern const unsigned int tsapi_mde_dut_n_libs;
+
+/**
+ * Locate the built example on the agent.
+ *
+ * @param[in]  session  Session.
+ * @param[out] dut      Paths; release with tsapi_mde_dut_free().
+ *
+ * @return Status code.
+ * @retval TE_ENOENT    TE_TS_MDE_SRC is unset, or the example is not built
+ *                      there (the caller skips).
+ */
+extern te_errno tsapi_mde_dut_open(tsapi_mde_session *session,
+                                   tsapi_mde_dut *dut);
+
+/**
+ * Full path to a library of the ring.
+ *
+ * @param dut       Example.
+ * @param name      Library name without the extension, e.g. @c "libcppcore".
+ * @param path      String to append the path to.
+ */
+extern void tsapi_mde_dut_lib_path(const tsapi_mde_dut *dut, const char *name,
+                                   te_string *path);
+
+/**
+ * Release what tsapi_mde_dut_open() allocated.
+ *
+ * @param dut       Example.
+ */
+extern void tsapi_mde_dut_free(tsapi_mde_dut *dut);
+
+/**
+ * Open a session and locate the example, or skip the test.
+ *
+ * The opening of almost every test of the suite.
+ *
+ * @param _session  Session variable.
+ * @param _name     RPC server name.
+ * @param _dut      Example variable.
+ * @param _up       Boolean set once the session needs closing.
+ */
+#define TSAPI_MDE_OPEN_OR_SKIP(_session, _name, _dut, _up) \
+    do {                                                                  \
+        te_errno rc_ = tsapi_mde_session_init(&(_session), (_name));      \
+                                                                          \
+        if (rc_ != 0)                                                     \
+            TEST_FAIL("Cannot open a session on the agent: %r", rc_);     \
+        (_up) = true;                                                     \
+        rc_ = tsapi_mde_dut_open(&(_session), &(_dut));                   \
+        if (TE_RC_GET_ERROR(rc_) == TE_ENOENT)                            \
+            TEST_SKIP("The example is not built - run ./build.sh in "     \
+                      "TE_TS_MDE_SRC");                                   \
+        if (rc_ != 0)                                                     \
+            TEST_FAIL("Cannot locate the example: %r", rc_);              \
+    } while (0)
 
 #ifdef __cplusplus
 } /* extern "C" */

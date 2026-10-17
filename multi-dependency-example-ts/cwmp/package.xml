@@ -1,0 +1,146 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>CWMP tests: ring results carried in TR-069 messages</description>
+
+    <!-- @page mde-cwmp CWMP Tests
+          @objective Carry the ring's results in TR-069 messages (engine-side
+                     codec and session engine) and drive a connection request
+                     against a listener on the agent.
+
+          @par Test Groups:
+          - @ref mde-cwmp-inform_codec        - SOAP encode/decode round-trip
+          - @ref mde-cwmp-acs_session         - the ACS session state machine
+          - @ref mde-cwmp-connection_request  - digest-authenticated CR
+
+          @par Notes:
+          - The DUT has no TR-069 of its own; CWMP is an evidence channel for
+            the ring's results. The codec and the session engine are pure and
+            run engine-side; only the connection request touches the agent.
+          - inform_codec and acs_session use the reference model, so they pass
+            on the shipped example regardless of the injected defect - they
+            test the codec and the state machine, not the ring.
+    -->
+
+    <author mailto="maximmenshchikov@gmail.com" />
+
+    <session track_conf="silent">
+        <!-- @page mde-cwmp-prologue CWMP Group Prologue
+              @objective Prepare the cwmp group.
+
+              @par Scenario:
+              -# No special setup is required.
+        -->
+        <prologue>
+            <script name="prologue">
+                <objective>
+                    Prepare the cwmp group.
+
+                    @md
+                </objective>
+            </script>
+        </prologue>
+
+        <!-- @page mde-cwmp-epilogue CWMP Group Epilogue
+              @objective Finalize the cwmp group.
+
+              @par Scenario:
+              -# No cleanup actions are required.
+        -->
+        <epilogue>
+            <script name="epilogue">
+                <objective>
+                    Finalize the cwmp group.
+
+                    @md
+                </objective>
+            </script>
+        </epilogue>
+
+        <!-- @page mde-cwmp-inform_codec TR-069 Codec Round-trip
+              @objective Encode the ring's results into SOAP and decode them
+                         back, comparing every field; reject malformed SOAP.
+
+              @par Test Parameters:
+              | Parameter | Values    | Description                        |
+              |===========|===========|====================================|
+              | hops      | 1 / 5 / 8 | Hop budget the model is run with   |
+
+              @par Scenario:
+              -# Build the ring results from the reference model.
+              -# Encode them as ParameterValueStruct entries in a SOAP
+                 envelope.
+              -# Decode the envelope back and compare every name, value and
+                 type.
+              -# Feed truncated, garbage and oversized SOAP: each must be
+                 rejected cleanly (controls).
+
+              @par Expected Results:
+              - Every field round-trips and all three malformed controls are
+                rejected. Independent of the injected defect (pure codec).
+        -->
+        <run name="inform_codec">
+            <script name="inform_codec">
+                <objective>
+                    The TR-069 SOAP codec: encode, decode, compare, reject.
+
+                    @md
+                </objective>
+            </script>
+            <arg name="hops">
+                <value>1</value>
+                <value>5</value>
+                <value>8</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-cwmp-acs_session ACS Session State Machine
+              @objective Drive the session engine on crafted CPE bodies and
+                         check the transitions and the carried ring result.
+
+              @par Scenario:
+              -# Feed an Inform carrying the ring result; expect an
+                 InformResponse that echoes the ID.
+              -# Check the parsed Inform carries the result, identity and
+                 event back.
+              -# Acknowledge a TransferComplete.
+              -# End the session with an empty POST and confirm it is done.
+              -# Feed garbage to a fresh session (control): handled cleanly.
+
+              @par Expected Results:
+              - The transitions run in order and the session ends done.
+                Independent of the injected defect (pure state machine).
+        -->
+        <run name="acs_session">
+            <script name="acs_session">
+                <objective>
+                    The ACS session state machine, engine-side.
+
+                    @md
+                </objective>
+            </script>
+        </run>
+
+        <!-- @page mde-cwmp-connection_request CWMP Connection Request
+              @objective Drive a digest-authenticated connection request
+                         against a listener on the agent.
+
+              @par Scenario:
+              -# Start a tiny digest HTTP listener on the agent (python3).
+              -# A request with the right credentials is accepted (200).
+              -# A request with a wrong password is rejected (401) - control.
+
+              @par Expected Results:
+              - 200 for the right password, 401 for the wrong one. Skipped
+                when the agent has no python3 or curl.
+        -->
+        <run name="connection_request">
+            <script name="connection_request">
+                <objective>
+                    A digest-authenticated connection request.
+
+                    @md
+                </objective>
+            </script>
+        </run>
+    </session>
+</package>

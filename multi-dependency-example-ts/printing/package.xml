@@ -1,0 +1,150 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>Printing tests: ring traces through the print system</description>
+
+    <!-- @page mde-printing Printing Tests
+          @objective Carry a ring trace through the print system and audit the
+                     print infrastructure the module drives.
+
+          @par Test Groups:
+          - @ref mde-printing-ring_report_job - the ring trace as a print job
+          - @ref mde-printing-print_audit     - the print posture, with a control
+          - @ref mde-printing-caps            - a printer's supported values
+
+          @par Notes:
+          - The DUT has no printing of its own; the print system is an
+            evidence channel for the ring's results and the infrastructure
+            under audit.
+          - Everything needs a running CUPS on the agent; the job test also
+            needs the file backend to be permitted. When no scheduler answers
+            and the agent has passwordless sudo, the prologue starts a cupsd
+            of the suite's own (configuration copied to /tmp/mde-cupsd, with
+            FileDevice Yes) and the epilogue stops it. Each test skips
+            cleanly when its prerequisite is still missing.
+    -->
+
+    <author mailto="maximmenshchikov@gmail.com" />
+
+    <session track_conf="silent">
+        <!-- @page mde-printing-prologue Printing Group Prologue
+              @objective Make sure a CUPS scheduler answers on the agent.
+
+              @par Scenario:
+              -# If no scheduler answers and sudo -n works, start a cupsd of
+                 the suite's own from a copy of /etc/cups in /tmp/mde-cupsd,
+                 with FileDevice Yes and the agent user's group as a system
+                 group; mark it in /tmp/mde-cupsd.started.
+              -# Record whether CUPS is now available to the tests.
+        -->
+        <prologue>
+            <script name="prologue">
+                <objective>
+                    Prepare the printing group.
+
+                    @md
+                </objective>
+            </script>
+        </prologue>
+
+        <!-- @page mde-printing-epilogue Printing Group Epilogue
+              @objective Stop the scheduler the prologue started.
+
+              @par Scenario:
+              -# If /tmp/mde-cupsd.started exists, stop the suite's cupsd and
+                 remove /tmp/mde-cupsd; a scheduler the suite did not start
+                 is left alone.
+        -->
+        <epilogue>
+            <script name="epilogue">
+                <objective>
+                    Finalize the printing group.
+
+                    @md
+                </objective>
+            </script>
+        </epilogue>
+
+        <!-- @page mde-printing-ring_report_job Ring Report As A Print Job
+              @objective Print the ring trace to a file backend, follow the
+                         job to completion, and check the output.
+
+              @par Scenario:
+              -# Create a CUPS queue to a file backend (the generic driver;
+                 a raw queue as a fallback).
+              -# Validate a supported job, and reject one in an unsupported
+                 document format.
+              -# Print the ring trace text and wait for the job.
+              -# Assert the job completed and the output file is non-empty.
+
+              @par Expected Results:
+              - The job completes and writes a non-empty file; a bad job is
+                rejected by Validate-Job. Skipped when CUPS is absent or the
+                file backend is not permitted.
+        -->
+        <run name="ring_report_job">
+            <script name="ring_report_job">
+                <objective>
+                    The ring trace printed as a job to a file backend.
+
+                    @md
+                </objective>
+            </script>
+        </run>
+
+        <!-- @page mde-printing-print_audit Print System Audit
+              @objective Read the print posture, with a cleartext queue as a
+                         known-bad control.
+
+              @par Test Parameters:
+              | Parameter    | Values            | Description             |
+              |==============|===================|=========================|
+              | min_severity | medium / critical | Failing threshold       |
+
+              @par Scenario:
+              -# Plant a queue that sends in clear text to another host.
+              -# Read the print posture.
+              -# Assert the control was caught, then drop its findings.
+              -# Gate on the print system's own posture.
+
+              @par Expected Results:
+              - The posture has no finding at or above the threshold; the
+                cleartext control is caught so the audit is not blind.
+        -->
+        <run name="print_audit">
+            <script name="print_audit">
+                <objective>
+                    The posture of the print system, with a control.
+
+                    @md
+                </objective>
+            </script>
+            <arg name="min_severity">
+                <value>medium</value>
+                <value>critical</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-printing-caps Printer Capabilities
+              @objective Read a printer's supported values and chart the
+                         counts per category.
+
+              @par Scenario:
+              -# Create a queue and read its capabilities.
+              -# Chart the counts of supported media, resolutions, sides,
+                 colour modes, qualities and formats.
+
+              @par Expected Results:
+              - The capabilities are read and charted. Skipped when CUPS is
+                absent or the queue cannot be created.
+        -->
+        <run name="caps">
+            <script name="caps">
+                <objective>
+                    Printer capabilities, charted per category.
+
+                    @md
+                </objective>
+            </script>
+        </run>
+    </session>
+</package>

@@ -1,0 +1,217 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>AI grader tests</description>
+
+    <!-- @page mde-ai AI Grader Tests
+          @objective Use an AI model (through tsf-ai) as a second, independent
+                     reader of the suite's evidence: a ring trace, a browser
+                     screenshot, a streamed answer. The model's reading must
+                     agree with the suite's own; its opinions are artifacts,
+                     not verdicts.
+
+          @par Test Groups:
+          - @ref mde-ai-grade_trace      - the model counts the stages of a cpp-demo trace
+          - @ref mde-ai-grade_screenshot - a vision model counts node lines in the browser screenshot
+          - @ref mde-ai-stream           - a streamed answer arrives in order and matches a non-streamed one
+
+          @par Notes:
+          - The key is TSF_AI_KEY, from the engine's environment or the
+            agent's (/agent/env). tsf-ai passes it to its helper on the
+            agent in the environment, never in argv; it is never logged.
+            Without it every test skips with "TSF_AI_KEY is not set".
+          - The key belongs to one provider: TSF_AI_PROVIDER when set, else
+            the key's prefix ("sk-ant-" is Anthropic). The other provider's
+            iterations skip. TSF_AI_MODEL and TSF_AI_BASE_URL override the
+            module's defaults.
+          - Every request costs tokens and leaves the network.
+    -->
+
+    <author mailto="maximmenshchikov@gmail.com" />
+
+    <session track_conf="silent">
+        <!-- @page mde-ai-prologue AI Group Prologue
+              @objective Inventory the AI settings of the run.
+
+              @par Scenario:
+              -# Check TSF_AI_KEY (presence and provider only),
+                 TSF_AI_PROVIDER, TSF_AI_MODEL, TSF_AI_BASE_URL, python3 and
+                 the browser group's kept screenshot; chart it.
+        -->
+        <prologue>
+            <script name="prologue">
+                <objective>
+                    Inventory the AI settings of the run.
+
+                    @md
+                </objective>
+            </script>
+        </prologue>
+
+        <!-- @page mde-ai-epilogue AI Group Epilogue
+              @objective Finalize the ai group.
+
+              @par Scenario:
+              -# No cleanup actions are required.
+        -->
+        <epilogue>
+            <script name="epilogue">
+                <objective>
+                    Finalize the ai group.
+
+                    @md
+                </objective>
+            </script>
+        </epilogue>
+
+        <!-- @page mde-ai-grade_trace Grade a Ring Trace
+              @objective An AI model reads a cpp-demo trace with the README's
+                         stage formulas and its count of the stages visited
+                         must equal the suite's own parse.
+
+              @par Test Parameters:
+              | Parameter    | Values             | Description                   |
+              |==============|====================|===============================|
+              | provider     | anthropic / openai | AI provider of the iteration  |
+              | hops         | 5 / 7              | Hop budget of the walk        |
+              | min_severity | low / medium       | Lowest finding that fails     |
+
+              @par Scenario:
+              -# Skip unless TSF_AI_KEY is set, is for this provider, python3
+                 is on the agent and the provider is reachable.
+              -# Run cpp-demo 1 hops and parse the trace with the suite's
+                 parser; predict the correct walk with the ring model.
+              -# Send the trace, the stage formulas and weights to the model
+                 (JSON mode, temperature 0) and ask for {stages_visited,
+                 expected, defect_suspected, first_bad_stage}.
+              -# A count different from the suite's parse, or an expected
+                 count different from hops+1, is a low ai.disagrees finding;
+                 an answer that is not that JSON is a medium ai.bad-json.
+              -# The model's defect opinion is an artifact, not a verdict.
+              -# Known-bad control: a full-length trace with one stage's
+                 result planted wrong; the model must flag a defect.
+              -# Chart latency, token counts and the two readings.
+
+              @par Expected Results:
+              - The model counts what the suite counts (1 stage on the
+                as-shipped example): pass with min_severity=low too.
+        -->
+        <run name="grade_trace">
+            <script name="grade_trace">
+                <objective>
+                    An AI model's count of the stages in a cpp-demo trace must
+                    equal the suite's own parse.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="provider">
+                <value>anthropic</value>
+                <value>openai</value>
+            </arg>
+            <arg name="hops">
+                <value>5</value>
+                <value>7</value>
+            </arg>
+            <arg name="min_severity">
+                <value>low</value>
+                <value>medium</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-ai-grade_screenshot Grade a Browser Screenshot
+              @objective A vision model counts the node lines in the browser's
+                         screenshot of a web tier walk; the count must equal
+                         the suite's parse of the page text.
+
+              @par Test Parameters:
+              | Parameter    | Values             | Description                   |
+              |==============|====================|===============================|
+              | provider     | anthropic / openai | AI provider of the iteration  |
+              | min_severity | low / medium       | Lowest finding that fails     |
+
+              @par Scenario:
+              -# Skip unless the provider takes images and the key is usable.
+              -# Reuse /tmp/mde-browser-walk-h5.{png,txt} kept by
+                 browser/walk_page, or make them with Chromium (hops=5).
+              -# Check the PNG and log its size and SHA-256.
+              -# Parse the page text: node lines and the value= line.
+              -# Ask the model with the image attached for {node_lines,
+                 value_line}; a different count is a low ai.disagrees
+                 finding, a different value line an info one.
+              -# Chart latency, token counts and the two readings.
+
+              @par Expected Results:
+              - The model counts the lines the page shows: pass.
+        -->
+        <run name="grade_screenshot">
+            <script name="grade_screenshot">
+                <objective>
+                    A vision model's count of node lines in the browser
+                    screenshot must equal the suite's parse of the page.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="provider">
+                <value>anthropic</value>
+                <value>openai</value>
+            </arg>
+            <arg name="min_severity">
+                <value>low</value>
+                <value>medium</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-ai-stream Streamed Answer
+              @objective A streamed answer arrives in pieces that put together
+                         are the whole answer, in order, and match the same
+                         prompt asked without streaming.
+
+              @par Test Parameters:
+              | Parameter    | Values             | Description                   |
+              |==============|====================|===============================|
+              | provider     | anthropic / openai | AI provider of the iteration  |
+              | count        | 10 / 40            | The model counts from 1 to it |
+              | min_severity | low / medium       | Lowest finding that fails     |
+
+              @par Scenario:
+              -# Skip unless the provider streams and the key is usable.
+              -# Stream "count from 1 to N"; time each piece.
+              -# The pieces must end with ENODATA (a stall is a verdict),
+                 their sizes must add up to the whole, and the whole must be
+                 exactly 1..N in order (medium ai.stream-content otherwise).
+              -# Ask the same without streaming: the numbers must be the same
+                 (low ai.disagrees otherwise).
+              -# Chart chunk size and arrival time over the chunk index, the
+                 time to the first chunk, latency and token counts.
+
+              @par Expected Results:
+              - The stream delivers 1..N in order: pass.
+        -->
+        <run name="stream">
+            <script name="stream">
+                <objective>
+                    A streamed answer arrives in order and matches the same
+                    prompt asked without streaming.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="provider">
+                <value>anthropic</value>
+                <value>openai</value>
+            </arg>
+            <arg name="count">
+                <value>10</value>
+                <value>40</value>
+            </arg>
+            <arg name="min_severity">
+                <value>low</value>
+                <value>medium</value>
+            </arg>
+        </run>
+    </session>
+</package>

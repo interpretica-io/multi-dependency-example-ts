@@ -1,0 +1,202 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>Container tests</description>
+
+    <!-- @page mde-container Container Tests
+          @objective Run the built example inside container images it was
+                     not built for, audit the security posture of the
+                     containers it would run in, and move its libraries in
+                     and out of a container intact (tsf-container).
+
+          @par Test Groups:
+          - @ref mde-container-ring_inside    - the ring walked inside an image, compared with the agent and the model
+          - @ref mde-container-posture        - the audit's view of a profile against /proc and a real write
+          - @ref mde-container-copy_roundtrip - every ring library in and out, hashed three times
+
+          @par Notes:
+          - The agent drives the host's Docker through its socket, so
+            containers are siblings of the agent and agent paths cannot be
+            bind-mounted: files move with docker cp only.
+          - Containers have stable names (mde-ring-inside-*, mde-posture-*,
+            mde-copy-*); a leftover from a failed run is removed before a
+            test starts and by the group epilogue.
+          - Every test skips when Docker does not answer or the image
+            cannot be pulled.
+    -->
+
+    <author mailto="maximmenshchikov@gmail.com" />
+
+    <session track_conf="silent">
+        <!-- @page mde-container-prologue Container Group Prologue
+              @objective Check that Docker answers and record its version.
+
+              @par Scenario:
+              -# Skip the group when no container runtime answers.
+              -# Record client/server versions and security options.
+        -->
+        <prologue>
+            <script name="prologue">
+                <objective>
+                    Check that Docker answers and record its version.
+
+                    @md
+                </objective>
+            </script>
+        </prologue>
+
+        <!-- @page mde-container-epilogue Container Group Epilogue
+              @objective Remove containers the group may have left behind.
+
+              @par Scenario:
+              -# Remove containers named mde-ring-inside-*, mde-posture-*
+                 and mde-copy-*.
+        -->
+        <epilogue>
+            <script name="epilogue">
+                <objective>
+                    Remove containers the group may have left behind.
+
+                    @md
+                </objective>
+            </script>
+        </epilogue>
+
+        <!-- @page mde-container-ring_inside The Ring Inside a Container
+              @objective Walk the ring with cpp-demo inside an image and
+                         check the trace is the agent's byte for byte and
+                         shows the same deviations from the model.
+
+              @par Test Parameters:
+              | Parameter | Values                                                  | Description            |
+              |===========|=========================================================|========================|
+              | image     | debian:bookworm-slim / ubuntu:24.04 / python:3.11-slim-bookworm | Image to run in |
+              | hops      | 1 / 5                                                   | Hop budget             |
+
+              @par Scenario:
+              -# Pull the image; chart its size and pull time.
+              -# Run cpp-demo 1 hops on the agent as the reference.
+              -# Start the container (sleep infinity) and copy dist/ and
+                 python/ in at the agent's absolute paths.
+              -# Run ldd inside; each library reported "not found" is a
+                 container.missing-runtime finding naming the library.
+              -# Run cpp-demo inside; compare its output with the agent's
+                 byte for byte (container.trace-diverged) and both with
+                 the ring model (ring.* findings; container.defect-diverged
+                 when the counts differ).
+              -# Chart run time agent vs container, copy times, steps.
+
+              @par Expected Results:
+              - debian:bookworm-slim and ubuntu:24.04 have no libpython:
+                container.missing-runtime, the test fails with that verdict.
+              - python:3.11-slim-bookworm runs the demo; the trace equals
+                the agent's and the ring defect reproduces (ring.depth).
+        -->
+        <run name="ring_inside">
+            <script name="ring_inside">
+                <objective>
+                    Walk the ring inside a container image and compare with
+                    the agent and with the model.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="image">
+                <value>debian:bookworm-slim</value>
+                <value>ubuntu:24.04</value>
+                <value>python:3.11-slim-bookworm</value>
+            </arg>
+            <arg name="hops">
+                <value>1</value>
+                <value>5</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-container-posture Container Posture
+              @objective Audit a container started with a given profile and
+                         check the audit against /proc/self/status and a
+                         real write to the root filesystem.
+
+              @par Test Parameters:
+              | Parameter    | Values                          | Description                  |
+              |==============|=================================|==============================|
+              | profile      | default / hardened / privileged | How the container is started |
+              | min_severity | high / critical                 | Gate threshold               |
+
+              @par Scenario:
+              -# Start debian:bookworm-slim as mde-posture-PROFILE:
+                 hardened = ‑‑cap-drop ALL ‑‑read-only
+                 ‑‑security-opt no-new-privileges, user nobody;
+                 privileged = ‑‑privileged.
+              -# tapi_container_audit() and tapi_container_posture_get().
+              -# Read CapEff/NoNewPrivs/Seccomp inside and try to write
+                 to /tmp; any disagreement is container.posture-disagrees.
+              -# hardened: CapEff 0, read-only, no_new_privs, nobody, no
+                 audit finding of medium or worse.
+              -# default: the audit must report root-user and
+                 writable-rootfs (control that it is not blind).
+              -# privileged (known-bad control): container.privileged and
+                 container.no-seccomp must be found, then are dropped.
+              -# Chart capability counts (audit vs /proc), findings, audit
+                 time.
+
+              @par Expected Results:
+              - Every iteration passes; default leaves medium/low findings
+                that do not reach the gate.
+        -->
+        <run name="posture">
+            <script name="posture">
+                <objective>
+                    Audit a container profile and check it from inside.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="profile">
+                <value>default</value>
+                <value>hardened</value>
+                <value>privileged</value>
+            </arg>
+            <arg name="min_severity">
+                <value>high</value>
+                <value>critical</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-container-copy_roundtrip Copy Round Trip
+              @objective Copy each ring library into a container and back
+                         out and check it is unchanged.
+
+              @par Test Parameters:
+              | Parameter | Values                              | Description     |
+              |===========|=====================================|=================|
+              | image     | debian:bookworm-slim / ubuntu:24.04 | Image to run in |
+
+              @par Scenario:
+              -# For each built ring library: sha256 on the agent, copy
+                 in, sha256 inside, copy out, sha256 again; all equal.
+              -# Known-bad control: overwrite the first bytes of one copy
+                 inside, copy it out; container.copy-mismatch must be
+                 found, then is dropped.
+              -# Chart sizes, copy-in/out times and throughput.
+
+              @par Expected Results:
+              - Every library survives the round trip; the test passes.
+        -->
+        <run name="copy_roundtrip">
+            <script name="copy_roundtrip">
+                <objective>
+                    Copy every ring library through a container and back.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="image">
+                <value>debian:bookworm-slim</value>
+                <value>ubuntu:24.04</value>
+            </arg>
+        </run>
+    </session>
+</package>

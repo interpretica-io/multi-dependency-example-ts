@@ -1,9 +1,14 @@
 /** @file
  * @brief Ring Group
  *
- * Enter the native FFI ring from one language and count how many stages a
- * value actually travels through. Correct code carries it through hops+1
- * stages; the injected always-true defect stops it after the first.
+ * Enter the native FFI ring from one language and check the whole walk.
+ * Correct code carries the value through hops+1 stages; the injected
+ * always-true defect stops it after the first.
+ *
+ * The stage count is checked first and keeps its historical verdict. Then
+ * the whole trace is compared with the reference model step by step (order,
+ * hop counter, hand-off, formula, value, result) and the findings are gated
+ * by min_severity.
  *
  * Copyright (C) 2026 Maxim Menshikov
  *
@@ -12,161 +17,152 @@
 
 #define TE_TEST_NAME    "ring/propagation"
 
-#include "te_config.h"
-#include "tapi_test.h"
-#include "te_string.h"
-#include "tsapi_evo.h"
-#include "tsapi_mde.h"
-
-/* Entry point into the ring: which demo binary enters the cycle and where. */
-typedef enum ring_entry {
-    RING_ENTRY_CPP,     /**< cpp-demo: enters at the Rust stage. */
-    RING_ENTRY_RUST,    /**< rust-demo: enters at the C++ stage. */
-    RING_ENTRY_PY,      /**< python demo: enters at the C++ stage. */
-} ring_entry;
-
-#define RING_ENTRY_LIST \
-    { "cpp",  RING_ENTRY_CPP  }, \
-    { "rust", RING_ENTRY_RUST }, \
-    { "py",   RING_ENTRY_PY   }
-
-/* Any stage's trace line: "  [rust] hops=7 ... "; the name is padded. */
-#define RING_STAGE_RE   "\\[\\s*(cpp|rust|go|cs|py)\\s*\\]\\s+hops="
-/* The demo's final line: "cpp-demo: result = 20.0735". */
-#define RING_RESULT_RE  "result = (-?[0-9]+\\.[0-9]+)"
+#include "ring_common.h"
 
 int
 main(int argc, char **argv)
 {
-    ring_entry           entry;
-    int                  hops;
-    const char          *src;
-    const char          *value = "1";
-    te_string            program = TE_STRING_INIT;
-    te_string            script = TE_STRING_INIT;
-    char                 hops_str[16];
-    const char          *cmd[8];
-    size_t               n = 0;
-    tsapi_mde_session    session;
-    bool                 session_up = false;
-    tsapi_mde_run_result res;
-    tsapi_evo_schart     chart;
-    char                 metric[32];
-    char                 xaxis[32];
-    unsigned int         expected;
+    ring_demo              entry;
+    int                    hops;
+    double                 value;
+    tapi_cybersec_severity min_severity;
+    tsapi_mde_session      session;
+    bool                   session_up = false;
+    tsapi_mde_dut          dut = { .root = NULL };
+    tsapi_mde_report       report;
+    bool                   report_up = false;
+    ring_walk              walk = RING_WALK_INIT;
+    te_vec                 model = TE_VEC_INIT(tsapi_mde_step);
+    tsapi_mde_stage        stage;
+    double                 model_result;
+    unsigned int           traced;
+    unsigned int           expected;
+    bool                   count_bad = false;
+    const char            *why;
+    te_mi_logger          *logger = NULL;
 
     TEST_START;
+    tsapi_mde_report_init(&report);
+    report_up = true;
 
     TEST_STEP("Parse test parameters");
-    TEST_GET_ENUM_PARAM(entry, RING_ENTRY_LIST);
+    TEST_GET_ENUM_PARAM(entry, RING_DEMO_LIST);
     TEST_GET_INT_PARAM(hops);
+    TEST_GET_DOUBLE_PARAM(value);
+    TEST_GET_MDE_SEVERITY(min_severity);
+    stage = ring_demo_entry(entry);
 
-    TEST_STEP("Locate the example under test");
-    src = tsapi_mde_src();
-    if (src == NULL)
-        TEST_SKIP("TE_TS_MDE_SRC is not set");
-
-    TE_SPRINTF(hops_str, "%d", hops);
-
-    switch (entry)
-    {
-        case RING_ENTRY_CPP:
-            te_string_append(&program, "%s/dist/bin/cpp-demo", src);
-            cmd[n++] = program.ptr;
-            cmd[n++] = value;
-            cmd[n++] = hops_str;
-            break;
-
-        case RING_ENTRY_RUST:
-            te_string_append(&program, "%s/dist/bin/rust-demo", src);
-            cmd[n++] = program.ptr;
-            cmd[n++] = value;
-            cmd[n++] = hops_str;
-            break;
-
-        case RING_ENTRY_PY:
-            te_string_append(&program, "python3");
-            cmd[n++] = program.ptr;
-            /* argv[1] is the script; it lives in the source tree, not dist. */
-            te_string_append(&script, "%s/python/demo.py", src);
-            cmd[n++] = script.ptr;
-            cmd[n++] = value;
-            cmd[n++] = hops_str;
-            break;
-
-        default:
-            TEST_FAIL("Unknown entry value: %d", entry);
-    }
-    cmd[n] = NULL;
-
-    TEST_STEP("Open a session on the agent");
-    CHECK_RC(tsapi_mde_session_init(&session, "ring"));
-    session_up = true;
+    TEST_STEP("Open a session and locate the example");
+    TSAPI_MDE_OPEN_OR_SKIP(session, "ring", dut, session_up);
 
     TEST_STEP("Skip unless the demo can be run");
-    /*
-     * For a native demo the binary itself must be there; for the Python demo
-     * the script must be there (python3 is resolved through PATH) and the ring
-     * libraries it dlopen()s must have been built. cpp-demo is the sentinel
-     * for "the example is built": it is produced by the same ./build.sh run
-     * as every library, so its presence implies dist/lib is populated too
-     * (an empty dist/lib directory left over from a clean must not pass).
-     */
-    if (entry == RING_ENTRY_PY)
-    {
-        te_string sentinel = TE_STRING_INIT;
-        bool      have;
+    why = ring_demo_unavailable(&session, &dut, entry);
+    if (why != NULL)
+        TEST_SKIP("%s", why);
 
-        te_string_append(&sentinel, "%s/dist/bin/cpp-demo", src);
-        have = tsapi_mde_exists(&session, cmd[1]) &&
-               tsapi_mde_exists(&session, sentinel.ptr);
-        te_string_free(&sentinel);
-        if (!have)
-            TEST_SKIP("Python demo or the built ring libraries are missing");
-    }
-    else if (!tsapi_mde_exists(&session, program.ptr))
-    {
-        TEST_SKIP("%s is missing - build the example first", program.ptr);
-    }
+    TEST_STEP("Known-bad controls: a planted trace defect and a planted "
+              "crash must both be detected");
+    ring_control_compare(&report, stage);
+    CHECK_RC(ring_control_crash(&session, &report));
 
-    TEST_STEP("Run the demo and count the stages the value visits");
-    CHECK_RC(tsapi_mde_run(&session, cmd[0], cmd, 30000,
-                           RING_STAGE_RE, RING_RESULT_RE, &res));
-    if (!res.started)
+    TEST_STEP("Run the %s demo with value=%g hops=%d and capture its trace",
+              ring_demo2str(entry), value, hops);
+    CHECK_RC(ring_walk_run(&session, &dut, entry, value, hops, &walk));
+    if (!walk.started)
         TEST_FAIL("The demo could not be started");
 
-    RING("Demo exited (type=%d value=%d); %u stage(s) traced; result=%s %g",
-         res.status.type, res.status.value, res.match_count,
-         res.have_value ? "" : "(none)", res.have_value ? res.value : 0.0);
+    TEST_STEP("Predict the walk with the reference model");
+    model_result = tsapi_mde_ring_predict(stage, value, hops, &model);
 
-    TEST_STEP("Record the propagation depth");
-    tsapi_evo_analysis_hint(
-        "Stages visited should equal hops+1. A value of 1 means the value "
-        "stopped at the entry stage - the injected always-true defect.");
-    tsapi_evo_schart_init(&chart, "Ring propagation",
-                          "Stages visited / Entry+hops", "0", "stages");
-    TE_SPRINTF(xaxis, "%s/hops=%d",
-               entry == RING_ENTRY_CPP ? "cpp" :
-               entry == RING_ENTRY_RUST ? "rust" : "py", hops);
-    TE_SPRINTF(metric, "%u", res.match_count);
-    tsapi_evo_schart_add_metric(&chart, xaxis, metric, NULL);
-    tsapi_evo_schart_print(&chart);
-    tsapi_evo_schart_fini(&chart);
-
-    TEST_STEP("Check that the value reached every stage");
+    TEST_STEP("Check the number of stages the value visited");
+    traced = te_vec_size(&walk.steps);
     expected = (unsigned int)hops + 1;
-    if (res.match_count != expected)
+    if (traced != expected)
     {
-        TEST_VERDICT("Ring propagated through %u stage(s), expected %u",
-                     res.match_count, expected);
+        /*
+         * The historical verdict comes first (TRC matches it); the report
+         * gate below adds the deep one.
+         */
+        ERROR_VERDICT("Ring propagated through %u stage(s), expected %u",
+                      traced, expected);
+        count_bad = true;
     }
+
+    TEST_STEP("Compare the trace with the model step by step");
+    ring_check_crash(&walk, stage, tsapi_mde_stage2str(stage), &report.cyber);
+    tsapi_mde_ring_compare(stage, &model, &walk.steps, walk.have_result,
+                           model_result, walk.result, RING_TOLERANCE,
+                           &report.cyber);
+
+    TEST_STEP("Record the walk: charts and artifacts");
+    if (tsapi_mde_mi_create("ring", &logger) == 0)
+    {
+        te_mi_logger_add_meas_key(logger, NULL, "entry", "%s",
+                                  ring_demo2str(entry));
+        te_mi_logger_add_meas_key(logger, NULL, "hops", "%d", hops);
+        te_mi_logger_add_meas_key(logger, NULL, "value", "%g", value);
+        tsapi_mde_ring_chart(logger, "walk", &model, &walk.steps);
+        te_mi_logger_destroy(logger);
+        logger = NULL;
+    }
+    ring_chart_residuals("Per-step residuals of the observed trace",
+                         &walk.steps);
+    if (tsapi_mde_mi_create("ring", &logger) == 0)
+    {
+        te_mi_logger_add_meas(logger, NULL, TE_MI_MEAS_UNITLESS_VALUE,
+                              "observed_stages", TE_MI_MEAS_AGGR_SINGLE,
+                              traced, TE_MI_MEAS_MULTIPLIER_PLAIN);
+        te_mi_logger_add_meas(logger, NULL, TE_MI_MEAS_UNITLESS_VALUE,
+                              "expected_stages", TE_MI_MEAS_AGGR_SINGLE,
+                              expected, TE_MI_MEAS_MULTIPLIER_PLAIN);
+        te_mi_logger_add_meas(logger, NULL, TE_MI_MEAS_TIME, "demo_wall",
+                              TE_MI_MEAS_AGGR_SINGLE, walk.wall_s,
+                              TE_MI_MEAS_MULTIPLIER_PLAIN);
+        te_mi_logger_add_meas(logger, NULL, TE_MI_MEAS_UNITLESS_VALUE,
+                              "observed_result", TE_MI_MEAS_AGGR_SINGLE,
+                              walk.have_result ? walk.result : 0,
+                              TE_MI_MEAS_MULTIPLIER_PLAIN);
+        te_mi_logger_add_meas(logger, NULL, TE_MI_MEAS_UNITLESS_VALUE,
+                              "model_result", TE_MI_MEAS_AGGR_SINGLE,
+                              model_result, TE_MI_MEAS_MULTIPLIER_PLAIN);
+        /*
+         * Several single values: a line graph over the sequence
+         * number draws each as a point (a point view takes one).
+         */
+        te_mi_logger_add_meas_view(logger, NULL, TE_MI_MEAS_VIEW_LINE_GRAPH,
+                                   "summary", "Ring walk summary");
+        te_mi_logger_meas_graph_axis_add_name(logger, NULL,
+                                              TE_MI_MEAS_VIEW_LINE_GRAPH,
+                                              "summary", TE_MI_GRAPH_AXIS_X,
+                                              TE_MI_GRAPH_AUTO_SEQNO);
+        te_mi_logger_destroy(logger);
+        logger = NULL;
+    }
+
+    TEST_ARTIFACT("%s demo value=%g hops=%d: %u stage(s) traced, model %u",
+                  ring_demo2str(entry), value, hops, traced, expected);
+    TEST_ARTIFACT("Observed result %s%.4f, model result %.4f",
+                  walk.have_result ? "" : "(none) ",
+                  walk.have_result ? walk.result : 0.0, model_result);
+    TEST_ARTIFACT("Exit code %d, wall time %.3f s, stdout fnv1a64 %016" PRIx64,
+                  walk.rc, walk.wall_s, ring_fnv1a(ring_str(&walk.out)));
+
+    TEST_STEP("Decide on the findings");
+    TSAPI_MDE_REPORT_GATE(&report, "ring", min_severity);
+    if (count_bad)
+        TEST_STOP;
 
     TEST_SUCCESS;
 
 cleanup:
 
-    te_string_free(&program);
-    te_string_free(&script);
+    if (logger != NULL)
+        te_mi_logger_destroy(logger);
+    te_vec_free(&model);
+    ring_walk_free(&walk);
+    if (report_up)
+        tsapi_mde_report_free(&report);
+    tsapi_mde_dut_free(&dut);
     if (session_up)
         tsapi_mde_session_fini(&session);
 

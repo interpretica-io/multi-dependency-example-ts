@@ -1,0 +1,202 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>Fuzzing tests</description>
+
+    <!-- @page mde-fuzz Fuzzing Tests
+          @objective Put the ring's C ABI (double X_step(double, int))
+                     under libFuzzer + ASan, turn what it finds into stable
+                     findings, and keep every crash as a regression seed
+                     that later runs replay (tsf-fuzz, tsf-devtool).
+
+          @par Test Groups:
+          - @ref mde-fuzz-ring_abi - a campaign against one stage
+          - @ref mde-fuzz-replay   - every kept crash, replayed
+
+          @par Notes:
+          - The harness is written and built on the agent with tapi_cc
+            (clang -g -O1 -fsanitize=fuzzer,address). It dlopen()s the five
+            ring libraries from dist/lib with RTLD_NOW | RTLD_GLOBAL in build
+            order; libgocore leaves cpp_weight unresolved until libcppcore is
+            loaded, so whatever RTLD_NOW refuses on the first pass is loaded
+            on a second pass, after libcppcore.
+          - Jobs on the agent do not inherit ASAN_OPTIONS: the harness
+            compiles in detect_leaks=0 (the Python, Go and .NET runtimes keep
+            memory by design), allow_user_segv_handler=1 (Go and .NET
+            handle SIGSEGV themselves) and handle_abort=1: without it
+            libFuzzer catches SIGABRT itself, prints "libFuzzer: deadly
+            signal" and exits 77, which tsf-fuzz's triage cannot read, so
+            every abort would replay as "not reproduced" (ring_abi) or
+            "fixed" (replay). With it an abort is "AddressSanitizer: ABRT"
+            with a stack. The oracles raise SIGABRT from named functions
+            (mde_result_not_finite, mde_planted_defect) so the signature
+            says which one fired.
+          - A crash signature depends on the input, so it never reaches a
+            verdict: crashes are artifacts, and the report carries one
+            finding fuzz.ring-abi-crash about the target.
+          - Seeds live under /tmp/mde-fuzz-seeds/TARGET on the agent and
+            outlive the run; the epilogue removes only /tmp/mde-fuzz-build.
+          - Without clang or libFuzzer every test skips.
+    -->
+
+    <author mailto="maximmenshchikov@gmail.com" />
+
+    <session track_conf="silent">
+        <!-- @page mde-fuzz-prologue Fuzz Group Prologue
+              @objective Record which clang builds the harness, whether it
+                         supports -fsanitize=fuzzer,address, and how many
+                         seeds earlier runs left.
+
+              @par Scenario:
+              -# Record the clang version and llvm-symbolizer presence.
+              -# Probe -fsanitize=fuzzer,address with tapi_cc_check_snippet().
+              -# Count the seeds per target; chart the counts.
+              -# Create /tmp/mde-fuzz-build and /tmp/mde-fuzz-seeds.
+
+              @par Expected Results:
+              - Passes; the tests skip on their own when it is not supported.
+        -->
+        <prologue>
+            <script name="prologue">
+                <objective>
+                    Probe libFuzzer support and record the seed corpus.
+
+                    @md
+                </objective>
+            </script>
+        </prologue>
+
+        <!-- @page mde-fuzz-epilogue Fuzz Group Epilogue
+              @objective Remove the build directories and keep the seeds.
+
+              @par Scenario:
+              -# Remove /tmp/mde-fuzz-build; list /tmp/mde-fuzz-seeds.
+        -->
+        <epilogue>
+            <script name="epilogue">
+                <objective>
+                    Remove the build directories, keep the regression corpus.
+
+                    @md
+                </objective>
+            </script>
+        </epilogue>
+
+        <!-- @page mde-fuzz-ring_abi Ring ABI Campaign
+              @objective Fuzz one stage of the ring with a finite value and a
+                         hop budget of 0..3, and fail on a result that is not
+                         finite or on any sanitizer report.
+
+              @par Test Parameters:
+              | Parameter    | Values                        | Description                     |
+              |==============|===============================|=================================|
+              | target       | cpp_step / rust_step / go_step | Stage the harness calls         |
+              | duration     | 20 / 60                       | Campaign length, seconds        |
+              | min_severity | high / critical               | Lowest severity that fails      |
+
+              @par Scenario:
+              -# Locate the example; skip without clang + libFuzzer.
+              -# Build the harness and a control variant that also aborts on
+                 any input starting with 'X'; chart both build times.
+              -# Oracle: the harness on value=1, hops=0 must print the
+                 stage's trace line and return what the ring model predicts
+                 (a one-stage walk, unaffected by the injected defect).
+              -# Known-bad control: run the control for 5 s with a seed
+                 "XXXX..."; the planted crash must be collected and reported
+                 as fuzz.crash (tsapi_mde_report_expect) and, replayed, must
+                 come back as ASan ABRT with mde_planted_defect on its stack
+                 (else fuzz.control-not-reproduced, critical); then the
+                 control's findings are dropped.
+              -# Seed the corpus with five valid walks; run the campaign for
+                 @p duration seconds (-close_fd_mask=1, -print_final_stats=1).
+              -# Read the statistics two ways: tapi_fuzz_get_stats() and the
+                 parsed progress lines must agree on whether it ran; the
+                 final unit count must not be below the last progress line.
+              -# Collect and triage crashes; each is an artifact and becomes a
+                 seed in /tmp/mde-fuzz-seeds/TARGET; their input-dependent
+                 findings are replaced by one fuzz.ring-abi-crash finding.
+              -# tapi_fuzz_check_progress(): fewer than 1000 inputs without a
+                 crash, or no coverage, fails with a stable verdict.
+              -# Chart coverage/features and exec/s over inputs executed,
+                 total inputs, crashes, seeds, wall times, peak RSS.
+              -# Gate the report at @p min_severity.
+
+              @par Expected Results:
+              - On the shipped example a stage stops after itself with
+                finite arithmetic, so no crash is expected: passes. A walk
+                that reaches cs_step on Linux (once the injected defect is
+                fixed) may crash; that is fuzz.ring-abi-crash, high.
+              - "The TARGET campaign made no progress" when the harness
+                could not fuzz (e.g. the ring libraries fail to load under
+                ASan).
+        -->
+        <run name="ring_abi">
+            <script name="ring_abi">
+                <objective>
+                    Fuzz one stage of the ring's C ABI.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="target">
+                <value>cpp_step</value>
+                <value>rust_step</value>
+                <value>go_step</value>
+            </arg>
+            <arg name="duration">
+                <value>20</value>
+                <value>60</value>
+            </arg>
+            <arg name="min_severity">
+                <value>high</value>
+                <value>critical</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-fuzz-replay Seed Replay
+              @objective Replay every crash ring_abi kept against a freshly
+                         built harness: each one still reproduces (a known
+                         issue) or is fixed.
+
+              @par Test Parameters:
+              | Parameter    | Values          | Description                |
+              |==============|=================|============================|
+              | min_severity | high / critical | Lowest severity that fails |
+
+              @par Scenario:
+              -# Count the seeds per target; with none, pass with the
+                 artifact "no seeds to replay".
+              -# Skip without clang + libFuzzer.
+              -# Known-bad control: a planted "XXXX..." seed replayed on the
+                 control harness must be reported as fuzz.crash and come back
+                 as ASan ABRT with mde_planted_defect on its stack.
+              -# Per target with seeds: build the harness; check it reaches
+                 the stage on a valid input (else a "fixed" would mean
+                 nothing); replay every seed with tapi_fuzz_crashes_collect().
+              -# Every listed seed must be accounted for; a seed that still
+                 crashes is fuzz.ring-abi-crash (high), a fixed one is
+                 fuzz.replay-fixed (info). A seed is fixed only when triage
+                 found no report and the harness also exits 0 on it.
+              -# Chart seeds, still crashing and fixed per target, replay and
+                 build times.
+              -# Gate the report at @p min_severity.
+
+              @par Expected Results:
+              - Passes with "no seeds to replay" while ring_abi finds nothing.
+        -->
+        <run name="replay">
+            <script name="replay">
+                <objective>
+                    Replay the regression corpus.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="min_severity">
+                <value>high</value>
+                <value>critical</value>
+            </arg>
+        </run>
+    </session>
+</package>

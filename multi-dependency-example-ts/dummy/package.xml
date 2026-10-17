@@ -1,0 +1,116 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>Dummy tests</description>
+
+    <!-- @page mde-dummy Dummy Tests
+          @objective The TE_EXT_REPO machinery itself, through tsf-dummy:
+                     its engine-side TAPI and its external Test Agent type.
+
+          @par Test Groups:
+          - @ref mde-dummy-greeting - tapi_dummy_greeting() and dummy_agent
+
+          @par Notes:
+          - tapi_dummy_greeting() takes no arguments, so there are no names
+            to vary; the call count is varied instead.
+    -->
+
+    <author mailto="maximmenshchikov@gmail.com" />
+
+    <session track_conf="silent">
+        <!-- @page mde-dummy-prologue Dummy Group Prologue
+              @objective Record the greeting and where agent types are
+                         installed.
+
+              @par Scenario:
+              -# Log the greeting and TE_INSTALL as artifacts; chart the
+                 greeting length. Never skip.
+        -->
+        <prologue>
+            <script name="prologue">
+                <objective>
+                    Record what tsf-dummy provides.
+
+                    @md
+                </objective>
+            </script>
+        </prologue>
+
+        <!-- @page mde-dummy-epilogue Dummy Group Epilogue
+              @objective Finalize the dummy group.
+
+              @par Scenario:
+              -# No cleanup actions are required.
+        -->
+        <epilogue>
+            <script name="epilogue">
+                <objective>
+                    Finalize the dummy group.
+
+                    @md
+                </objective>
+            </script>
+        </epilogue>
+
+        <!-- @page mde-dummy-greeting Dummy Greeting and Agent
+              @objective Check tapi_dummy_greeting() against its contract,
+                         and that the Builder built and installed the
+                         dummy_agent Test Agent type.
+
+              @par Test Parameters:
+              | Parameter | Values           | Description                         |
+              |===========|==================|=====================================|
+              | check     | greeting / agent | Which component is checked          |
+              | calls     | 1 / 1000         | Calls of the TAPI (check=greeting)  |
+
+              @par Scenario:
+              -# check=greeting: the greeting is non-NULL and exactly
+                 "Greetings from the external tsf-dummy repository!";
+                 printable, no leading/trailing blanks, capitalised, ends
+                 with "!", names tsf-dummy; every one of @p calls calls
+                 returns the same static buffer and the text never changes.
+                 Chart the length per call, the word lengths and the time
+                 per call.
+              -# check=agent: find dummy_agent at TE_INSTALL/agents/dummy/ta
+                 (or TE_AGENTS_INST/dummy/ta, or by find under TE_INSTALL);
+                 skip if it is not there. It is executable, built for this
+                 machine (readelf -h vs uname -m), runs, exits 0 on its own
+                 and prints "dummy_agent is alive on platform <name>". Its
+                 size, sha256 and output are artifacts; size and run time
+                 are charted.
+
+              @par Expected Results:
+              - Pass.
+        -->
+        <run name="greeting">
+            <script name="greeting">
+                <objective>
+                    Check the tsf-dummy greeting against its contract.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="check">
+                <value>greeting</value>
+            </arg>
+            <arg name="calls">
+                <value>1</value>
+                <value>1000</value>
+            </arg>
+        </run>
+
+        <run name="greeting_agent">
+            <script name="greeting">
+                <objective>
+                    Check that the Builder built and installed dummy_agent.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="check">
+                <value>agent</value>
+            </arg>
+        </run>
+    </session>
+</package>

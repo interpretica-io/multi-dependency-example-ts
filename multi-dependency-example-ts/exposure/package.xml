@@ -1,0 +1,307 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>Exposure tests</description>
+
+    <!-- @page mde-exposure Exposure Tests
+          @objective What the running web tier listens on, what of it can
+                     be reached, what it talks to and what crosses the wire
+                     (tsf-cybersec: tapi_netexpose, tapi_egress,
+                     tapi_sniffrules, tapi_frida).
+
+          @par Test Groups:
+          - @ref mde-exposure-listeners    - listeners against the allowed set
+          - @ref mde-exposure-reachability - connect probes against the socket table
+          - @ref mde-exposure-egress       - outgoing connections during walks
+          - @ref mde-exposure-sniff        - traffic rules over a captured walk
+          - @ref mde-exposure-frida        - connect() traced inside gateway-rs
+
+          @par Notes:
+          - The agent shares the host network: the socket tables hold the
+            host's sockets too. The tests take a baseline before the tier
+            starts, or judge only what the agent's user owns, so that the
+            gate is about the example.
+          - Every audit runs next to a known-bad control (a planted
+            listener, a TEST-NET connection, basic authentication in the
+            clear); a control that is not found fails the test with its own
+            verdict.
+    -->
+
+    <author mailto="maximmenshchikov@gmail.com" />
+
+    <session track_conf="silent">
+        <!-- @page mde-exposure-prologue Exposure Group Prologue
+              @objective Record the tools of the group; start nothing.
+
+              @par Scenario:
+              -# Check curl, python3, setsid, ip, tcpdump, sudo, frida,
+                 passwordless sudo and whether the web tier is built.
+        -->
+        <prologue>
+            <script name="prologue">
+                <objective>
+                    Record the tools available to the exposure group.
+
+                    @md
+                </objective>
+            </script>
+        </prologue>
+
+        <!-- @page mde-exposure-epilogue Exposure Group Epilogue
+              @objective Make sure nothing of the tier, the controls or the
+                         capture is left running.
+
+              @par Scenario:
+              -# Count the web tier processes and control listeners left.
+              -# Kill them, stop a leftover tcpdump, remove temporary files.
+        -->
+        <epilogue>
+            <script name="epilogue">
+                <objective>
+                    Stop whatever the tests of the group left behind.
+
+                    @md
+                </objective>
+            </script>
+        </epilogue>
+
+        <!-- @page mde-exposure-listeners Listeners of the Web Tier
+              @objective Check what the running tier listens on against the
+                         three contract ports, loopback only.
+
+              @par Test Parameters:
+              | Parameter    | Values            | Description                        |
+              |==============|===================|====================================|
+              | min_severity | medium / critical | Lowest finding severity that fails |
+
+              @par Scenario:
+              -# Baseline: the listening TCP ports before the tier starts
+                 (the host's own); a contract port taken already fails.
+              -# Start the tier and wait until every port accepts.
+              -# Known-bad controls: python3 -m http.server on 0.0.0.0:18099
+                 (not allowed) and on 0.0.0.0:18098 (allowed on loopback
+                 only).
+              -# tapi_netexpose_check() with 8081-8083 and 18098 loopback-only
+                 and the baseline as it is.
+              -# Expect net.unexpected-listener tcp/18099 and
+                 net.listens-beyond-loopback tcp/18098; drop them.
+              -# Each service must be in the table; a service bound anywhere
+                 but loopback while it announced 127.0.0.1 is a
+                 net.view-mismatch.
+              -# One TEST_ARTIFACT per listener (address, uid, inode, tag);
+                 charts of listeners per address class, before/after counts
+                 and service start times.
+              -# Gate on @c min_severity.
+
+              @par Expected Results:
+              - The services bind 127.0.0.1: pass, unless something new
+                appears on the host during the test.
+        -->
+        <run name="listeners">
+            <script name="listeners">
+                <objective>
+                    Check the listeners of the running web tier.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="min_severity">
+                <value>medium</value>
+                <value>critical</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-exposure-reachability Reachability of the Web Tier
+              @objective Probe the tier over loopback and over the agent's
+                         non-loopback address and compare with the socket
+                         table.
+
+              @par Test Parameters:
+              | Parameter        | Values      | Description                        |
+              |==================|=============|====================================|
+              | min_severity     | high / critical | Lowest finding severity that fails |
+              | probe_timeout_ms | 250 / 1000  | Connect probe timeout              |
+
+              @par Scenario:
+              -# Baseline scan of 8079..8090 over loopback and the host address.
+              -# Start the tier; plant a control listener on the first free
+                 port above 8083 (loopback).
+              -# Probe 8081-8083 and the control over both addresses; the
+                 result must follow the bound address from the socket table
+                 (net.view-mismatch otherwise); every service must answer on
+                 loopback.
+              -# tapi_netexpose_scan_check() over loopback with the tier and
+                 the baseline allowed: expect net.unexpected-reachable-port
+                 for the control, drop it.
+              -# The same scan over the host address with only the baseline
+                 allowed: the tier must not answer there.
+              -# Chart probe results and probe times per port and address,
+                 and scan time per address.
+              -# Gate on @c min_severity.
+
+              @par Expected Results:
+              - Loopback open, host address closed for every service: pass.
+        -->
+        <run name="reachability">
+            <script name="reachability">
+                <objective>
+                    Probe the web tier from the agent and compare with the
+                    socket table.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="min_severity">
+                <value>high</value>
+                <value>critical</value>
+            </arg>
+            <arg name="probe_timeout_ms">
+                <value>250</value>
+                <value>1000</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-exposure-egress Egress during Walks
+              @objective Watch what the agent connects to while walks run
+                         through the tier, against 127.0.0.1:8081-8083.
+
+              @par Test Parameters:
+              | Parameter    | Values          | Description                        |
+              |==============|=================|====================================|
+              | min_severity | high / critical | Lowest finding severity that fails |
+              | walks        | 1 / 5           | Walks sent during the window       |
+
+              @par Scenario:
+              -# Start the tier, send one walk (hops=3), count its node steps.
+              -# In the background: @c walks walks; the control - curl to
+                 198.51.100.1:80 (TEST-NET), or a connection held to the
+                 agent's own address when there is no route.
+              -# Six tapi_egress_snapshot() reads; connections of the
+                 agent's user that are not accepted by a local listener are
+                 judged with tapi_egress_policy_allows(): not allowed is a
+                 net.unexpected-egress (high); a loopback peer outside the
+                 tier is a net.loopback-peer (info).
+              -# Log the host-wide tapi_egress_check() for reference.
+              -# Expect the control; drop it.
+              -# The walks of the window must report walks x steps node
+                 steps.
+              -# Chart connections per destination and per snapshot.
+              -# Gate on @c min_severity.
+
+              @par Expected Results:
+              - The tier talks only to itself on loopback: pass.
+        -->
+        <run name="egress">
+            <script name="egress">
+                <objective>
+                    Check what the agent connects to during walks.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="min_severity">
+                <value>high</value>
+                <value>critical</value>
+            </arg>
+            <arg name="walks">
+                <value>1</value>
+                <value>5</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-exposure-sniff Traffic of One Walk
+              @objective Capture the loopback traffic of a walk, apply the
+                         tapi_sniffrules rules and check the requests on the
+                         wire against the response.
+
+              @par Test Parameters:
+              | Parameter    | Values          | Description                        |
+              |==============|=================|====================================|
+              | min_severity | high / critical | Lowest finding severity that fails |
+              | hops         | 1 / 5           | Hop budget of the walk             |
+
+              @par Scenario:
+              -# Skip without tcpdump, passwordless sudo, python3, or when the
+                 agent cannot capture on lo.
+              -# Start the tier and a control listener on 127.0.0.1:18096.
+              -# tapi_sniffrules_start() on lo with every rule; tcpdump to
+                 /tmp/mde-exposure-sniff.pcap.
+              -# One walk; then curl -u to the control (basic authentication).
+              -# Stop both; expect traffic.cleartext-credentials tcp/18096,
+                 drop it.
+              -# The pcap: size and SHA-256 as artifacts; HTTP requests to
+                 8081-8083 must equal the node steps of the response, and
+                 the requests per port must follow the cycle.
+              -# Chart packets and bytes per port, requests per port (model
+                 vs wire), walk and window time.
+              -# Gate on @c min_severity.
+
+              @par Expected Results:
+              - Pass where capturing is possible (one request per step, also
+                with the injected defect); skip otherwise.
+        -->
+        <run name="sniff">
+            <script name="sniff">
+                <objective>
+                    Capture one walk and judge the traffic.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="min_severity">
+                <value>high</value>
+                <value>critical</value>
+            </arg>
+            <arg name="hops">
+                <value>1</value>
+                <value>5</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-exposure-frida connect() inside gateway-rs
+              @objective Trace every connect() of gateway-rs with Frida
+                         during a walk and judge the destinations.
+
+              @par Test Parameters:
+              | Parameter    | Values          | Description                        |
+              |==============|=================|====================================|
+              | min_severity | high / critical | Lowest finding severity that fails |
+              | hops         | 5               | Hop budget of the walk             |
+
+              @par Scenario:
+              -# Skip unless Frida is installed and usable.
+              -# Control: spawn curl to 198.51.100.1 under the connect()
+                 tracer; expect runtime.unexpected-egress, drop it.
+              -# Start the tier, attach to gateway-rs, send one walk, stop.
+              -# tapi_frida_check_egress() against 127.0.0.1:8081-8083.
+              -# The number of connect() calls must equal the forwards the
+                 response implies (node steps at positions 0, 3, ... that
+                 are not the last).
+              -# Chart the events.
+              -# Gate on @c min_severity.
+
+              @par Expected Results:
+              - Skipped where Frida is not installed (the usual case).
+        -->
+        <run name="frida">
+            <script name="frida">
+                <objective>
+                    Trace the connections of gateway-rs with Frida.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="min_severity">
+                <value>high</value>
+                <value>critical</value>
+            </arg>
+            <arg name="hops">
+                <value>5</value>
+            </arg>
+        </run>
+    </session>
+</package>

@@ -8,6 +8,12 @@
     - cm_l4_port.yml
     - cm_sys.yml
     - cm_system.yml
+    # Subtrees brought in by the external tsf-* repositories.
+    - cm_vpn.yml
+    - cm_wifi.yml
+    - cm_android.yml
+    - cm_apple.yml
+    - cm_appium.yml
 
 - include:
     - cs.conf.local

@@ -4,34 +4,41 @@
 
     <!-- @page mde-graph Graph Tests
           @objective Verify the build-time linkage that makes the ring's cyclic
-                     dependency graph possible.
+                     dependency graph possible, the C ABI each library
+                     exports, and that the whole graph closes into the ring.
 
           @par Test Groups:
-          - @ref mde-graph-links - load-time edges and the undefined symbol
+          - @ref mde-graph-links         - load-time edges and the undefined
+                                           cycle-break symbol
+          - @ref mde-graph-symbols       - each library exports its contract
+          - @ref mde-graph-cycle_closure - the graph is a buildable DAG at load
+                                           time and the full ring at run time
 
           @par Notes:
           - A cyclic dependency cannot be linked directly. The example breaks
             the cycle by late-binding Python and C#, and by leaving cpp_weight
-            undefined in libgocore until dyld resolves it at process start.
-          - These are properties of the build, read from the libraries' Mach-O
-            metadata, so the arithmetic defect does not affect them: this group
-            passes on the as-shipped example (and skips where otool/nm are not
-            available, e.g. a Linux build container).
+            undefined in libgocore until the loader resolves it.
+          - Read with readelf -d / nm -D on ELF (the Linux container) and
+            otool -L / nm on Mach-O. These are properties of the build, so the
+            arithmetic defect does not affect them: this group passes on the
+            as-shipped example.
     -->
 
     <author mailto="maximmenshchikov@gmail.com" />
 
     <session track_conf="silent">
         <!-- @page mde-graph-prologue Graph Group Prologue
-              @objective Prepare the graph group.
+              @objective Record the binary format and tools of the graph group.
 
               @par Scenario:
-              -# No special setup is required.
+              -# Record readelf, nm, otool, strings and ldd availability (chart).
+              -# Locate the example; when it is not built, say so and succeed.
+              -# Record each ring library's format and size (chart).
         -->
         <prologue>
             <script name="prologue">
                 <objective>
-                    Prepare the graph group.
+                    Record the ring libraries' format, sizes and the tools.
 
                     @md
                 </objective>
@@ -59,17 +66,30 @@
                          symbol that must stay undefined.
 
               @par Test Parameters:
-              | Parameter | Values               | Description                 |
-              |===========|======================|=============================|
-              | relation  | rust / cpp / go-undef | Which linkage fact to check |
+              | Parameter | Values                     | Description                 |
+              |===========|============================|=============================|
+              | relation  | rust / cpp / go / go-undef | Which linkage fact to check |
 
               @par Scenario:
               -# Parse the relation parameter.
               -# Locate the example; skip when it is absent, unbuilt, or the
-                 Mach-O tools (otool/nm) are not available.
-              -# rust: otool -L librustcore references libgocore and libcscore.
-              -# cpp:  otool -L libcppcore references librustcore and libpycore.
-              -# go-undef: nm -u libgocore lists cpp_weight.
+                 binary tools are not available.
+              -# Read NEEDED, undefined and exported symbols of all five
+                 libraries (chart the counts).
+              -# Known-bad control: a librustcore without libgocore must give
+                 graph.missing-edge.
+              -# rust: librustcore needs libgocore and libcscore.
+                 cpp: libcppcore needs librustcore and libpycore.
+                 go: libgocore needs libcscore.
+                 go-undef: libgocore leaves cpp_weight undefined.
+                 Verdict "<lib> does not link <dep>" / "libgocore does not
+                 leave cpp_weight undefined (...)" (first, without stopping).
+              -# The whole edge table: graph.missing-edge,
+                 graph.unexpected-edge (high for go -> cpp: the cycle break
+                 undone); graph.cycle-break; libcppcore exports cpp_weight
+                 (graph.unresolvable); on ELF, ldd resolves every ring
+                 dependency (graph.unresolved-needed).
+              -# Gate at high.
 
               @par Expected Results:
               - All relations hold for a correctly built example, regardless of
@@ -88,7 +108,109 @@
             <arg name="relation">
                 <value>rust</value>
                 <value>cpp</value>
+                <value>go</value>
                 <value>go-undef</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-graph-symbols Graph Symbols
+              @objective Check a ring library exports exactly its C ABI.
+
+              @par Test Parameters:
+              | Parameter | Values                     | Description       |
+              |===========|============================|===================|
+              | lib       | cpp / rust / go / cs / py  | Library to check  |
+
+              @par Scenario:
+              -# Locate the example; skip when the library or the tools are
+                 missing.
+              -# Read the exports of all five libraries.
+              -# Known-bad control: a planted export list without cpp_weight
+                 and with rust_step must give graph.missing-export and
+                 graph.foreign-export.
+              -# The library must export <stage>_step and <stage>_weight
+                 (graph.missing-export), no other stage's contract symbol
+                 (graph.foreign-export); other exports are
+                 graph.unexpected-export (low).
+              -# On ELF, readelf (dynamic symbol table) must show both as global (or weak)
+                 defined functions (graph.export-mismatch).
+              -# Charts: exported and non-contract symbol counts per library.
+              -# Gate at medium.
+
+              @par Expected Results:
+              - Every library exports its contract: PASSED (runtime exports of
+                Go and .NET show up as low findings only).
+        -->
+        <run name="symbols">
+            <script name="symbols">
+                <objective>
+                    Check one ring library exports exactly its two contract
+                    symbols.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="lib">
+                <value>cpp</value>
+                <value>rust</value>
+                <value>go</value>
+                <value>cs</value>
+                <value>py</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-graph-cycle_closure Graph Cycle Closure
+              @objective Build the ring's dependency graph from its binaries
+                         and check its shape.
+
+              @par Test Parameters:
+              | Parameter | Values        | Description                          |
+              |===========|===============|======================================|
+              | view      | needed / full | Load-time edges only, or every edge  |
+
+              @par Scenario:
+              -# Locate the example; skip when a library or a tool is missing.
+              -# Edges: NEEDED; in the full view also undefined symbols
+                 resolved against the other libraries' exports, contract
+                 names found by strings (single-byte and UTF-16LE, for the
+                 C# dlsym look-ups), and the calls of python/ring_stage.py
+                 when libpycore names ring_stage.
+              -# Emit the graph as DOT: in the log, as an artifact line, and
+                 as /tmp/mde-graph-cycle_closure-<view>.dot on the agent
+                 (size and sha256 as an artifact).
+              -# needed: known-bad control (a planted go -> cpp load-time edge
+                 closing a cycle must give graph.needed-cycle); then the graph
+                 must be a DAG (graph.needed-cycle) and the README build
+                 order py, cs, go, rust, cpp a topological order of it
+                 (graph.build-order).
+              -# full: known-bad control (the ring without cs -> py must give
+                 graph.cycle-edge-missing); then the ring cycle
+                 cpp->rust->go->cs->py->cpp (graph.cycle-edge-missing), the
+                 chords (graph.chord-missing), nothing else
+                 (graph.unexpected-edge), in/out degree 2 (graph.degree).
+              -# Chart in- and out-degree per library. Gate at high.
+
+              @par Expected Results:
+              - needed: PASSED.
+              - full: PASSED with the NativeAOT C# stage. A RING_SKIP_CSHARP
+                build has a C stand-in that never calls py_step, so the ring
+                is open: "security check graph.cycle-edge-missing failed for
+                cs->py".
+        -->
+        <run name="cycle_closure">
+            <script name="cycle_closure">
+                <objective>
+                    Build the ring's dependency graph from the binaries and
+                    check it is buildable and closes into the ring.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="view">
+                <value>needed</value>
+                <value>full</value>
             </arg>
         </run>
     </session>

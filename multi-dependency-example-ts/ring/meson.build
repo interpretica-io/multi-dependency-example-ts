@@ -5,6 +5,9 @@ tests = [
     'epilogue',
     'propagation',
     'reference',
+    'sweep',
+    'determinism',
+    'entry_matrix',
 ]
 
 foreach test : tests

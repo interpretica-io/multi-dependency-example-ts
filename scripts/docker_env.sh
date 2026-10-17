@@ -83,12 +83,22 @@ if [ -n "${SSH_AUTH_SOCK:-}" ] ; then
     SSH_AGENT_ARGS="${SSH_AGENT_ARGS} -e SSH_AUTH_SOCK=${agent_sock}"
 fi
 
+# Docker Desktop (macOS) exposes its socket as root:root inside a
+# container, so the docker group of the image does not open it; the agent
+# drives sibling containers through it (tsf-container), so give the
+# container user the socket's group.
+SOCK_GROUP_ARGS=""
+if [ "$(uname -s)" == "Darwin" ] ; then
+    SOCK_GROUP_ARGS="--group-add 0"
+fi
+
 # Run docker image
 docker run --platform linux/amd64 --rm -i \
        --network host \
        --user=$(id -u):$(id -g) \
        --hostname=$(hostname)-te \
        --group-add docker \
+       ${SOCK_GROUP_ARGS} \
        ${MOUNTS} \
        ${ENV_VARS} \
        ${TE_DOCKER_WORK_DIR:+-w "${TE_DOCKER_WORK_DIR}"} \

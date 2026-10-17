@@ -11,6 +11,7 @@
 #include "te_config.h"
 
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 
 #include "logger_api.h"
@@ -211,4 +212,185 @@ tsapi_mde_exists(tsapi_mde_session *session, const char *path)
     return res.started &&
            res.status.type == TAPI_JOB_STATUS_EXITED &&
            res.status.value == 0;
+}
+
+/* See description in tsapi_mde.h */
+te_errno
+tsapi_mde_sh(tsapi_mde_session *session, int timeout_ms,
+             tsapi_mde_sh_result *res, const char *fmt, ...)
+{
+    tapi_job_t         *job = NULL;
+    tapi_job_channel_t *channels[2] = { NULL, NULL };
+    tapi_job_channel_t *filters[2] = { NULL, NULL };
+    tapi_job_buffer_t   buf = TAPI_JOB_BUFFER_INIT;
+    te_string           cmd = TE_STRING_INIT;
+    const char         *argv[4];
+    va_list             ap;
+    te_errno            rc;
+    unsigned int        i;
+
+    te_string_reset(&res->out);
+    te_string_reset(&res->err);
+    res->started = false;
+    memset(&res->status, 0, sizeof(res->status));
+
+    va_start(ap, fmt);
+    te_string_append_va(&cmd, fmt, ap);
+    va_end(ap);
+
+    argv[0] = "sh";
+    argv[1] = "-c";
+    argv[2] = cmd.ptr;
+    argv[3] = NULL;
+
+    rc = tapi_job_create(session->factory, NULL, "sh", argv, NULL, &job);
+    if (rc != 0)
+    {
+        ERROR("Cannot create a job for '%s': %r", cmd.ptr, rc);
+        goto out;
+    }
+
+    rc = tapi_job_alloc_output_channels(job, 2, channels);
+    if (rc != 0)
+        goto out;
+
+    /* No regexp: a readable filter passes everything through. */
+    rc = tapi_job_attach_filter(TAPI_JOB_CHANNEL_SET(channels[0]), "out",
+                                true, TE_LL_VERB, &filters[0]);
+    if (rc == 0)
+        rc = tapi_job_attach_filter(TAPI_JOB_CHANNEL_SET(channels[1]), "err",
+                                    true, TE_LL_VERB, &filters[1]);
+    if (rc != 0)
+        goto out;
+
+    rc = tapi_job_start(job);
+    if (rc != 0)
+        goto out;
+    res->started = true;
+
+    rc = tapi_job_wait(job, timeout_ms, &res->status);
+    if (rc != 0)
+    {
+        WARN("'%s' did not finish within %d ms: %r", cmd.ptr, timeout_ms, rc);
+        rc = 0;
+    }
+
+    for (i = 0; i < 2; i++)
+    {
+        te_string *dst = (i == 0) ? &res->out : &res->err;
+
+        while (1)
+        {
+            te_string_reset(&buf.data);
+            if (tapi_job_receive(TAPI_JOB_CHANNEL_SET(filters[i]), 1000,
+                                 &buf) != 0)
+                break;
+            if (buf.eos)
+                break;
+            te_string_append(dst, "%s", buf.data.ptr);
+        }
+    }
+
+out:
+    te_string_free(&buf.data);
+    te_string_free(&cmd);
+    if (job != NULL)
+        tapi_job_destroy(job, -1);
+
+    return rc;
+}
+
+/* See description in tsapi_mde.h */
+void
+tsapi_mde_sh_result_free(tsapi_mde_sh_result *res)
+{
+    te_string_free(&res->out);
+    te_string_free(&res->err);
+}
+
+/* See description in tsapi_mde.h */
+bool
+tsapi_mde_have(tsapi_mde_session *session, const char *program)
+{
+    tsapi_mde_sh_result res = TSAPI_MDE_SH_RESULT_INIT;
+    bool                ok;
+
+    ok = tsapi_mde_sh(session, 10000, &res, "command -v '%s'", program) == 0 &&
+         tsapi_mde_sh_ok(&res);
+    tsapi_mde_sh_result_free(&res);
+
+    return ok;
+}
+
+/* See description in tsapi_mde.h */
+const char * const tsapi_mde_dut_bins[] = {
+    "cpp-demo", "rust-demo", "gateway-rs", "service-go", "service-cs",
+};
+/* See description in tsapi_mde.h */
+const unsigned int tsapi_mde_dut_n_bins = TE_ARRAY_LEN(tsapi_mde_dut_bins);
+
+/* See description in tsapi_mde.h */
+const char * const tsapi_mde_dut_libs[] = {
+    "libpycore", "libcscore", "libgocore", "librustcore", "libcppcore",
+};
+/* See description in tsapi_mde.h */
+const unsigned int tsapi_mde_dut_n_libs = TE_ARRAY_LEN(tsapi_mde_dut_libs);
+
+/* See description in tsapi_mde.h */
+te_errno
+tsapi_mde_dut_open(tsapi_mde_session *session, tsapi_mde_dut *dut)
+{
+    const char *src = tsapi_mde_src();
+    te_string   path = TE_STRING_INIT;
+    bool        built;
+
+    memset(dut, 0, sizeof(*dut));
+    if (src == NULL)
+        return TE_RC(TE_TAPI, TE_ENOENT);
+
+    dut->root = strdup(src);
+    te_string_append(&path, "%s/dist/bin", src);
+    dut->bin = path.ptr;
+    path = (te_string)TE_STRING_INIT;
+    te_string_append(&path, "%s/dist/lib", src);
+    dut->lib = path.ptr;
+    path = (te_string)TE_STRING_INIT;
+    te_string_append(&path, "%s/python", src);
+    dut->python = path.ptr;
+    path = (te_string)TE_STRING_INIT;
+
+    /*
+     * cpp-demo is the sentinel for "built": it comes out of the same
+     * ./build.sh run as every library.
+     */
+    te_string_append(&path, "%s/cpp-demo", dut->bin);
+    built = tsapi_mde_exists(session, path.ptr);
+    te_string_free(&path);
+    if (!built)
+        return TE_RC(TE_TAPI, TE_ENOENT);
+
+    te_string_append(&path, "%s/libcppcore.dylib", dut->lib);
+    dut->dylib_ext = tsapi_mde_exists(session, path.ptr) ? "dylib" : "so";
+    te_string_free(&path);
+
+    return 0;
+}
+
+/* See description in tsapi_mde.h */
+void
+tsapi_mde_dut_lib_path(const tsapi_mde_dut *dut, const char *name,
+                       te_string *path)
+{
+    te_string_append(path, "%s/%s.%s", dut->lib, name, dut->dylib_ext);
+}
+
+/* See description in tsapi_mde.h */
+void
+tsapi_mde_dut_free(tsapi_mde_dut *dut)
+{
+    free(dut->root);
+    free(dut->bin);
+    free(dut->lib);
+    free(dut->python);
+    memset(dut, 0, sizeof(*dut));
 }

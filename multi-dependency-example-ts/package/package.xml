@@ -1,0 +1,199 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>Package tests</description>
+
+    <!-- @page mde-package Package Tests
+          @objective The tools every module drives, inventoried and ensured,
+                     and the runtime dependencies of the example mapped to
+                     the packages that provide them (tsf-package).
+
+          @par Test Groups:
+          - @ref mde-package-inventory        - tools per module set, two views
+          - @ref mde-package-ensure_rollback  - install a package, roll it back
+          - @ref mde-package-dut_runtime_deps - NEEDED/ldd of every artifact,
+                                                mapped to packages
+
+          @par Notes:
+          - Every audit plants a known-bad control next to the real subject
+            and asserts it was caught; the control's own findings are then
+            dropped so they do not fail the gate.
+          - A missing tool is an INFO finding, never a failure.
+    -->
+
+    <author mailto="maximmenshchikov@gmail.com" />
+
+    <session track_conf="silent">
+        <!-- @page mde-package-prologue Package Group Prologue
+              @objective Detect the package manager and count what it has
+                         installed.
+
+              @par Scenario:
+              -# Detect the package manager with tapi_package_ctx_init().
+              -# List the installed packages; chart their number and their
+                 split by architecture.
+              -# Never skip: the tests skip on their own.
+        -->
+        <prologue>
+            <script name="prologue">
+                <objective>
+                    Detect the package manager and count the installed
+                    packages.
+
+                    @md
+                </objective>
+            </script>
+        </prologue>
+
+        <!-- @page mde-package-epilogue Package Group Epilogue
+              @objective Finalize the package group.
+
+              @par Scenario:
+              -# No cleanup actions are required.
+        -->
+        <epilogue>
+            <script name="epilogue">
+                <objective>
+                    Finalize the package group.
+
+                    @md
+                </objective>
+            </script>
+        </epilogue>
+
+        <!-- @page mde-package-inventory Tool Inventory
+              @objective For every tool the suite's modules drive in one set,
+                         ask the package manager and the agent independently
+                         whether it is there, what owns it and which version
+                         it is, and check that the two views agree.
+
+              @par Test Parameters:
+              | Parameter    | Values                               | Description                     |
+              |==============|======================================|=================================|
+              | set          | core / network / radio / bench / ui  | Which group of tools            |
+              | min_severity | high                                 | Lowest severity that fails      |
+
+              @par Scenario:
+              -# Detect the package manager; skip without one.
+              -# For every tool: command -v (sbin added), the file's owner by
+                 dpkg -S, the tool's version banner; tapi_package_query() of
+                 the expected package and of the actual owner.
+              -# Findings: package.missing (info), package.unowned (info),
+                 package.version-disagree (low), package.view-mismatch
+                 (medium: the manager says installed but the tool is not on
+                 PATH, or dpkg -S names an owner the manager says is not
+                 installed).
+              -# Known-bad controls: a tool that does not exist must give
+                 package.missing; a planted script that no package owns must
+                 give package.unowned and its version 1.2.3 must be read.
+              -# Chart installed (1/0) and probe time per tool, and the
+                 coverage percentage; one artifact per tool with its version.
+              -# Gate on the findings.
+
+              @par Expected Results:
+              - In the suite's container every set passes; a tool absent from
+                the image is reported as INFO only.
+        -->
+        <run name="inventory">
+            <script name="inventory">
+                <objective>
+                    Inventory the tools of one module set through the package
+                    manager and through the agent, and check the views agree.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="set">
+                <value>core</value>
+                <value>network</value>
+                <value>radio</value>
+                <value>bench</value>
+                <value>ui</value>
+            </arg>
+            <arg name="min_severity">
+                <value>high</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-package-ensure_rollback Ensure and Rollback
+              @objective Install a tiny package the agent does not have with
+                         tapi_package_ensure(), check it end to end, then
+                         roll it back and check the agent is as before.
+
+              @par Scenario:
+              -# Detect the package manager; skip without one, or without
+                 root or passwordless sudo.
+              -# Pick the first of hello, cowsay, cmatrix, sl that is not
+                 installed (and whose probe does not already work); skip if
+                 all are installed.
+              -# Refresh the index (skip if it cannot - no network) and
+                 ensure the package (skip if it cannot be installed).
+              -# Check: exactly one rollback record, installed with a
+                 version, its file list contains its binary, it verifies
+                 clean, its probe prints what it should.
+              -# Ensure it again: success, still one record.
+              -# Roll back: success, no records, not installed, binary gone,
+                 probe no longer works.
+              -# Chart time per phase (update, ensure, ensure-again,
+                 rollback) and the number of owned paths.
+
+              @par Expected Results:
+              - With network access in the container: pass. Without it: skip.
+        -->
+        <run name="ensure_rollback">
+            <script name="ensure_rollback">
+                <objective>
+                    Ensure a package that is not installed, verify it, then
+                    roll back and verify it is gone.
+
+                    @md
+                </objective>
+            </script>
+        </run>
+
+        <!-- @page mde-package-dut_runtime_deps Runtime Dependencies of the Example
+              @objective List the shared libraries every binary and library
+                         of the example needs, check each one resolves, and
+                         map each to the package that owns it.
+
+              @par Test Parameters:
+              | Parameter    | Values          | Description                |
+              |==============|=================|============================|
+              | min_severity | high / critical | Lowest severity that fails |
+
+              @par Scenario:
+              -# Locate the example; skip when it is not built.
+              -# For every artifact in dist/bin and dist/lib: readelf -d
+                 NEEDED, ldd, and dpkg -S of each resolved file.
+              -# Findings: package.unresolved-dep (critical) for each "not
+                 found"; package.view-mismatch (medium) for a NEEDED entry
+                 missing from the ldd view, or an owner the package manager
+                 says is not installed; package.unowned-dep (info);
+                 package.artifact-missing (info).
+              -# Confirm every owning package with tapi_package_query().
+              -# Known-bad control: a library linked against a library that
+                 is then deleted must give package.unresolved-dep.
+              -# Chart NEEDED/resolved/packages per artifact and artifacts
+                 per package; gate on the findings.
+
+              @par Expected Results:
+              - The example built in the container resolves every dependency
+                (rpaths point at dist/lib): pass.
+        -->
+        <run name="dut_runtime_deps">
+            <script name="dut_runtime_deps">
+                <objective>
+                    Check every runtime dependency of the example resolves,
+                    and map it to its owning package.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="min_severity">
+                <value>high</value>
+                <value>critical</value>
+            </arg>
+        </run>
+    </session>
+</package>

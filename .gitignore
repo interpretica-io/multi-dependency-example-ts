@@ -9,6 +9,8 @@
 /meta_data.json
 /tmp/
 /tmp_raw_log
+# Every report scripts/reports.sh derives from a run
+/reports/
 # Agent logs: ta.list and one ta.<agent> per agent
 /ta.*
 
@@ -70,3 +72,6 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# Python
+__pycache__/
