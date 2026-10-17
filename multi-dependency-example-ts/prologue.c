@@ -2,9 +2,9 @@
  * @brief Test Suite
  *
  * Test Suite prologue: report where the example under test is, whether it
- * has been built, what it is made of and which of the tools the tsf-*
- * modules drive the agent has - so the per-group skips later in the run are
- * easy to read, and the run opens with charts of what it found.
+ * has been built, what it is made of and which of the tools the groups
+ * drive the agent has - so the per-group skips later in the run are easy to
+ * read, and the run opens with charts of what it found.
  *
  * Copyright (C) 2026 Maxim Menshikov
  *
@@ -23,13 +23,12 @@
 #include "tsapi_mde.h"
 #include "tsapi_mde_mi.h"
 
-/* The tools the groups drive, by the module that drives them. */
+/* The tools the groups drive. */
 static const char *tools[] = {
-    "python3", "curl", "readelf", "nm", "objdump", "strace", "gdb", "lsof",
-    "openssl", "clang", "gcc", "make", "docker", "qemu-system-x86_64",
-    "faketime", "mosquitto", "smbd", "smbclient", "cupsd", "ipptool", "wg",
-    "candump", "bluetoothctl", "rtl_433", "openocd", "flashrom", "node",
-    "adb", "appium", "tcpdump", "nmap",
+    "python3", "python3-config", "curl", "readelf", "nm", "objdump",
+    "strings", "ldd", "dpkg", "sha256sum", "clang", "gcc", "make",
+    "llvm-symbolizer", "docker", "node", "npx", "lsof", "ss", "tcpdump",
+    "frida",
 };
 
 /* Size of a file on the agent in bytes, or -1. */
@@ -68,8 +67,8 @@ main(int argc, char **argv)
     tsapi_evo_analysis_hint(
         "multi-dependency-example suite. Drives the built example's demos and "
         "HTTP services as programs on the agent, checks that a value still "
-        "propagates through every stage of each dependency cycle, and runs "
-        "every tsf-* module of the catalog against it.");
+        "propagates through every stage of each dependency cycle, and audits "
+        "how it is built, linked, laid out and exposed.");
 
     TEST_STEP("Open a session on the agent");
     CHECK_RC(tsapi_mde_session_init(&session, "prologue"));

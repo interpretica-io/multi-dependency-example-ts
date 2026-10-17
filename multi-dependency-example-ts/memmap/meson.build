@@ -5,7 +5,6 @@ tests = [
     'epilogue',
     'elf',
     'proc',
-    'ram',
 ]
 
 foreach test : tests

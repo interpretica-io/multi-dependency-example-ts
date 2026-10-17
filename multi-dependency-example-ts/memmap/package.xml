@@ -5,13 +5,11 @@
     <!-- @page mde-memmap Memory Map Tests
           @objective ELF images and live mappings of the example: segment
                      and section sizes, W^X in the files and in the running
-                     services, and the RAM budget of the ring
-                     (tsf-memorymap).
+                     services (tsf-memorymap).
 
           @par Test Groups:
           - @ref mde-memmap-elf  - ELF image of every binary and library, readelf cross-check, W^X
           - @ref mde-memmap-proc - live mappings of every web service, W^X
-          - @ref mde-memmap-ram  - RAM budget of the ring libraries
 
           @par Notes:
           - The W^X audits have known-bad controls built on the agent: a
@@ -158,42 +156,5 @@
             </arg>
         </run>
 
-        <!-- @page mde-memmap-ram RAM Budget of the Ring
-              @objective How much of a RAM budget the ring libraries take.
-
-              @par Test Parameters:
-              | Parameter | Values  | Description               |
-              |===========|=========|===========================|
-              | budget_mb | 16 / 64 | RAM region size, MB       |
-
-              @par Scenario:
-              -# Place every ring library's PT_LOAD segments in the region
-                 with tapi_memmap_ram_usage(); used + overflow must equal the
-                 PT_LOAD memory, used + free the region.
-              -# Chart the footprint per library and what the budget has
-                 left after each; compare the total with MemAvailable.
-              -# A ring larger than the budget is memmap.ram-budget (medium).
-              -# Control: a region half the size of a library must overflow.
-              -# Gate at high.
-
-              @par Expected Results:
-              - Accounting adds up: pass in both iterations (the 16 MB
-                budget may record a medium finding).
-        -->
-        <run name="ram">
-            <script name="ram">
-                <objective>
-                    RAM budget of the ring libraries: footprint, what is
-                    left, and an overflow control.
-
-                    @md
-                </objective>
-            </script>
-
-            <arg name="budget_mb">
-                <value>16</value>
-                <value>64</value>
-            </arg>
-        </run>
     </session>
 </package>

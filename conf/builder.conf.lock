@@ -1,35 +1,13 @@
 # External repositories pinned by the Test Environment Builder.
 # Commit this file: it makes the build reproducible.
 # Run dispatcher.sh --update-external to move the records on.
-tsf_802154 https://github.com/interpretica-io/tsf-802154.git main c592cd89f6b8c7b9d53d34630d409fcfd12d67c8
-tsf_ai https://github.com/interpretica-io/tsf-ai.git main d586a773ba80d29e04207776eb4b5a58ed4d0434
-tsf_android https://github.com/interpretica-io/tsf-android.git main b0e23a012307b05b053dde3bff8a1925cc37d8b8
-tsf_appium https://github.com/interpretica-io/tsf-appium.git main f95b7ebbcddb001f0e7a86845313d59c9a941f7c
-tsf_apple https://github.com/interpretica-io/tsf-apple.git main 18efc6c9e69f2ababfe9146005f9912d95f4d9ab
-tsf_bluetooth https://github.com/interpretica-io/tsf-bluetooth.git main 7d5488df13f0cd3eae77ec7040be3a15dbb63f8a
-tsf_can https://github.com/interpretica-io/tsf-can.git main 350bd684223f0f4f8c05cc52ef134682dcff5918
 tsf_container https://github.com/interpretica-io/tsf-container.git main ba9b57f771588b54f0ea75929d7957cf66fa3843
-tsf_cwmp https://github.com/interpretica-io/tsf-cwmp.git main 8d1947be92bb9a320ee5abd8045b1cb5a61e07ad
 tsf_cybersec https://github.com/interpretica-io/tsf-cybersec.git main 629b2a167ab4fbbc3fe904a1ac2f84ba430191ef
 tsf_devtool https://github.com/interpretica-io/tsf-devtool.git main 86ff5255c5c8934fd527f1cd5931374bde055e56
-tsf_dummy https://github.com/interpretica-io/tsf-dummy.git main 7e9f0928352679774559d28495d53d170854a813
-tsf_emu https://github.com/interpretica-io/tsf-emu.git main 0eebd55ed2877c734c3f58d277e24a5d98f392ab
-tsf_flash https://github.com/interpretica-io/tsf-flash.git main f03862d6fa528372db3896c1a28e90cf3575669d
 tsf_fs https://github.com/interpretica-io/tsf-fs.git main 7e96e8c401c04423870379dfac76fb31f793cb39
-tsf_fuzz https://github.com/interpretica-io/tsf-fuzz.git main 0c25914feea9561218d3db3f593048d9af7db40a
+tsf_fuzz https://github.com/interpretica-io/tsf-fuzz.git main 79bc5732eaa0e5353f145d394f596187155cb502
 tsf_http https://github.com/interpretica-io/tsf-http.git main b932c72817e51cfa34e87646963a34b53400726a
-tsf_jtag https://github.com/interpretica-io/tsf-jtag.git main bf3c9ee4f7aee8b27228f73ac95b55a0e9ae56f5
-tsf_kernel https://github.com/interpretica-io/tsf-kernel.git main 8f269ee31e145b7144b7cf2aed9e75bcb4524748
-tsf_lorawan https://github.com/interpretica-io/tsf-lorawan.git main 631cd0decaa1414d6d668fad7f5231f7027a3249
+tsf_kernel https://github.com/interpretica-io/tsf-kernel.git main df370248e8d69808f4076ccc30f2f2b171d0be3f
 tsf_memorymap https://github.com/interpretica-io/tsf-memorymap.git main ca4204d0186cac343ff283434697d142f5b2ab03
-tsf_mqtt https://github.com/interpretica-io/tsf-mqtt.git main 500b5639883e524c8db2547bbce05d77bb1d1e9f
 tsf_package https://github.com/interpretica-io/tsf-package.git main 2a5b22b4e740033a5ad6ae0417b86b1b90545f40
 tsf_playwright https://github.com/interpretica-io/tsf-playwright.git main 0ddfc6b69a8e12d7786dac317f93d9c23fedfb88
-tsf_power https://github.com/interpretica-io/tsf-power.git main fa67d722ec1ed208cf4636cc6d31b7de0451d44d
-tsf_printing https://github.com/interpretica-io/tsf-printing.git main 22a496c4adbd5bfd1ea6c1935e05e1e370ab2305
-tsf_sdr https://github.com/interpretica-io/tsf-sdr.git main 0f936a48ead268444556e4a718d28ad7cd998314
-tsf_smb https://github.com/interpretica-io/tsf-smb.git main ceea40e16202a539525f3111b30adab07910fdef
-tsf_time https://github.com/interpretica-io/tsf-time.git main 35d669954631fd26b522e4ded9143f4b60ec5da8
-tsf_tls https://github.com/interpretica-io/tsf-tls.git main cc34f56ce8fa2f0f894f53e974ba83b4d3ce530c
-tsf_tunnel https://github.com/interpretica-io/tsf-tunnel.git main 69da79c14ce087924226d928f3f0461a618eff4e
-tsf_wifi https://github.com/interpretica-io/tsf-wifi.git main 0687a610a15a9583491e756f683e4e8d11b2169e

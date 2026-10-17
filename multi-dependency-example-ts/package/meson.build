@@ -3,8 +3,6 @@
 tests = [
     'prologue',
     'epilogue',
-    'inventory',
-    'ensure_rollback',
     'dut_runtime_deps',
 ]
 

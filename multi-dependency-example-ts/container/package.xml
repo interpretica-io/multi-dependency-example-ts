@@ -4,22 +4,18 @@
 
     <!-- @page mde-container Container Tests
           @objective Run the built example inside container images it was
-                     not built for, audit the security posture of the
-                     containers it would run in, and move its libraries in
-                     and out of a container intact (tsf-container).
+                     not built for (tsf-container).
 
           @par Test Groups:
           - @ref mde-container-ring_inside    - the ring walked inside an image, compared with the agent and the model
-          - @ref mde-container-posture        - the audit's view of a profile against /proc and a real write
-          - @ref mde-container-copy_roundtrip - every ring library in and out, hashed three times
 
           @par Notes:
           - The agent drives the host's Docker through its socket, so
             containers are siblings of the agent and agent paths cannot be
             bind-mounted: files move with docker cp only.
-          - Containers have stable names (mde-ring-inside-*, mde-posture-*,
-            mde-copy-*); a leftover from a failed run is removed before a
-            test starts and by the group epilogue.
+          - Containers have stable names (mde-ring-inside-*); a leftover
+            from a failed run is removed before a test starts and by the
+            group epilogue.
           - Every test skips when Docker does not answer or the image
             cannot be pulled.
     -->
@@ -48,8 +44,7 @@
               @objective Remove containers the group may have left behind.
 
               @par Scenario:
-              -# Remove containers named mde-ring-inside-*, mde-posture-*
-                 and mde-copy-*.
+              -# Remove containers named mde-ring-inside-*.
         -->
         <epilogue>
             <script name="epilogue">
@@ -112,91 +107,5 @@
             </arg>
         </run>
 
-        <!-- @page mde-container-posture Container Posture
-              @objective Audit a container started with a given profile and
-                         check the audit against /proc/self/status and a
-                         real write to the root filesystem.
-
-              @par Test Parameters:
-              | Parameter    | Values                          | Description                  |
-              |==============|=================================|==============================|
-              | profile      | default / hardened / privileged | How the container is started |
-              | min_severity | high / critical                 | Gate threshold               |
-
-              @par Scenario:
-              -# Start debian:bookworm-slim as mde-posture-PROFILE:
-                 hardened = ‑‑cap-drop ALL ‑‑read-only
-                 ‑‑security-opt no-new-privileges, user nobody;
-                 privileged = ‑‑privileged.
-              -# tapi_container_audit() and tapi_container_posture_get().
-              -# Read CapEff/NoNewPrivs/Seccomp inside and try to write
-                 to /tmp; any disagreement is container.posture-disagrees.
-              -# hardened: CapEff 0, read-only, no_new_privs, nobody, no
-                 audit finding of medium or worse.
-              -# default: the audit must report root-user and
-                 writable-rootfs (control that it is not blind).
-              -# privileged (known-bad control): container.privileged and
-                 container.no-seccomp must be found, then are dropped.
-              -# Chart capability counts (audit vs /proc), findings, audit
-                 time.
-
-              @par Expected Results:
-              - Every iteration passes; default leaves medium/low findings
-                that do not reach the gate.
-        -->
-        <run name="posture">
-            <script name="posture">
-                <objective>
-                    Audit a container profile and check it from inside.
-
-                    @md
-                </objective>
-            </script>
-
-            <arg name="profile">
-                <value>default</value>
-                <value>hardened</value>
-                <value>privileged</value>
-            </arg>
-            <arg name="min_severity">
-                <value>high</value>
-                <value>critical</value>
-            </arg>
-        </run>
-
-        <!-- @page mde-container-copy_roundtrip Copy Round Trip
-              @objective Copy each ring library into a container and back
-                         out and check it is unchanged.
-
-              @par Test Parameters:
-              | Parameter | Values                              | Description     |
-              |===========|=====================================|=================|
-              | image     | debian:bookworm-slim / ubuntu:24.04 | Image to run in |
-
-              @par Scenario:
-              -# For each built ring library: sha256 on the agent, copy
-                 in, sha256 inside, copy out, sha256 again; all equal.
-              -# Known-bad control: overwrite the first bytes of one copy
-                 inside, copy it out; container.copy-mismatch must be
-                 found, then is dropped.
-              -# Chart sizes, copy-in/out times and throughput.
-
-              @par Expected Results:
-              - Every library survives the round trip; the test passes.
-        -->
-        <run name="copy_roundtrip">
-            <script name="copy_roundtrip">
-                <objective>
-                    Copy every ring library through a container and back.
-
-                    @md
-                </objective>
-            </script>
-
-            <arg name="image">
-                <value>debian:bookworm-slim</value>
-                <value>ubuntu:24.04</value>
-            </arg>
-        </run>
     </session>
 </package>

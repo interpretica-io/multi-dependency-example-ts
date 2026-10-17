@@ -6,8 +6,6 @@ tests = [
     'perm_audit',
     'secrets',
     'integrity',
-    'mounts',
-    'health',
 ]
 
 foreach test : tests

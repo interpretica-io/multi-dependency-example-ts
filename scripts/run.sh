@@ -67,7 +67,7 @@ if [ "$is_docker" == "1" ] ; then
     export GIT_CONFIG_COUNT=1
     export GIT_CONFIG_KEY_0="safe.directory"
     export GIT_CONFIG_VALUE_0="*"
-    export TE_DOCKER_ENV="TE_BASE:TS_TOPDIR:TE_TS_MDE_SRC:GIT_CONFIG_COUNT:GIT_CONFIG_KEY_0:GIT_CONFIG_VALUE_0:TSF_AI_KEY:TSF_AI_PROVIDER:TSF_AI_MODEL:TE_TS_MDE_BUILD"
+    export TE_DOCKER_ENV="TE_BASE:TS_TOPDIR:TE_TS_MDE_SRC:GIT_CONFIG_COUNT:GIT_CONFIG_KEY_0:GIT_CONFIG_VALUE_0:TE_TS_MDE_BUILD"
     ${TS_TOPDIR}/scripts/docker_env.sh ${TS_TOPDIR}/scripts/run.sh $@
     exit $?
 fi

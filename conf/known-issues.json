@@ -30,11 +30,6 @@
   "note": "DUT: the same web-tier defect seen through Chromium."
  },
  {
-  "test": "mqtt/ring_bus",
-  "verdict": "ring\\.depth",
-  "note": "DUT: the ring trace carried over MQTT round-trips exactly, and shows the 1-stage walk."
- },
- {
   "test": "http/headers",
   "verdict": "http\\.walk-depth|http\\.no-csp",
   "note": "DUT: the walk depth defect seen in the HTTP body; the toy services also send no security headers."
@@ -78,36 +73,6 @@
   "test": "memmap/proc",
   "verdict": "memmap\\.wx-mapping",
   "note": "Environment: the amd64 container runs under Rosetta on Apple silicon; the translator's code cache is mapped W+X in every process. Re-check on native amd64."
- },
- {
-  "test": "net/vpn_tree",
-  "verdict": "/agent/vpn subtree is not registered",
-  "note": "tsf-tunnel: ta_vpn links a static tapi_cfg_vpn, which is built shared only (build_lib_static = false), so the agent half cannot be linked into any agent."
- },
- {
-  "test": "net/ipsec_builder",
-  "verdict": "/agent/vpn subtree is not registered",
-  "note": "tsf-tunnel: see net/vpn_tree."
- },
- {
-  "test": "net/wg_tunnel",
-  "verdict": "/agent/vpn subtree is not registered",
-  "note": "tsf-tunnel: see net/vpn_tree."
- },
- {
-  "test": "iot/frames_802154",
-  "verdict": "MIC|accepted a frame|header",
-  "note": "tsf-802154: at MIC-only security levels tapi_802154_unsecure() never verifies the tag (no EVP_CipherFinal_ex), and tapi_802154_secure() restarts the MAC between header and payload, so the header is not authenticated."
- },
- {
-  "test": "iot/sdr",
-  "verdict": "capture that does not exist|rtl_433",
-  "note": "tsf-sdr: rtl_433 22.11 exits 0 after failing to open a file; tapi_sdr_decode() checks the exit status only, so a missing capture reads as an empty one."
- },
- {
-  "test": "kernel/modules",
-  "verdict": "tapi_kmod_list cannot parse",
-  "note": "tsf-kernel: /proc/modules prints '-' as the use count of modules that cannot be unloaded; the parser wants a number and fails the whole list."
  },
  {
   "test": "container/ring_inside",

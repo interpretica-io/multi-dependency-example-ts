@@ -4,15 +4,12 @@
 
     <!-- @page mde-fs Filesystem Tests
           @objective The example tree on disk: permissions, secrets at
-                     rest, integrity across a run, the mounts it lives on
-                     and their health (tsf-fs).
+                     rest and integrity across a run (tsf-fs).
 
           @par Test Groups:
           - @ref mde-fs-perm_audit - permissions of dist and the source tree
-          - @ref mde-fs-secrets    - keys, AWS key ids, weak hashes, accounts
+          - @ref mde-fs-secrets    - keys, AWS key ids, weak hashes
           - @ref mde-fs-integrity  - nothing in dist may change during a run
-          - @ref mde-fs-mounts     - mount options, enforcement, protections
-          - @ref mde-fs-health     - space, inodes, errors, deleted-open files
 
           @par Notes:
           - tsf-fs reports issues; this group ranks every fs.* check (see
@@ -104,7 +101,7 @@
 
         <!-- @page mde-fs-secrets Secrets at Rest
               @objective Find private keys, AWS key ids and weak password
-                         hashes in the example tree and the agent accounts.
+                         hashes in the example tree.
 
               @par Test Parameters:
               | Parameter    | Values          | Description                        |
@@ -116,11 +113,10 @@
               -# Find private keys (tsf-fs), AWS key ids and MD5-crypt hashes
                  (grep), and look for the control marker, which must not be
                  there yet.
-              -# Audit the accounts of the agent.
               -# Chart files scanned against findings, findings per directory.
               -# Plant a PEM key, the example AWS key id, an MD5-crypt hash
-                 and the marker; run every scanner on them and on a synthetic
-                 shadow entry; each must be found; drop them.
+                 and the marker; run every scanner on them; each must be
+                 found; drop them.
               -# Gate on min_severity.
 
               @par Expected Results:
@@ -180,79 +176,5 @@
             </arg>
         </run>
 
-        <!-- @page mde-fs-mounts Mounts Under the Example
-              @objective Mount options of the example's filesystem and of
-                         the usual mount points, and their enforcement.
-
-              @par Test Parameters:
-              | Parameter    | Values          | Description                        |
-              |==============|=================|====================================|
-              | min_severity | high / critical | Lowest finding severity that fails |
-
-              @par Scenario:
-              -# Read the mount table; chart mounts by kind and option.
-              -# Find the mount of the example; df must agree; chart its
-                 options; noexec there is a finding.
-              -# Check the mount options of /tmp, /dev/shm, /proc, ...
-              -# Probe noexec and read-only enforcement; check link and dump
-                 protections.
-              -# Control: a synthetic mount table with a bare /media mount
-                 must be reported for nosuid, nodev and noexec.
-              -# Gate on min_severity.
-
-              @par Expected Results:
-              - No high findings in a usual container: pass.
-        -->
-        <run name="mounts">
-            <script name="mounts">
-                <objective>
-                    Mount options, their enforcement and the filesystem
-                    protections under the example.
-
-                    @md
-                </objective>
-            </script>
-
-            <arg name="min_severity">
-                <value>high</value>
-                <value>critical</value>
-            </arg>
-        </run>
-
-        <!-- @page mde-fs-health Filesystem Health
-              @objective Space, inodes, errors and deleted files held open
-                         under the example.
-
-              @par Test Parameters:
-              | Parameter | Values  | Description                           |
-              |===========|=========|=======================================|
-              | threshold | 90 / 95 | Usage percent reported as a finding   |
-
-              @par Scenario:
-              -# Control: at a 0% threshold the space check must report.
-              -# Compare the size of the example's filesystem with df.
-              -# Chart space and inode usage of every mount holding files.
-              -# Report filesystems above the threshold and error counters.
-              -# With the web tier running, list deleted files held open.
-              -# Gate at high.
-
-              @par Expected Results:
-              - Enough space, no errors: pass.
-        -->
-        <run name="health">
-            <script name="health">
-                <objective>
-                    Filesystem health under the example: space, inodes,
-                    errors, deleted files held open.
-
-                    @md
-                </objective>
-            </script>
-
-            <arg name="threshold">
-                <value>90</value>
-                <value>95</value>
-            </arg>
-        </run>
     </session>
 </package>

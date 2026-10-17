@@ -30,8 +30,7 @@ main(int argc, char **argv)
         session_up = true;
         (void)tsapi_mde_sh(&session, MDE_CT_TIMEOUT_MS, &sh,
                            "docker ps -aq --filter name=mde-ring-inside- "
-                           "--filter name=mde-posture- "
-                           "--filter name=mde-copy- 2>/dev/null | "
+                           "2>/dev/null | "
                            "xargs -r docker rm -f >/dev/null 2>&1; "
                            "rm -rf /tmp/mde-container-rt; true");
     }

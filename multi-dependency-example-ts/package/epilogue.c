@@ -19,10 +19,7 @@ main(int argc, char **argv)
     TEST_START;
 
     TEST_STEP("Finalize the package group");
-    /*
-     * Nothing to undo: ensure_rollback rolls back its own install, and the
-     * other tests only ask questions.
-     */
+    /* Nothing to undo: the tests only ask questions. */
 
     TEST_SUCCESS;
 

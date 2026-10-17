@@ -10,30 +10,16 @@
           - @ref mde-ring - the native FFI ring (C++/Rust/Go/C#/Python), checked step by step against a model
           - @ref mde-web - the HTTP web tier (gateway-rs/service-go/service-cs)
           - @ref mde-graph - the build-time linkage that makes the cycle possible
-          - @ref mde-package - the tools every module drives, inventoried and ensured (tsf-package)
+          - @ref mde-package - runtime dependencies of the example mapped to packages (tsf-package)
           - @ref mde-devtool - rebuilding parts of the example on the agent (tsf-devtool)
-          - @ref mde-kernel - the agent kernel under the example: posture, log windows, resources (tsf-kernel)
           - @ref mde-fs - the example tree on disk: permissions, secrets, integrity (tsf-fs)
           - @ref mde-memmap - ELF images and live mappings of the example (tsf-memorymap)
           - @ref mde-binary - how every binary of the example was built (tsf-cybersec)
           - @ref mde-exposure - what the running web tier listens on and talks to (tsf-cybersec)
           - @ref mde-http - each service of the web tier as an HTTP server (tsf-http)
-          - @ref mde-tls - TLS in front of the web tier, certificates and clients (tsf-tls)
-          - @ref mde-time - the example under a clock that is not the machine's (tsf-time)
-          - @ref mde-mqtt - ring results over a broker on the agent (tsf-mqtt)
-          - @ref mde-smb - the built example served and read back over SMB (tsf-smb)
-          - @ref mde-printing - ring traces through the print system (tsf-printing)
-          - @ref mde-cwmp - ring results carried in TR-069 messages (tsf-cwmp)
           - @ref mde-container - the example inside a container (tsf-container)
-          - @ref mde-emu - a QEMU machine as the place to break things (tsf-emu)
           - @ref mde-fuzz - the ring's C ABI under a fuzzer (tsf-fuzz)
-          - @ref mde-iot - ring values in radio and field-bus frames (tsf-802154, tsf-lorawan, tsf-sdr, tsf-can, tsf-bluetooth)
-          - @ref mde-net - tunnels and Wi-Fi through Configurator (tsf-tunnel, tsf-wifi)
-          - @ref mde-bench - JTAG, flashing and power on an emulated bench (tsf-jtag, tsf-flash, tsf-power)
           - @ref mde-browser - the web tier in a real browser (tsf-playwright)
-          - @ref mde-mobile - device control stacks (tsf-android, tsf-apple, tsf-appium)
-          - @ref mde-ai - an AI model as a second opinion on the evidence (tsf-ai)
-          - @ref mde-dummy - the TE_EXT_REPO machinery itself (tsf-dummy)
 
           @par Notes:
           - The suite drives an already-built example located by TE_TS_MDE_SRC.
@@ -104,7 +90,7 @@
         </run>
 
         <!-- @page mde-package Package Tests
-              @objective The tools every module drives, inventoried and ensured (tsf-package).
+              @objective Runtime dependencies of the example mapped to packages (tsf-package).
         -->
         <run>
             <package name="package" />
@@ -117,12 +103,6 @@
             <package name="devtool" />
         </run>
 
-        <!-- @page mde-kernel Kernel Tests
-              @objective The agent kernel under the example: posture, log windows, resources (tsf-kernel).
-        -->
-        <run>
-            <package name="kernel" />
-        </run>
 
         <!-- @page mde-fs Filesystem Tests
               @objective The example tree on disk: permissions, secrets, integrity (tsf-fs).
@@ -159,47 +139,11 @@
             <package name="http" />
         </run>
 
-        <!-- @page mde-tls TLS Tests
-              @objective TLS in front of the web tier, certificates and clients (tsf-tls).
-        -->
-        <run>
-            <package name="tls" />
-        </run>
 
-        <!-- @page mde-time Time Tests
-              @objective The example under a clock that is not the machine's (tsf-time).
-        -->
-        <run>
-            <package name="time" />
-        </run>
 
-        <!-- @page mde-mqtt MQTT Tests
-              @objective Ring results over a broker on the agent (tsf-mqtt).
-        -->
-        <run>
-            <package name="mqtt" />
-        </run>
 
-        <!-- @page mde-smb SMB Tests
-              @objective The built example served and read back over SMB (tsf-smb).
-        -->
-        <run>
-            <package name="smb" />
-        </run>
 
-        <!-- @page mde-printing Printing Tests
-              @objective Ring traces through the print system (tsf-printing).
-        -->
-        <run>
-            <package name="printing" />
-        </run>
 
-        <!-- @page mde-cwmp CWMP Tests
-              @objective Ring results carried in TR-069 messages (tsf-cwmp).
-        -->
-        <run>
-            <package name="cwmp" />
-        </run>
 
         <!-- @page mde-container Container Tests
               @objective The example inside a container (tsf-container).
@@ -208,12 +152,6 @@
             <package name="container" />
         </run>
 
-        <!-- @page mde-emu Emulator Tests
-              @objective A QEMU machine as the place to break things (tsf-emu).
-        -->
-        <run>
-            <package name="emu" />
-        </run>
 
         <!-- @page mde-fuzz Fuzzing Tests
               @objective The ring's C ABI under a fuzzer (tsf-fuzz).
@@ -222,26 +160,8 @@
             <package name="fuzz" />
         </run>
 
-        <!-- @page mde-iot IoT Tests
-              @objective Ring values in radio and field-bus frames (tsf-802154, tsf-lorawan, tsf-sdr, tsf-can, tsf-bluetooth).
-        -->
-        <run>
-            <package name="iot" />
-        </run>
 
-        <!-- @page mde-net Network Configuration Tests
-              @objective Tunnels and Wi-Fi through Configurator (tsf-tunnel, tsf-wifi).
-        -->
-        <run>
-            <package name="net" />
-        </run>
 
-        <!-- @page mde-bench Bench Tests
-              @objective JTAG, flashing and power on an emulated bench (tsf-jtag, tsf-flash, tsf-power).
-        -->
-        <run>
-            <package name="bench" />
-        </run>
 
         <!-- @page mde-browser Browser Tests
               @objective The web tier in a real browser (tsf-playwright).
@@ -250,25 +170,7 @@
             <package name="browser" />
         </run>
 
-        <!-- @page mde-mobile Mobile Tests
-              @objective Device control stacks (tsf-android, tsf-apple, tsf-appium).
-        -->
-        <run>
-            <package name="mobile" />
-        </run>
 
-        <!-- @page mde-ai AI Grader Tests
-              @objective An AI model as a second opinion on the evidence (tsf-ai).
-        -->
-        <run>
-            <package name="ai" />
-        </run>
 
-        <!-- @page mde-dummy Dummy Tests
-              @objective The TE_EXT_REPO machinery itself (tsf-dummy).
-        -->
-        <run>
-            <package name="dummy" />
-        </run>
     </session>
 </package>

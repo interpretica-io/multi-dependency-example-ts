@@ -4,7 +4,7 @@
  * @brief One report per test, filled by every module the test uses
  *
  * Audits from tsf-cybersec and everything built on it append findings to
- * a tapi_cybersec_report; tsf-fs, tsf-flash and tsf-kernel append to a
+ * a tapi_cybersec_report; tsf-fs and tsf-memorymap append to a
  * tapi_kernel_issues list. A test of this suite keeps both in one
  * #tsapi_mde_report and decides once, at the end, what fails it - by a
  * severity threshold that is a package.xml parameter, so the same test
@@ -40,7 +40,7 @@ extern "C" {
 typedef struct tsapi_mde_report {
     /** Findings of tsf-cybersec and the modules built on it. */
     tapi_cybersec_report cyber;
-    /** Issues of tsf-fs, tsf-flash and tsf-kernel. */
+    /** Issues of tsf-fs and tsf-memorymap. */
     tapi_kernel_issues   issues;
     /** Controls that did not find what was planted. */
     te_string            broken_controls;

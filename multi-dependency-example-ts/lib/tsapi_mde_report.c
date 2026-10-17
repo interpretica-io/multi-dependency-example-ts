@@ -17,6 +17,7 @@
 #include "logger_api.h"
 #include "te_str.h"
 #include "tapi_test_log.h"
+#include "tsapi_mde.h"
 #include "tsapi_mde_mi.h"
 #include "tsapi_mde_report.h"
 
@@ -159,6 +160,48 @@ tsapi_mde_report_drop_subject(tsapi_mde_report *report, const char *subject)
     }
 }
 
+/*
+ * Make a subject under the example relative to its root. A verdict names
+ * the subject, and TRC matches verdicts as text: an absolute path would
+ * tie the expected results to the directory the example was built in.
+ */
+static void
+subject_relative(char **subject, const char *root, size_t root_len)
+{
+    char *rel;
+
+    if (*subject == NULL || strncmp(*subject, root, root_len) != 0 ||
+        (*subject)[root_len] != '/')
+        return;
+
+    rel = strdup(*subject + root_len + 1);
+    if (rel == NULL)
+        return;
+    free(*subject);
+    *subject = rel;
+}
+
+/* Every subject of the report that lies under the example, made relative. */
+static void
+report_relative(tsapi_mde_report *report)
+{
+    const char            *root = tsapi_mde_src();
+    size_t                 root_len;
+    tapi_cybersec_finding *f;
+    tapi_kernel_issue     *k;
+
+    if (root == NULL)
+        return;
+    root_len = strlen(root);
+    while (root_len > 1 && root[root_len - 1] == '/')
+        root_len--;
+
+    TE_VEC_FOREACH(&report->cyber.findings, f)
+        subject_relative(&f->subject, root, root_len);
+    TE_VEC_FOREACH(&report->issues.items, k)
+        subject_relative(&k->subject, root, root_len);
+}
+
 /* Chart: findings per severity, plus kernel issues as their own point. */
 static void
 chart_severity(const tsapi_mde_report *report, const char *tool)
@@ -260,6 +303,7 @@ tsapi_mde_report_finish(tsapi_mde_report *report, const char *tool,
     const tapi_kernel_issue     *k;
     bool                         fail = false;
 
+    report_relative(report);
     tapi_cybersec_report_log(&report->cyber);
     tapi_kernel_issues_log(&report->issues);
 

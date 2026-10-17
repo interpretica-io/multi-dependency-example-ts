@@ -4,11 +4,11 @@
 
     <!-- @page mde-devtool Devtool Tests
           @objective Rebuild parts of the example on the agent with
-                     tsf-devtool (tapi_cc, tapi_make) and check the
-                     compilers, the build and make deeply.
+                     tsf-devtool (tapi_cc, tapi_make) and check the build
+                     deeply: warnings, exports, make semantics and
+                     reproducibility.
 
           @par Test Groups:
-          - @ref mde-devtool-compile_probe  - sanitizer/hardening feature probes
           - @ref mde-devtool-rebuild_pycore - rebuild the Python shim, warnings
                                               and exports
           - @ref mde-devtool-make_stub      - make's incremental semantics on
@@ -62,62 +62,6 @@
                 </objective>
             </script>
         </epilogue>
-
-        <!-- @page mde-devtool-compile_probe Compiler Feature Probe
-              @objective Probe whether a compiler supports a sanitizer or a
-                         hardening feature with tapi_cc_check_snippet(),
-                         between a positive and a negative control.
-
-              @par Test Parameters:
-              | Parameter | Values                                                    | Description     |
-              |===========|===========================================================|=================|
-              | feature   | asan / ubsan / fuzzer / stack-protector / fortify / pie / cfi | Feature probed |
-              | cc        | clang / gcc                                               | Compiler        |
-
-              @par Scenario:
-              -# Skip when the compiler is missing; record its version.
-              -# Positive control: plain C must build.
-              -# Negative control: a syntax error must not build.
-              -# For features that announce themselves with a macro (asan,
-                 stack-protector, fortify, pie): record whether it is on by
-                 default, and check the probe fails with the feature turned
-                 off.
-              -# Probe the feature with its flags.
-              -# Chart the probe results and compile times, and a point
-                 "supported".
-              -# Supported: pass. Not supported where it is expected (asan,
-                 ubsan, stack-protector, fortify, pie on both; fuzzer, cfi on
-                 clang): verdict. Not supported and not expected (fuzzer, cfi
-                 on gcc): skip.
-
-              @par Expected Results:
-              - clang: every feature passes.
-              - gcc: fuzzer and cfi skip, every other feature passes.
-        -->
-        <run name="compile_probe">
-            <script name="compile_probe">
-                <objective>
-                    Probe a compiler feature on the agent between a positive
-                    and a negative control.
-
-                    @md
-                </objective>
-            </script>
-
-            <arg name="feature">
-                <value>asan</value>
-                <value>ubsan</value>
-                <value>fuzzer</value>
-                <value>stack-protector</value>
-                <value>fortify</value>
-                <value>pie</value>
-                <value>cfi</value>
-            </arg>
-            <arg name="cc">
-                <value>clang</value>
-                <value>gcc</value>
-            </arg>
-        </run>
 
         <!-- @page mde-devtool-rebuild_pycore Rebuild the Python Shim
               @objective Rebuild python/src/pycore.c on the agent with

@@ -24,32 +24,10 @@ test_deps = [
 # and tapi_devtool (or on TE alone).
 te_libs = [
     'tapi_playwright',
-    'tapi_ai',
-    'tapi_android',
-    'tapi_apple',
-    'tapi_appium',
-    'tapi_dummy',
-    'tapi_cfg_vpn',
-    'tapi_cfg_wifi',
-    'tapi_power',
-    'tapi_flash',
-    'tapi_jtag',
-    'tapi_can',
-    'tapi_sdr',
-    'tapi_lorawan',
-    'tapi_802154',
-    'tapi_bt',
-    'tapi_cwmp',
-    'tapi_print',
-    'tapi_smb',
-    'tapi_mqtt',
     'tapi_http',
-    'tapi_tls',
     'tapi_fuzz',
     'tapi_memmap',
     'tapi_fs',
-    'tapi_time',
-    'tapi_emu',
     'tapi_container',
     'tapi_package',
     'tapi_cybersec',
@@ -130,10 +108,6 @@ package_dir = join_paths(mydir, 'devtool')
 package_tests_c = []
 subdir('devtool')
 
-package_dir = join_paths(mydir, 'kernel')
-package_tests_c = []
-subdir('kernel')
-
 package_dir = join_paths(mydir, 'fs')
 package_tests_c = []
 subdir('fs')
@@ -154,66 +128,14 @@ package_dir = join_paths(mydir, 'http')
 package_tests_c = []
 subdir('http')
 
-package_dir = join_paths(mydir, 'tls')
-package_tests_c = []
-subdir('tls')
-
-package_dir = join_paths(mydir, 'time')
-package_tests_c = []
-subdir('time')
-
-package_dir = join_paths(mydir, 'mqtt')
-package_tests_c = []
-subdir('mqtt')
-
-package_dir = join_paths(mydir, 'smb')
-package_tests_c = []
-subdir('smb')
-
-package_dir = join_paths(mydir, 'printing')
-package_tests_c = []
-subdir('printing')
-
-package_dir = join_paths(mydir, 'cwmp')
-package_tests_c = []
-subdir('cwmp')
-
 package_dir = join_paths(mydir, 'container')
 package_tests_c = []
 subdir('container')
-
-package_dir = join_paths(mydir, 'emu')
-package_tests_c = []
-subdir('emu')
 
 package_dir = join_paths(mydir, 'fuzz')
 package_tests_c = []
 subdir('fuzz')
 
-package_dir = join_paths(mydir, 'iot')
-package_tests_c = []
-subdir('iot')
-
-package_dir = join_paths(mydir, 'net')
-package_tests_c = []
-subdir('net')
-
-package_dir = join_paths(mydir, 'bench')
-package_tests_c = []
-subdir('bench')
-
 package_dir = join_paths(mydir, 'browser')
 package_tests_c = []
 subdir('browser')
-
-package_dir = join_paths(mydir, 'mobile')
-package_tests_c = []
-subdir('mobile')
-
-package_dir = join_paths(mydir, 'ai')
-package_tests_c = []
-subdir('ai')
-
-package_dir = join_paths(mydir, 'dummy')
-package_tests_c = []
-subdir('dummy')

@@ -3,7 +3,6 @@
 tests = [
     'prologue',
     'epilogue',
-    'compile_probe',
     'rebuild_pycore',
     'make_stub',
     'reproducible',

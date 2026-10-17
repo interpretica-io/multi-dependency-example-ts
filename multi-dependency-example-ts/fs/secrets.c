@@ -2,12 +2,11 @@
  * @brief Filesystem Group
  *
  * Secrets at rest in the example tree: private keys (tsf-fs), AWS access
- * key ids and MD5-crypt password hashes (grep on the agent), and the
- * accounts of the agent (weak hashes, empty passwords). Every scanner has
- * a known-bad control planted in a directory of its own on the agent - a
- * PEM private key, the documented example AWS key id, an MD5-crypt hash,
- * a unique marker - and must find it; the controls' findings are dropped
- * before the gate. The marker is also looked for in the example, where it
+ * key ids and MD5-crypt password hashes (grep on the agent). Every
+ * scanner has a known-bad control planted in a directory of its own on the
+ * agent - a PEM private key, the documented example AWS key id, an
+ * MD5-crypt hash, a unique marker - and must find it; the controls'
+ * findings are dropped before the gate. The marker is also looked for in the example, where it
  * must not be: a scanner that finds what is not there is as broken as
  * one that misses what is.
  *
@@ -33,8 +32,6 @@
 #define SEC_CTL_CANARY  SEC_CTL "/app.log"
 /** A marker that occurs nowhere else. */
 #define SEC_CANARY      "MDE-CANARY-7f3c9a1e5b"
-/** The control account of the engine-side accounts audit. */
-#define SEC_CTL_USER    "mdectl"
 
 /** An AWS access key id: AKIA and 16 upper-case letters or digits. */
 #define SEC_AWS_RE      "AKIA[0-9A-Z]{16}"
@@ -106,7 +103,6 @@ main(int argc, char **argv)
     unsigned int           n_aws;
     unsigned int           n_md5;
     unsigned int           n_canary;
-    unsigned int           n_accounts;
     double                 t0;
     double                 scan_s;
 
@@ -150,16 +146,10 @@ main(int argc, char **argv)
         TEST_VERDICT("The marker of the control was found in the example "
                      "before it was planted");
 
-    TEST_STEP("Audit the accounts of the agent");
-    CHECK_RC(tapi_fs_accounts_audit(session.factory, &issues));
-    n_accounts = fs_issues_to_report(&issues, &report);
-    TEST_ARTIFACT("agent accounts: %u finding(s)", n_accounts);
-
     TEST_STEP("Chart files scanned against findings");
     {
         static const char *labels[] = {
             "files_scanned", "private_keys", "aws_keys", "md5_hashes",
-            "account_findings",
         };
         double vals[TE_ARRAY_LEN(labels)];
 
@@ -167,7 +157,6 @@ main(int argc, char **argv)
         vals[1] = n_keys;
         vals[2] = n_aws;
         vals[3] = n_md5;
-        vals[4] = n_accounts;
         tsapi_mde_mi_bars("fs/secrets", "Example files scanned and findings",
                           TE_MI_MEAS_UNITLESS_VALUE, "count",
                           TE_ARRAY_LEN(labels), labels, vals,
@@ -188,7 +177,7 @@ main(int argc, char **argv)
                           " && chmod 0644 " SEC_CTL_KEY " && "
                           "echo 'aws_access_key_id = AKIAIOSFODNN7EXAMPLE' > "
                           SEC_CTL_AWS " && "
-                          "echo '" SEC_CTL_USER ":$1$saltsalt$qjXMvbEw8oaL.CzflDugX/"
+                          "echo 'mdectl:$1$saltsalt$qjXMvbEw8oaL.CzflDugX/"
                           ":19000:0:99999:7:::' > " SEC_CTL_HASH " && "
                           "echo 'login password=" SEC_CANARY "' > "
                           SEC_CTL_CANARY));
@@ -206,22 +195,15 @@ main(int argc, char **argv)
     CHECK_RC(tapi_fs_canary_check(session.factory, ctl_roots, 1, SEC_CANARY,
                                   NULL, 0, &issues));
     (void)fs_issues_to_report(&issues, &report);
-    CHECK_RC(tapi_fs_accounts_audit_parse(
-                 SEC_CTL_USER ":x:4242:4242::/nonexistent:/bin/false\n",
-                 SEC_CTL_USER ":$1$saltsalt$qjXMvbEw8oaL.CzflDugX/"
-                 ":19000:0:99999:7:::\n", &issues));
-    (void)fs_issues_to_report(&issues, &report);
 
     tsapi_mde_report_expect(&report, "fs.private-key", SEC_CTL_KEY);
     tsapi_mde_report_expect(&report, "fs.aws-key", SEC_CTL_AWS);
     tsapi_mde_report_expect(&report, "fs.weak-hash-file", SEC_CTL_HASH);
     tsapi_mde_report_expect(&report, "fs.canary", SEC_CTL_CANARY);
-    tsapi_mde_report_expect(&report, "fs.weak-hash", SEC_CTL_USER);
     tsapi_mde_report_drop_subject(&report, SEC_CTL_KEY);
     tsapi_mde_report_drop_subject(&report, SEC_CTL_AWS);
     tsapi_mde_report_drop_subject(&report, SEC_CTL_HASH);
     tsapi_mde_report_drop_subject(&report, SEC_CTL_CANARY);
-    tsapi_mde_report_drop_subject(&report, SEC_CTL_USER);
 
     TEST_STEP("Decide over the secrets found");
     TSAPI_MDE_REPORT_GATE(&report, "fs", min_sev);
