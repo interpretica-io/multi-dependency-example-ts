@@ -1,0 +1,138 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>Web dependency tests</description>
+
+    <!-- @page mde-webdeps Web Dependency Tests
+          @objective Settle hypotheses H1, H2 and H3 about the dependencies
+                     between gateway-rs, service-go and service-cs.
+
+          @par Test Groups:
+          - @ref mde-webdeps-webdeps_gw_no_backends - Gateway without backends (H1)
+          - @ref mde-webdeps-webdeps_gw_bad_backend - Gateway with bad backends (H1)
+          - @ref mde-webdeps-webdeps_gw_recovery - Gateway recovery (H1)
+          - @ref mde-webdeps-webdeps_go_stalled_peer - service-go with a stalled peer (H2)
+          - @ref mde-webdeps-webdeps_cs_stalled_peer - service-cs with a stalled peer (H2)
+          - @ref mde-webdeps-webdeps_masked_error - Masked peer errors (H2)
+          - @ref mde-webdeps-webdeps_contract_violation - Contract violations (H2)
+          - @ref mde-webdeps-webdeps_listen_surface - Listening surface (H3)
+          - @ref mde-webdeps-webdeps_egress - Egress destinations (H3)
+          - @ref mde-webdeps-webdeps_port_conflict - Port conflict (H3)
+
+          @par Notes:
+          - H1: the Rust gateway panics when a backend is down or returns
+            malformed data. H2: the Go and C# services have no timeout or
+            error isolation toward peers. H3: hardcoded endpoints fix the
+            topology and may expose services beyond loopback.
+          - Each test starts the three binaries from the built artifacts and
+            waits for readiness by polling the TCP ports found in the process
+            listing (/proc/PID/fd joined with /proc/net/tcp).
+          - Each test ends with an explicit PASS or FAIL verdict naming its
+            hypothesis; an empty verdict is a harness error.
+    -->
+
+    <author mailto="maximmenshchikov@gmail.com" />
+
+    <session track_conf="silent">
+        <prologue>
+            <script name="prologue">
+                <objective>Prepare the webdeps group.</objective>
+            </script>
+        </prologue>
+
+        <epilogue>
+            <script name="epilogue">
+                <objective>Stop whatever a failed test left running.</objective>
+            </script>
+        </epilogue>
+
+        <!-- @page mde-webdeps-webdeps_gw_no_backends Gateway without backends (H1)
+              @objective Start gateway-rs alone (service-go, service-cs not running); 3 requests to each route; PASS (H1 disproved) if it survives and answers within 5 s, FAIL (H1 confirmed) if it exits, aborts or prints 'panicked'. tapi_binscan of the three binaries goes into the report as information.
+        -->
+        <run name="webdeps_gw_no_backends">
+            <script name="webdeps_gw_no_backends">
+                <objective>Start gateway-rs alone (service-go, service-cs not running); 3 requests to each route; PASS (H1 disproved) if it survives and answers within 5 s, FAIL (H1 confirmed) if it exits, aborts or prints 'panicked'. tapi_binscan of the three binaries goes into the report as information.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-webdeps-webdeps_gw_bad_backend Gateway with bad backends (H1)
+              @objective Stub listeners on the backend ports answer empty body, non-JSON garbage, a connection reset. FAIL (H1 confirmed) if the gateway dies; PASS if it stays up and serves a following request.
+        -->
+        <run name="webdeps_gw_bad_backend">
+            <script name="webdeps_gw_bad_backend">
+                <objective>Stub listeners on the backend ports answer empty body, non-JSON garbage, a connection reset. FAIL (H1 confirmed) if the gateway dies; PASS if it stays up and serves a following request.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-webdeps-webdeps_gw_recovery Gateway recovery (H1)
+              @objective After the no-backends run start the backends and check the same gateway process serves normally. FAIL means the dependency is hard.
+        -->
+        <run name="webdeps_gw_recovery">
+            <script name="webdeps_gw_recovery">
+                <objective>After the no-backends run start the backends and check the same gateway process serves normally. FAIL means the dependency is hard.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-webdeps-webdeps_go_stalled_peer service-go with a stalled peer (H2)
+              @objective service-go with a peer that accepts and never answers. FAIL (H2 confirmed) without a response or error within 10 s; PASS if it returns an error within 10 s.
+        -->
+        <run name="webdeps_go_stalled_peer">
+            <script name="webdeps_go_stalled_peer">
+                <objective>service-go with a peer that accepts and never answers. FAIL (H2 confirmed) without a response or error within 10 s; PASS if it returns an error within 10 s.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-webdeps-webdeps_cs_stalled_peer service-cs with a stalled peer (H2)
+              @objective The same for service-cs.
+        -->
+        <run name="webdeps_cs_stalled_peer">
+            <script name="webdeps_cs_stalled_peer">
+                <objective>The same for service-cs.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-webdeps-webdeps_masked_error Masked peer errors (H2)
+              @objective Peer answers HTTP 500, garbage, closes. FAIL (H2 confirmed) if a service answers 2xx without an error status or field; PASS if it reports the failure.
+        -->
+        <run name="webdeps_masked_error">
+            <script name="webdeps_masked_error">
+                <objective>Peer answers HTTP 500, garbage, closes. FAIL (H2 confirmed) if a service answers 2xx without an error status or field; PASS if it reports the failure.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-webdeps-webdeps_contract_violation Contract violations (H2)
+              @objective Requests to service-go with missing, wrong-typed and oversized fields. FAIL (H2 confirmed) on a crash or success; PASS if rejected with 4xx.
+        -->
+        <run name="webdeps_contract_violation">
+            <script name="webdeps_contract_violation">
+                <objective>Requests to service-go with missing, wrong-typed and oversized fields. FAIL (H2 confirmed) on a crash or success; PASS if rejected with 4xx.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-webdeps-webdeps_listen_surface Listening surface (H3)
+              @objective tapi_netexpose with all three services running; every listening socket is appended to the tapi_cybersec_report. FAIL (H3 confirmed) for a backend bound beyond loopback; PASS if backends are loopback only.
+        -->
+        <run name="webdeps_listen_surface">
+            <script name="webdeps_listen_surface">
+                <objective>tapi_netexpose with all three services running; every listening socket is appended to the tapi_cybersec_report. FAIL (H3 confirmed) for a backend bound beyond loopback; PASS if backends are loopback only.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-webdeps-webdeps_egress Egress destinations (H3)
+              @objective tapi_egress with loopback as the allowed set; one request through each service. FAIL (H3 confirmed) for any non-loopback destination.
+        -->
+        <run name="webdeps_egress">
+            <script name="webdeps_egress">
+                <objective>tapi_egress with loopback as the allowed set; one request through each service. FAIL (H3 confirmed) for any non-loopback destination.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-webdeps-webdeps_port_conflict Port conflict (H3)
+              @objective Another listener on service-go's hardcoded port before the services start. FAIL if service-go continues silently; PASS if it exits non-zero with a message.
+        -->
+        <run name="webdeps_port_conflict">
+            <script name="webdeps_port_conflict">
+                <objective>Another listener on service-go's hardcoded port before the services start. FAIL if service-go continues silently; PASS if it exits non-zero with a message.</objective>
+            </script>
+        </run>
+    </session>
+</package>

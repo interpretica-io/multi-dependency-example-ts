@@ -96,6 +96,10 @@ package_dir = join_paths(mydir, 'web')
 package_tests_c = []
 subdir('web')
 
+package_dir = join_paths(mydir, 'webdeps')
+package_tests_c = []
+subdir('webdeps')
+
 package_dir = join_paths(mydir, 'graph')
 package_tests_c = []
 subdir('graph')

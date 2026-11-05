@@ -1122,6 +1122,61 @@
           </test>
         </iter>
       </test>
+      <test name="webdeps" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="webdeps_gw_no_backends" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="webdeps_gw_bad_backend" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="webdeps_gw_recovery" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="webdeps_go_stalled_peer" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="webdeps_cs_stalled_peer" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="webdeps_masked_error" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="webdeps_contract_violation" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="webdeps_listen_surface" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="webdeps_egress" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="webdeps_port_conflict" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="epilogue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+        </iter>
+      </test>
       <test name="graph" type="package">
         <objective/>
         <notes/>
