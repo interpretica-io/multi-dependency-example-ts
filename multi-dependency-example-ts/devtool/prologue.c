@@ -22,11 +22,11 @@
 
 /* Compilers first; the build tools after them are not counted as such. */
 static const char *devtool_tools[] = {
-    "cc", "gcc", "clang", "c++", "g++", "clang++",
+    "cc", "gcc", "clang", "tcc", "c++", "g++", "clang++",
     "make", "ld", "python3-config",
 };
 /* How many of devtool_tools are compilers. */
-#define DEVTOOL_N_COMPILERS 6
+#define DEVTOOL_N_COMPILERS 7
 
 int
 main(int argc, char **argv)

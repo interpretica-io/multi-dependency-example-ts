@@ -35,11 +35,13 @@
 typedef enum rp_cc {
     RP_CC_CLANG,
     RP_CC_GCC,
+    RP_CC_TCC,
 } rp_cc;
 
 #define RP_CC_LIST \
     { "clang", RP_CC_CLANG }, \
-    { "gcc",   RP_CC_GCC }
+    { "gcc",   RP_CC_GCC }, \
+    { "tcc",   RP_CC_TCC }
 
 /** Most flags taken from python3-config. */
 #define RP_MAX_FLAGS    48
@@ -264,7 +266,8 @@ main(int argc, char **argv)
     TEST_STEP("Parse test parameters");
     TEST_GET_ENUM_PARAM(cc, RP_CC_LIST);
     TEST_GET_MDE_SEVERITY(min_sev);
-    cc_name = (cc == RP_CC_CLANG) ? "clang" : "gcc";
+    cc_name = (cc == RP_CC_CLANG) ? "clang" :
+              (cc == RP_CC_GCC) ? "gcc" : "tcc";
 
     TEST_STEP("Locate the example under test");
     TSAPI_MDE_OPEN_OR_SKIP(session, "dev_repro", dut, session_up);

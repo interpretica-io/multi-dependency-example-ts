@@ -35,11 +35,13 @@
 typedef enum ms_cc {
     MS_CC_CLANG,
     MS_CC_GCC,
+    MS_CC_TCC,
 } ms_cc;
 
 #define MS_CC_LIST \
     { "clang", MS_CC_CLANG }, \
-    { "gcc",   MS_CC_GCC }
+    { "gcc",   MS_CC_GCC }, \
+    { "tcc",   MS_CC_TCC }
 
 /** What the recipe prints when it runs: the output file name. */
 #define MS_RECIPE_MARK  "-o libcscore_stub.so"
@@ -163,7 +165,8 @@ main(int argc, char **argv)
 
     TEST_STEP("Parse test parameters");
     TEST_GET_ENUM_PARAM(cc, MS_CC_LIST);
-    cc_name = (cc == MS_CC_CLANG) ? "clang" : "gcc";
+    cc_name = (cc == MS_CC_CLANG) ? "clang" :
+              (cc == MS_CC_GCC) ? "gcc" : "tcc";
 
     TEST_STEP("Locate the example under test");
     TSAPI_MDE_OPEN_OR_SKIP(session, "dev_make", dut, session_up);

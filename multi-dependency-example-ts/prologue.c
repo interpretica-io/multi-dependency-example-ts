@@ -26,7 +26,7 @@
 /* The tools the groups drive. */
 static const char *tools[] = {
     "python3", "python3-config", "curl", "readelf", "nm", "objdump",
-    "strings", "ldd", "dpkg", "sha256sum", "clang", "gcc", "make",
+    "strings", "ldd", "dpkg", "sha256sum", "clang", "gcc", "tcc", "make",
     "llvm-symbolizer", "docker", "node", "npx", "lsof", "ss", "tcpdump",
     "frida",
 };

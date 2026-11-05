@@ -31,7 +31,7 @@
               @objective Record the compilers and build tools on the agent.
 
               @par Scenario:
-              -# For cc, gcc, clang, c++, g++, clang++, make, ld and
+              -# For cc, gcc, clang, tcc, c++, g++, clang++, make, ld and
                  python3-config: the path and the first version line, as
                  artifacts.
               -# Chart the number of compilers found and the availability of
@@ -72,7 +72,7 @@
               @par Test Parameters:
               | Parameter    | Values      | Description                |
               |==============|=============|============================|
-              | cc           | clang / gcc | Compiler                   |
+              | cc           | clang / gcc / tcc | Compiler                   |
               | opt          | O0 / O2     | Optimization level         |
               | min_severity | high        | Lowest severity that fails |
 
@@ -107,6 +107,7 @@
             <arg name="cc">
                 <value>clang</value>
                 <value>gcc</value>
+                <value>tcc</value>
             </arg>
             <arg name="opt">
                 <value>O0</value>
@@ -125,7 +126,7 @@
               @par Test Parameters:
               | Parameter | Values      | Description          |
               |===========|=============|======================|
-              | cc        | clang / gcc | Compiler passed as CC |
+              | cc        | clang / gcc / tcc | Compiler passed as CC |
 
               @par Scenario:
               -# Locate the example; skip without make, the compiler or the
@@ -160,6 +161,7 @@
             <arg name="cc">
                 <value>clang</value>
                 <value>gcc</value>
+                <value>tcc</value>
             </arg>
         </run>
 
@@ -171,7 +173,7 @@
               @par Test Parameters:
               | Parameter    | Values      | Description                |
               |==============|=============|============================|
-              | cc           | clang / gcc | Compiler                   |
+              | cc           | clang / gcc / tcc | Compiler                   |
               | min_severity | medium      | Lowest severity that fails |
 
               @par Scenario:
@@ -202,6 +204,7 @@
             <arg name="cc">
                 <value>clang</value>
                 <value>gcc</value>
+                <value>tcc</value>
             </arg>
             <arg name="min_severity">
                 <value>medium</value>

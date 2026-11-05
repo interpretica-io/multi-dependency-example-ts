@@ -32,11 +32,13 @@
 typedef enum rb_cc {
     RB_CC_CLANG,
     RB_CC_GCC,
+    RB_CC_TCC,
 } rb_cc;
 
 #define RB_CC_LIST \
     { "clang", RB_CC_CLANG }, \
-    { "gcc",   RB_CC_GCC }
+    { "gcc",   RB_CC_GCC }, \
+    { "tcc",   RB_CC_TCC }
 
 /** Optimization levels. */
 typedef enum rb_opt {
@@ -347,7 +349,8 @@ main(int argc, char **argv)
     TEST_GET_ENUM_PARAM(cc, RB_CC_LIST);
     TEST_GET_ENUM_PARAM(opt, RB_OPT_LIST);
     TEST_GET_MDE_SEVERITY(min_sev);
-    cc_name = (cc == RB_CC_CLANG) ? "clang" : "gcc";
+    cc_name = (cc == RB_CC_CLANG) ? "clang" :
+              (cc == RB_CC_GCC) ? "gcc" : "tcc";
     olevel = (opt == RB_OPT_O0) ? "0" : "2";
 
     TEST_STEP("Locate the example under test");
