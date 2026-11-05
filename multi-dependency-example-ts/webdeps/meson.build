@@ -1,18 +1,9 @@
 # Copyright (C) 2026 Maxim Menshikov
 
+# One small test, run once per hypothesis case (see package.xml).
+# No group prologue/epilogue: a setup problem must never fail the session.
 tests = [
-    'prologue',
-    'epilogue',
-    'webdeps_gw_no_backends',
-    'webdeps_gw_bad_backend',
-    'webdeps_gw_recovery',
-    'webdeps_go_stalled_peer',
-    'webdeps_cs_stalled_peer',
-    'webdeps_masked_error',
-    'webdeps_contract_violation',
-    'webdeps_listen_surface',
-    'webdeps_egress',
-    'webdeps_port_conflict',
+    'webdeps_hyp',
 ]
 
 foreach test : tests

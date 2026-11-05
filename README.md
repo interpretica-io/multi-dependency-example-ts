@@ -39,7 +39,7 @@ for **maximum evidence**:
 |---|---|---|
 | `ring` | suite model (`lib/tsapi_mde_ring`) | `propagation` (72 it.), `reference`, `sweep`, `determinism`, `entry_matrix`: every stage line checked against a reference model of the five formulas |
 | `web` | suite (`lib/tsapi_mde_web`) | `cycle`, `latency`, `contract`, `robustness`, `h1_gateway_backends`, `h2_stalled_peer` (hypotheses H1, H2) |
-| `webdeps` | suite (`lib/tsapi_mde_web`), tsf-cybersec | `webdeps_gw_no_backends`, `webdeps_gw_bad_backend`, `webdeps_gw_recovery` (H1), `webdeps_go_stalled_peer`, `webdeps_cs_stalled_peer`, `webdeps_masked_error`, `webdeps_contract_violation` (H2), `webdeps_listen_surface`, `webdeps_egress`, `webdeps_port_conflict` (H3); each ends with an explicit PASS/FAIL verdict naming its hypothesis |
+| `webdeps` | tsf-cybersec (netexpose, egress, binscan) | `webdeps_hyp`, one source run once per case: `H1-a`..`H1-c`, `H2-a`..`H2-c`, `H3-a`..`H3-c`; every run is independent and ends with a PASS, FAIL or SKIP verdict naming its case id; a missing binary or port is a SKIP with the reason |
 | `graph` | binutils | `links`, `symbols`, `cycle_closure` (DOT graph artifact) |
 | `binary` | tsf-cybersec (binscan, objdump) | `hardening`, `hardening_matrix`, `disasm_defect`, `linked_libs` |
 | `devtool` | tsf-devtool | `rebuild_pycore`, `make_stub`, `reproducible` |

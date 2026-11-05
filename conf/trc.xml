@@ -1127,53 +1127,45 @@
         <notes/>
         <iter result="PASSED">
           <notes/>
-          <test name="prologue" type="script">
+          <test name="webdeps_hyp" type="script">
             <objective/>
             <notes/>
-          </test>
-          <test name="webdeps_gw_no_backends" type="script">
-            <objective/>
-            <notes/>
-          </test>
-          <test name="webdeps_gw_bad_backend" type="script">
-            <objective/>
-            <notes/>
-          </test>
-          <test name="webdeps_gw_recovery" type="script">
-            <objective/>
-            <notes/>
-          </test>
-          <test name="webdeps_go_stalled_peer" type="script">
-            <objective/>
-            <notes/>
-          </test>
-          <test name="webdeps_cs_stalled_peer" type="script">
-            <objective/>
-            <notes/>
-          </test>
-          <test name="webdeps_masked_error" type="script">
-            <objective/>
-            <notes/>
-          </test>
-          <test name="webdeps_contract_violation" type="script">
-            <objective/>
-            <notes/>
-          </test>
-          <test name="webdeps_listen_surface" type="script">
-            <objective/>
-            <notes/>
-          </test>
-          <test name="webdeps_egress" type="script">
-            <objective/>
-            <notes/>
-          </test>
-          <test name="webdeps_port_conflict" type="script">
-            <objective/>
-            <notes/>
-          </test>
-          <test name="epilogue" type="script">
-            <objective/>
-            <notes/>
+            <iter result="PASSED">
+              <arg name="hyp_id">H1-a</arg>
+              <notes/>
+            </iter>
+            <iter result="PASSED">
+              <arg name="hyp_id">H1-b</arg>
+              <notes/>
+            </iter>
+            <iter result="PASSED">
+              <arg name="hyp_id">H1-c</arg>
+              <notes/>
+            </iter>
+            <iter result="PASSED">
+              <arg name="hyp_id">H2-a</arg>
+              <notes/>
+            </iter>
+            <iter result="PASSED">
+              <arg name="hyp_id">H2-b</arg>
+              <notes/>
+            </iter>
+            <iter result="PASSED">
+              <arg name="hyp_id">H2-c</arg>
+              <notes/>
+            </iter>
+            <iter result="PASSED">
+              <arg name="hyp_id">H3-a</arg>
+              <notes/>
+            </iter>
+            <iter result="PASSED">
+              <arg name="hyp_id">H3-b</arg>
+              <notes/>
+            </iter>
+            <iter result="PASSED">
+              <arg name="hyp_id">H3-c</arg>
+              <notes/>
+            </iter>
           </test>
         </iter>
       </test>
