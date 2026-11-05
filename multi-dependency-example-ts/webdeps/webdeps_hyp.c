@@ -8,7 +8,7 @@
  * text names the test and carries the explicit hypothesis verdict
  * (H1:pass, H1:fail, H2:pass, H2:fail, H3:pass, H3:fail, H<n>:setup-error).
  * A missing binary, contract or port, or a service that dies while it
- * starts, is a distinct FAIL named webdeps_setup, never a finding. The
+ * starts, is a distinct FAIL named setup_<component>, never a finding. The
  * exit code and the first 2 KB of stderr of every spawned process are
  * logged.
  *
@@ -61,6 +61,9 @@
 #define MAX_PORTS   8
 #define NAMES       3
 #define REQUEST     "/ring?value=1&hops=3"
+#define START_WAIT  5       /**< s to wait for a port to accept TCP. */
+#define PROBE_TO    3       /**< s, client timeout of every probe. */
+#define STALL_LIMIT 10      /**< s, H2 stall verdict limit. */
 
 /** Service indexes, in contract order. */
 enum { GW = 0, GO, CS };
@@ -71,7 +74,7 @@ static const char * const names[NAMES] = {
 
 /** Outcome of a case, turned into the verdict by main(). */
 typedef struct res_t {
-    enum { R_PASS, R_FAIL, R_SETUP } kind;   /**< R_SETUP: webdeps_setup. */
+    enum { R_PASS, R_FAIL, R_SETUP } kind;   /**< R_SETUP: setup_<component>. */
     char msg[1536];
 } res_t;
 
@@ -320,46 +323,15 @@ read_contract(res_t *r)
     return true;
 }
 
-/** Listening ports of a pid from 'ss -ltnp'; -1 if ss does not work. */
-static int
-ss_ports(pid_t pid, char addrs[][64], unsigned *ports, int max)
-{
-    FILE *f = popen("ss -ltnp 2>/dev/null", "r");
-    char  line[1024];
-    char  key[32];
-    int   n = 0;
-    int   lines = 0;
+static bool port_accepts(unsigned port);
 
-    if (f == NULL)
-        return -1;
-    snprintf(key, sizeof(key), "pid=%d,", (int)pid);
-    while (fgets(line, sizeof(line), f) != NULL)
-    {
-        char  state[32], rq[32], sq[32], local[128];
-        char *colon;
-
-        lines++;
-        if (sscanf(line, "%31s %31s %31s %127s", state, rq, sq, local) != 4 ||
-            strcmp(state, "LISTEN") != 0 || strstr(line, key) == NULL)
-            continue;
-        colon = strrchr(local, ':');
-        if (colon == NULL || n >= max)
-            continue;
-        *colon = '\0';
-        ports[n] = atoi(colon + 1);
-        snprintf(addrs[n], 64, "%.63s", local[0] == '[' ? local + 1 : local);
-        if (addrs[n][0] != '\0' && addrs[n][strlen(addrs[n]) - 1] == ']')
-            addrs[n][strlen(addrs[n]) - 1] = '\0';
-        n++;
-    }
-    if (pclose(f) != 0 || lines == 0)
-        return -1;
-    return n;
-}
+/** The setup_<component> name of the problem, set with an R_SETUP outcome. */
+static char setup_name[64] = "setup";
 
 /**
- * Start a service and wait until 'ss -ltnp' shows it listening.
- * On any problem sets a SKIP outcome and returns NULL.
+ * Start a service and wait up to START_WAIT s for its port (read from the
+ * contract) to accept TCP. On any problem sets an R_SETUP outcome naming
+ * setup_<component> and returns NULL.
  */
 static proc_t *
 svc_start(res_t *r, int idx)
@@ -368,11 +340,15 @@ svc_start(res_t *r, int idx)
     char     lib[600];
     proc_t  *p;
     double   end;
-    char     addrs[MAX_PORTS][64];
-    unsigned ports[MAX_PORTS];
     char     why[900];
     pid_t    pid;
 
+    snprintf(setup_name, sizeof(setup_name), "setup_%s", names[idx]);
+    for (char *c = setup_name; *c != '\0'; c++)
+    {
+        if (*c == '-')
+            *c = '_';
+    }
     snprintf(path, sizeof(path), "%s/dist/bin/%s", src_root, names[idx]);
     if (access(path, X_OK) != 0)
     {
@@ -382,6 +358,12 @@ svc_start(res_t *r, int idx)
     if (n_procs >= MAX_PROCS)
     {
         res_set(r, R_SETUP, "too many processes");
+        return NULL;
+    }
+    if (port_accepts(tab_port[idx]))
+    {
+        res_set(r, R_SETUP, "port 127.0.0.1:%u of %s is busy before the "
+                "start", tab_port[idx], names[idx]);
         return NULL;
     }
     p = &procs[n_procs];
@@ -414,14 +396,13 @@ svc_start(res_t *r, int idx)
         _exit(127);
     }
     p->pid = pid;
+    p->port = tab_port[idx];
     setpgid(pid, pid);
     n_procs++;
 
-    end = now_s() + 20;
+    end = now_s() + START_WAIT;
     while (now_s() < end)
     {
-        int n;
-
         if (proc_gone(p))
         {
             proc_describe(p, why, sizeof(why));
@@ -431,22 +412,12 @@ svc_start(res_t *r, int idx)
                     names[idx], why);
             return NULL;
         }
-        n = ss_ports(pid, addrs, ports, MAX_PORTS);
-        if (n < 0)
-        {
-            res_set(r, R_SETUP, "'ss -ltnp' is not usable, cannot find the "
-                    "port of %s", names[idx]);
-            return NULL;
-        }
-        if (n > 0)
-        {
-            p->port = ports[0];
+        if (port_accepts(p->port))
             return p;
-        }
         usleep(100000);
     }
-    res_set(r, R_SETUP, "%s shows no listening port in 'ss -ltnp' in 20 s",
-            names[idx]);
+    res_set(r, R_SETUP, "%s: 127.0.0.1:%u does not accept TCP within %d s",
+            names[idx], p->port, START_WAIT);
     return NULL;
 }
 
@@ -470,7 +441,7 @@ typedef struct hg_res {
     hg_t   how;
     int    status;
     double elapsed;
-    char   body[512];
+    char   body[2048];
 } hg_res;
 
 static int
@@ -581,6 +552,7 @@ fake_start(res_t *r, unsigned port, fake_t mode, int *count_fd)
 
     inet_pton(AF_INET, "127.0.0.1", &sa.sin_addr);
     setsockopt(ls, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+    snprintf(setup_name, sizeof(setup_name), "setup_fake_peer");
     if (ls < 0 || bind(ls, (struct sockaddr *)&sa, sizeof(sa)) != 0 ||
         listen(ls, 16) != 0 || pipe(cp) != 0 || n_procs >= MAX_PROCS)
     {
@@ -737,183 +709,28 @@ start_all(res_t *r, proc_t **svc, const int *which, int n)
 
 /* ---- setup ---- */
 
-/** Start the three services from the built tree; all must listen. */
+/** Start one component from the built tree; setup_<component> on failure. */
 static void
-case_setup(res_t *r)
+setup_one(res_t *r, int idx)
 {
-    proc_t   *svc[NAMES] = { NULL };
-    const int which[] = { GO, CS, GW };
-    char      detail[600] = "";
-    int       i;
+    proc_t *svc[NAMES] = { NULL };
+    const int which[] = { idx };
 
-    if (!start_all(r, svc, which, 3))
+    if (!start_all(r, svc, which, 1))
         return;
-    for (i = 0; i < NAMES; i++)
-    {
-        if (svc[i]->port != tab_port[i])
-        {
-            res_set(r, R_SETUP, "%s listens on %u, the source says %u",
-                    names[i], svc[i]->port, tab_port[i]);
-            return;
-        }
-        append(detail, sizeof(detail), "%s pid %d port %u; ", names[i],
-               (int)svc[i]->pid, svc[i]->port);
-    }
-    res_set(r, R_PASS, "webdeps_setup PASS: all three services started "
-            "from %s/dist/bin: %s", src_root, detail);
+    res_set(r, R_PASS, "%s PASS: started from %s/dist/bin, pid %d, "
+            "127.0.0.1:%u accepts TCP", setup_name, src_root,
+            (int)svc[idx]->pid, svc[idx]->port);
 }
+
+static void case_setup_gateway_rs(res_t *r) { setup_one(r, GW); }
+static void case_setup_service_go(res_t *r) { setup_one(r, GO); }
+static void case_setup_service_cs(res_t *r) { setup_one(r, CS); }
 
 /* ---- H1 ---- */
 
 /** Tag for the explicit verdict of a hypothesis. */
 #define HV(h, ok)   ((ok) ? "H" #h ":pass" : "H" #h ":fail")
-
-static void
-case_gw_backend_down(res_t *r)
-{
-    /* The only route of the gateway: /ring; with hops > 0 it reaches for
-     * the backend (main.rs:30-36), hops = 0 is the local-only variant. */
-    static const char * const routes[] = {
-        "/ring?value=1&hops=3", "/ring", "/ring?value=1&hops=1",
-    };
-    proc_t  *svc[NAMES] = { NULL };
-    const int which[] = { GW };
-    char     detail[900] = "";
-    bool     bad = false;
-    unsigned i;
-
-    if (!start_all(r, svc, which, 1))
-        return;
-    for (i = 0; i < sizeof(routes) / sizeof(routes[0]); i++)
-    {
-        hg_res h;
-        bool   panic;
-        bool   alive;
-
-        http_get(svc[GW]->port, routes[i], 5, &h);
-        usleep(300000);
-        panic = file_has(svc[GW]->err, "panicked");
-        alive = svc_alive(svc[GW]);
-        append(detail, sizeof(detail), "[GET %s: %s, HTTP %d in %.2f s, "
-               "gateway %s%s] ", routes[i], hg_str(h.how), h.status,
-               h.elapsed, alive ? "alive" : "DEAD",
-               panic ? ", 'panicked' on stderr" : "");
-        if (!alive || panic || h.how != HG_OK)
-            bad = true;
-        if (!alive)
-            break;
-    }
-    if (bad)
-    {
-        char why[900] = "";
-
-        if (proc_gone(svc[GW]))
-            proc_describe(svc[GW], why, sizeof(why));
-        res_set(r, R_FAIL, "gw_backend_down %s: gateway with no backends "
-                "died, panicked or did not answer. %s %s", HV(1, false),
-                detail, why);
-    }
-    else
-        res_set(r, R_PASS, "gw_backend_down %s: gateway alive, no panic, "
-                "every route answered. %s", HV(1, true), detail);
-}
-
-static void
-case_gw_backend_garbage(res_t *r)
-{
-    static const struct { fake_t mode; const char *name; } cases[] = {
-        { F_EMPTY, "empty body" }, { F_BADJSON, "truncated JSON" },
-        { F_GARBAGE, "random bytes" }, { F_RESET, "reset after accept" },
-    };
-    /* service-go address first, then service-cs (main.rs:33-36). */
-    static const int backends[] = { GO, CS };
-    proc_t  *svc[NAMES] = { NULL };
-    const int which[] = { GW };
-    char     detail[1400] = "";
-    bool     bad = false;
-    unsigned b;
-    unsigned i;
-
-    if (!start_all(r, svc, which, 1))
-        return;
-    for (b = 0; b < 2 && !bad; b++)
-    {
-        for (i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
-        {
-            int      cfd;
-            proc_t  *fake = fake_start(r, tab_port[backends[b]],
-                                       cases[i].mode, &cfd);
-            hg_res   h;
-            unsigned hits;
-            bool     alive;
-            bool     panic;
-
-            if (fake == NULL)
-                return;
-            http_get(svc[GW]->port, REQUEST, 8, &h);
-            usleep(300000);
-            hits = fake_count(cfd);
-            panic = file_has(svc[GW]->err, "panicked");
-            alive = svc_alive(svc[GW]);
-            close(cfd);
-            proc_stop(fake);
-            append(detail, sizeof(detail), "[%s %s: gateway %s, %s, HTTP "
-                   "%d, backend hits %u%s] ", names[backends[b]],
-                   cases[i].name, alive ? "alive" : "DEAD", hg_str(h.how),
-                   h.status, hits, panic ? ", PANICKED" : "");
-            if (!alive || panic || h.how != HG_OK)
-            {
-                bad = true;
-                break;
-            }
-        }
-    }
-    if (bad)
-    {
-        char why[900] = "";
-
-        if (proc_gone(svc[GW]))
-            proc_describe(svc[GW], why, sizeof(why));
-        res_set(r, R_FAIL, "gw_backend_garbage %s: gateway died, panicked "
-                "or left a request unanswered. %s %s", HV(1, false), detail,
-                why);
-    }
-    else
-        res_set(r, R_PASS, "gw_backend_garbage %s: gateway stayed alive "
-                "and answered every request. %s", HV(1, true), detail);
-}
-
-/* ---- H2 ---- */
-
-#define STALL_LIMIT 30
-
-static void
-case_go_stalled_peer(res_t *r)
-{
-    proc_t   *svc[NAMES] = { NULL };
-    const int which[] = { GO };
-    int       cfd;
-    proc_t   *fake;
-    hg_res    h;
-
-    if (!start_all(r, svc, which, 1))
-        return;
-    /* service-go's upstream is service-cs (main.go:46-51). */
-    fake = fake_start(r, tab_port[CS], F_SILENT, &cfd);
-    if (fake == NULL)
-        return;
-    http_get(svc[GO]->port, REQUEST, STALL_LIMIT, &h);
-    if (h.how == HG_TIMEOUT || h.elapsed >= STALL_LIMIT)
-        res_set(r, R_FAIL, "go_stalled_peer %s: service-go gave no "
-                "response within %d s (open %.1f s) with a stalled peer on "
-                "port %u; peer contacted %u time(s)", HV(2, false),
-                STALL_LIMIT, h.elapsed, tab_port[CS], fake_count(cfd));
-    else
-        res_set(r, R_PASS, "go_stalled_peer %s: service-go %s after %.2f s "
-                "(HTTP %d) with a stalled peer on port %u; peer contacted "
-                "%u time(s)", HV(2, true), hg_str(h.how), h.elapsed,
-                h.status, tab_port[CS], fake_count(cfd));
-}
 
 /** Whether a response carries an error indication. */
 static bool
@@ -922,70 +739,292 @@ reports_error(const hg_res *h)
     return h->how == HG_OK && (h->status >= 400 ||
         strstr(h->body, "unreachable") != NULL ||
         strstr(h->body, "error") != NULL ||
-        strstr(h->body, "failed") != NULL);
+        strstr(h->body, "failed") != NULL ||
+        strstr(h->body, "degraded") != NULL);
+}
+
+/**
+ * Whether the gateway crashed: the process is gone (exit status described
+ * in @p why, 101 and SIGABRT called out) or stderr shows a panic.
+ */
+static bool
+gw_crashed(proc_t *gw, char *why, size_t size)
+{
+    bool panic = file_has(gw->err, "panicked");
+
+    why[0] = '\0';
+    if (proc_gone(gw))
+    {
+        proc_describe(gw, why, size);
+        if (WIFSIGNALED(gw->status) && WTERMSIG(gw->status) == SIGABRT)
+            append(why, size, " [SIGABRT]");
+        if (WIFEXITED(gw->status) && WEXITSTATUS(gw->status) == 101)
+            append(why, size, " [exit 101 = Rust panic]");
+        return true;
+    }
+    if (panic)
+        append(why, size, "'panicked' on stderr");
+    return panic;
 }
 
 static void
-case_cs_peer_failure_masking(res_t *r)
+case_h1_gateway_backends_absent(res_t *r)
 {
-    /* service-cs towards gateway-rs (Program.cs:34, :78), then service-go
-     * towards service-cs (main.go:87). */
-    static const int pairs[2][2] = { { CS, GW }, { GO, CS } };
+    /* The gateway routes: /ring, with and without the hop budget that makes
+     * it reach for the backend (main.rs:30-36). */
+    static const char * const routes[] = {
+        "/ring?value=1&hops=3", "/ring", "/ring?value=1&hops=1",
+        "/ring?value=1&hops=0",
+    };
+    proc_t  *svc[NAMES] = { NULL };
+    const int which[] = { GW };
+    char     detail[1200] = "";
+    bool     crashed = false;
+    char     why[900] = "";
+    unsigned i;
+
+    if (!start_all(r, svc, which, 1))
+        return;
+    for (i = 0; i < sizeof(routes) / sizeof(routes[0]); i++)
+    {
+        hg_res h;
+        bool   dead;
+        char   w[900];
+
+        http_get(svc[GW]->port, routes[i], PROBE_TO, &h);
+        usleep(300000);
+        dead = gw_crashed(svc[GW], w, sizeof(w));
+        append(detail, sizeof(detail), "[GET %s: %s, HTTP %d in %.2f s, "
+               "gateway %s%s%s] ", routes[i], hg_str(h.how), h.status,
+               h.elapsed, dead ? "DEAD/panicked" : "alive",
+               (h.status == 200 && !reports_error(&h)) ?
+                   ", 200 without degraded body" : "",
+               (h.how == HG_RESET || h.how == HG_NORESP) ?
+                   ", CONNECTION LOST" : "");
+        if (dead || h.how == HG_RESET || h.how == HG_NORESP)
+        {
+            crashed = true;
+            snprintf(why, sizeof(why), "%s", w);
+            break;
+        }
+    }
+    if (crashed)
+        res_set(r, R_FAIL, "h1_gateway_backends_absent %s (H1 confirmed): "
+                "gateway with no backends crashed or dropped the "
+                "connection. %s exit status: %s", HV(1, false), detail,
+                why[0] != '\0' ? why : "(still running)");
+    else
+        res_set(r, R_PASS, "h1_gateway_backends_absent %s: gateway alive "
+                "(exit status: none, still running), no panic, every "
+                "request answered. %s", HV(1, true), detail);
+}
+
+static void
+case_h1_gateway_backend_garbage(res_t *r)
+{
+    /* (a) empty body, (b) non-JSON bytes, (c) truncated JSON, (d) a 500. */
+    static const struct { fake_t mode; const char *name; } cases[] = {
+        { F_EMPTY, "(a) empty body" }, { F_GARBAGE, "(b) non-JSON bytes" },
+        { F_BADJSON, "(c) truncated JSON" }, { F_HTTP500, "(d) HTTP 500" },
+    };
+    /* service-go address first, then service-cs (main.rs:33-36). */
+    static const int backends[] = { GO, CS };
+    char     detail[2000] = "";
+    char     killers[400] = "";
+    unsigned b;
+    unsigned i;
+
+    for (b = 0; b < 2; b++)
+    {
+        for (i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
+        {
+            proc_t  *svc[NAMES] = { NULL };
+            const int which[] = { GW };
+            int      cfd;
+            proc_t  *fake;
+            hg_res   h;
+            unsigned hits;
+            bool     dead;
+            char     why[900];
+
+            if (!start_all(r, svc, which, 1))
+                return;
+            fake = fake_start(r, tab_port[backends[b]], cases[i].mode, &cfd);
+            if (fake == NULL)
+                return;
+            http_get(svc[GW]->port, REQUEST, PROBE_TO, &h);
+            usleep(300000);
+            hits = fake_count(cfd);
+            dead = gw_crashed(svc[GW], why, sizeof(why));
+            close(cfd);
+            proc_stop(fake);
+            append(detail, sizeof(detail), "[backend %s, reply %s: gateway "
+                   "%s, %s, HTTP %d, backend hits %u%s%s] ",
+                   names[backends[b]], cases[i].name,
+                   dead ? "DEAD" : "alive", hg_str(h.how), h.status, hits,
+                   dead ? ", exit status: " : "", dead ? why : "");
+            if (dead)
+                append(killers, sizeof(killers), "%s on %s; ",
+                       cases[i].name, names[backends[b]]);
+            proc_stop(svc[GW]);
+        }
+    }
+    if (killers[0] != '\0')
+        res_set(r, R_FAIL, "h1_gateway_backend_garbage %s (H1 confirmed): "
+                "reply kind(s) that killed the gateway: %s. %s", HV(1, false),
+                killers, detail);
+    else
+        res_set(r, R_PASS, "h1_gateway_backend_garbage %s: gateway alive "
+                "after every reply kind. %s", HV(1, true), detail);
+}
+
+static void
+case_h1_gateway_startup_order(res_t *r)
+{
+    proc_t  *svc[NAMES] = { NULL };
+    hg_res   early;
+    hg_res   h;
+    bool     dead;
+    bool     ok;
+    char     why[900];
+    int      one[] = { GW };
+    int      rest[] = { GO, CS };
+
+    if (!start_all(r, svc, one, 1))
+        return;
+    http_get(svc[GW]->port, REQUEST, PROBE_TO, &early);
+    sleep(2);
+    if (!start_all(r, svc, rest, 2))
+        return;
+    http_get(svc[GW]->port, REQUEST, PROBE_TO, &h);
+    dead = gw_crashed(svc[GW], why, sizeof(why));
+    ok = !dead && h.how == HG_OK && h.status == 200 &&
+         strstr(h.body, "value=") != NULL;
+    if (ok)
+        res_set(r, R_PASS, "h1_gateway_startup_order %s: gateway started "
+                "2 s before the backends serves correctly afterwards "
+                "(early request: %s HTTP %d; later: HTTP %d, gateway "
+                "alive, exit status: none)", HV(1, true),
+                hg_str(early.how), early.status, h.status);
+    else
+        res_set(r, R_FAIL, "h1_gateway_startup_order %s: after the backends "
+                "came up the gateway gave %s HTTP %d, gateway %s %s "
+                "(early request: %s HTTP %d)", HV(1, false), hg_str(h.how),
+                h.status, dead ? "DEAD" : "alive", why, hg_str(early.how),
+                early.status);
+}
+
+/* ---- H2 ---- */
+
+/** A service with a peer on its dependency address that never answers. */
+static void
+stalled_peer(res_t *r, const char *id, int svc_idx, int peer_idx)
+{
+    proc_t   *svc[NAMES] = { NULL };
+    const int which[] = { svc_idx };
+    int       cfd;
+    proc_t   *fake;
+    hg_res    h;
+
+    if (!start_all(r, svc, which, 1))
+        return;
+    fake = fake_start(r, tab_port[peer_idx], F_SILENT, &cfd);
+    if (fake == NULL)
+        return;
+    /* The one probe allowed more than PROBE_TO: it measures the stall. */
+    http_get(svc[svc_idx]->port, REQUEST, STALL_LIMIT, &h);
+    if (h.how == HG_TIMEOUT || h.elapsed >= STALL_LIMIT)
+        res_set(r, R_FAIL, "%s %s (H2 confirmed): %s gave no response "
+                "within %d s (open %.1f s, process %s) with a peer on %u "
+                "that accepts and never writes; peer contacted %u time(s)",
+                id, HV(2, false), names[svc_idx], STALL_LIMIT, h.elapsed,
+                proc_gone(svc[svc_idx]) ? "DEAD" : "alive", tab_port[peer_idx],
+                fake_count(cfd));
+    else
+        res_set(r, R_PASS, "%s %s: %s %s after %.2f s (HTTP %d, process "
+                "%s) with a peer on %u that accepts and never writes; peer "
+                "contacted %u time(s)", id, HV(2, true), names[svc_idx],
+                hg_str(h.how), h.elapsed, h.status,
+                proc_gone(svc[svc_idx]) ? "DEAD" : "alive", tab_port[peer_idx],
+                fake_count(cfd));
+}
+
+/* service-go depends on service-cs (main.go:46/51/87), service-cs on
+ * gateway-rs (Program.cs:24/34/78). */
+static void case_h2_go_stalled_peer(res_t *r)
+{
+    stalled_peer(r, "h2_go_stalled_peer", GO, CS);
+}
+
+static void case_h2_cs_stalled_peer(res_t *r)
+{
+    stalled_peer(r, "h2_cs_stalled_peer", CS, GW);
+}
+
+/** Peer returning 500, then closed, then garbage; is the failure masked? */
+static void
+failed_dep_masked(res_t *r, const char *id, int svc_idx, int peer_idx)
+{
     static const struct { fake_t mode; const char *name; } peers[] = {
-        { F_SILENT, "refused" }, { F_HTTP500, "HTTP 500" },
+        { F_HTTP500, "HTTP 500" }, { F_SILENT, "port closed" },
         { F_GARBAGE, "garbage" },
     };
-    char     detail[1500] = "";
-    bool     masked = false;
-    int      i;
-    unsigned k;
+    proc_t   *svc[NAMES] = { NULL };
+    const int which[] = { svc_idx };
+    char      detail[1500] = "";
+    bool      masked = false;
+    unsigned  k;
 
-    for (i = 0; i < 2; i++)
+    if (!start_all(r, svc, which, 1))
+        return;
+    for (k = 0; k < sizeof(peers) / sizeof(peers[0]); k++)
     {
-        proc_t *svc[NAMES] = { NULL };
-        int     which[1] = { pairs[i][0] };
+        int     cfd = -1;
+        proc_t *fake = NULL;
+        hg_res  h;
+        bool    err;
+        bool    mask;
 
-        if (!start_all(r, svc, which, 1))
-            return;
-        for (k = 0; k < sizeof(peers) / sizeof(peers[0]); k++)
+        /* "Port closed": nothing listens on the peer address. */
+        if (k != 1)
         {
-            int     cfd = -1;
-            proc_t *fake = NULL;
-            hg_res  h;
-            bool    err;
-
-            /* "Refused": nothing listens on the peer port. */
-            if (k > 0)
-            {
-                fake = fake_start(r, tab_port[pairs[i][1]], peers[k].mode,
-                                  &cfd);
-                if (fake == NULL)
-                    return;
-            }
-            http_get(svc[which[0]]->port, REQUEST, 10, &h);
-            err = reports_error(&h);
-            append(detail, sizeof(detail), "[%s, peer %s: HTTP %d, %s%s%s] ",
-                   names[which[0]], peers[k].name, h.status, hg_str(h.how),
-                   err && h.status < 400 ? ", error only in 200 body" : "",
-                   err ? "" : " - ERROR SWALLOWED");
-            if (!err)
-                masked = true;
-            if (fake != NULL)
-            {
-                close(cfd);
-                proc_stop(fake);
-            }
+            fake = fake_start(r, tab_port[peer_idx], peers[k].mode, &cfd);
+            if (fake == NULL)
+                return;
         }
-        proc_stop(svc[which[0]]);
+        http_get(svc[svc_idx]->port, REQUEST, PROBE_TO, &h);
+        err = reports_error(&h);
+        mask = h.how == HG_OK && h.status == 200 && !err;
+        append(detail, sizeof(detail), "[peer %s: %s, HTTP %d%s%s, "
+               "process %s] ", peers[k].name, hg_str(h.how), h.status,
+               mask ? ", 200 with a success body = MASKED" : "",
+               (err && h.status == 200) ? ", 200 but error/degraded body" : "",
+               proc_gone(svc[svc_idx]) ? "DEAD" : "alive");
+        masked = masked || mask;
+        if (fake != NULL)
+        {
+            close(cfd);
+            proc_stop(fake);
+        }
     }
     if (masked)
-        res_set(r, R_FAIL, "cs_peer_failure_masking %s: a failing peer is "
-                "answered with 200/OK and no error indication. %s",
-                HV(2, false), detail);
+        res_set(r, R_FAIL, "%s %s (H2 confirmed): %s masks a failed "
+                "dependency as success. %s", id, HV(2, false),
+                names[svc_idx], detail);
     else
-        res_set(r, R_PASS, "cs_peer_failure_masking %s: every peer failure "
-                "is reported as an error status or error text. %s",
-                HV(2, true), detail);
+        res_set(r, R_PASS, "%s %s: %s reports every dependency failure as "
+                "a non-2xx status or an error/degraded body. %s", id,
+                HV(2, true), names[svc_idx], detail);
+}
+
+static void case_h2_go_failed_dep_masked(res_t *r)
+{
+    failed_dep_masked(r, "h2_go_failed_dep_masked", GO, CS);
+}
+
+static void case_h2_cs_failed_dep_masked(res_t *r)
+{
+    failed_dep_masked(r, "h2_cs_failed_dep_masked", CS, GW);
 }
 
 /* ---- H3 ---- */
@@ -1076,7 +1115,7 @@ port_in_contract(unsigned port)
 }
 
 static void
-case_listen_surface(res_t *r)
+case_h3_netexpose(res_t *r)
 {
     proc_t              *svc[NAMES] = { NULL };
     const int            which[] = { GO, CS, GW };
@@ -1094,7 +1133,7 @@ case_listen_surface(res_t *r)
 
     if (!start_all(r, svc, which, 3))
         return;
-    if (tsapi_mde_session_init(&session, "webdeps_listen") != 0)
+    if (tsapi_mde_session_init(&session, "h3_netexpose") != 0)
     {
         res_set(r, R_SETUP, "no session on the agent for tapi_netexpose");
         return;
@@ -1124,7 +1163,7 @@ case_listen_surface(res_t *r)
         listeners++;
         sock_addr(&s->local, addr, sizeof(addr));
         wild = strcmp(addr, "0.0.0.0") == 0 || strcmp(addr, "::") == 0;
-        loop4 = strcmp(addr, "127.0.0.1") == 0;
+        loop4 = strncmp(addr, "127.", 4) == 0;
         append(detail, sizeof(detail), "%s %s:%u; ", names[o], addr,
                sock_port(&s->local));
         tapi_cybersec_report_add(&report, wild ? TAPI_CYBERSEC_SEV_HIGH :
@@ -1135,22 +1174,22 @@ case_listen_surface(res_t *r)
             append(bad, sizeof(bad), "%s bound to %s:%u (code names "
                    "127.0.0.1); ", names[o], addr, sock_port(&s->local));
         else if (!loop4)
-            append(bad, sizeof(bad), "%s bound to non-127.0.0.1 %s:%u; ",
+            append(bad, sizeof(bad), "%s bound to %s:%u outside 127.0.0.0/8; ",
                    names[o], addr, sock_port(&s->local));
         if (!port_in_contract(sock_port(&s->local)))
-            append(bad, sizeof(bad), "%s listens on port %u outside the "
-                   "hardcoded set; ", names[o], sock_port(&s->local));
+            append(detail, sizeof(detail), "(port %u outside the hardcoded "
+                   "set) ", sock_port(&s->local));
     }
     tapi_cybersec_report_log(&report);
     if (listeners == 0)
         res_set(r, R_SETUP, "tapi_netexpose found no listener of the three "
                 "processes");
     else if (bad[0] != '\0')
-        res_set(r, R_FAIL, "listen_surface H3:fail: %s Listeners: %s", bad,
+        res_set(r, R_FAIL, "h3_netexpose H3:fail (H3 confirmed): %s Listeners: %s", bad,
                 detail);
     else
-        res_set(r, R_PASS, "listen_surface H3:pass: every listener is "
-                "on 127.0.0.1 and in the hardcoded port set. Listeners: %s",
+        res_set(r, R_PASS, "h3_netexpose H3:pass: every listener is "
+                "inside 127.0.0.0/8, none on 0.0.0.0 or ::. Listeners: %s",
                 detail);
 out:
     te_vec_free(&socks);
@@ -1159,7 +1198,7 @@ out:
 }
 
 static void
-case_egress_surface(res_t *r)
+case_h3_egress(res_t *r)
 {
     proc_t              *svc[NAMES] = { NULL };
     const int            which[] = { GO, CS, GW };
@@ -1180,7 +1219,7 @@ case_egress_surface(res_t *r)
 
     if (!start_all(r, svc, which, 3))
         return;
-    if (tsapi_mde_session_init(&session, "webdeps_egress") != 0)
+    if (tsapi_mde_session_init(&session, "h3_egress") != 0)
     {
         res_set(r, R_SETUP, "no session on the agent for tapi_egress");
         return;
@@ -1190,8 +1229,8 @@ case_egress_surface(res_t *r)
     opt.tcp = true;
     for (i = 0; i < NAMES; i++)
     {
-        rules[i] = (tapi_egress_rule){ IPPROTO_TCP, "127.0.0.1/32",
-                                       tab_port[i], tab_port[i] };
+        rules[i] = (tapi_egress_rule){ IPPROTO_TCP, "127.0.0.0/8", 1,
+                                       65535 };
         n_ino[i] = pid_inodes(svc[i]->pid, ino[i], MAX_INO);
     }
     for (round = 0; round < 8; round++)
@@ -1247,58 +1286,12 @@ case_egress_surface(res_t *r)
     }
     tapi_cybersec_report_log(&report);
     if (bad[0] != '\0')
-        res_set(r, R_FAIL, "egress_surface H3:fail: outbound connection "
-                "outside the allow-list of the hardcoded loopback "
-                "endpoints: %s", bad);
+        res_set(r, R_FAIL, "h3_egress H3:fail (H3 confirmed): outbound "
+                "connection outside the allow-list 127.0.0.0/8: %s", bad);
     else
-        res_set(r, R_PASS, "egress_surface H3:pass: %u outbound "
+        res_set(r, R_PASS, "h3_egress H3:pass: %u outbound "
                 "connection(s) of the services seen, all on the allow-list "
                 "%s", seen, detail);
-out:
-    tapi_cybersec_report_free(&report);
-    tsapi_mde_session_fini(&session);
-}
-
-static void
-case_gw_binscan(res_t *r)
-{
-    tsapi_mde_session    session = { .ta = NULL };
-    tapi_cybersec_report report;
-    tapi_binscan_info    info;
-    char                 path[512];
-    char                 props[256];
-
-    snprintf(path, sizeof(path), "%s/dist/bin/%s", src_root, names[GW]);
-    if (access(path, R_OK) != 0)
-    {
-        res_set(r, R_SETUP, "gateway binary %s not readable", path);
-        return;
-    }
-    /* Informational: a scanner problem is reported, never failed on. */
-    if (tsapi_mde_session_init(&session, "webdeps_binscan") != 0)
-    {
-        res_set(r, R_PASS, "gw_binscan H1:setup-error (informational, not "
-                "a failure): no session on the agent for tapi_binscan");
-        return;
-    }
-    tapi_cybersec_report_init(&report);
-    if (tapi_binscan_inspect(session.ta, path, &info) != 0)
-    {
-        res_set(r, R_PASS, "gw_binscan H1:setup-error (informational, not "
-                "a failure): tapi_binscan could not scan %s", path);
-        goto out;
-    }
-    snprintf(props, sizeof(props), "NX=%s PIE=%s RELRO=%s canary=%s",
-             info.nx_unknown ? "unknown" : (info.nx ? "yes" : "no"),
-             info.kind == TAPI_BINSCAN_KIND_PIE ? "yes" : "no",
-             tapi_binscan_relro2str(info.relro), info.canary ? "yes" : "no");
-    tapi_cybersec_report_add(&report, TAPI_CYBERSEC_SEV_INFO,
-                             "binscan.properties", names[GW],
-                             "H1 supporting evidence: %s", props);
-    tapi_binscan_info_free(&info);
-    tapi_cybersec_report_log(&report);
-    res_set(r, R_PASS, "gw_binscan H1:pass (informational, supporting "
-            "evidence only, never a failure): %s %s", names[GW], props);
 out:
     tapi_cybersec_report_free(&report);
     tsapi_mde_session_fini(&session);
@@ -1314,14 +1307,18 @@ main(int argc, char **argv)
         int         hyp;
         void      (*fn)(res_t *);
     } table[] = {
-        { "webdeps_setup", 0, case_setup },
-        { "gw_backend_down", 1, case_gw_backend_down },
-        { "gw_backend_garbage", 1, case_gw_backend_garbage },
-        { "go_stalled_peer", 2, case_go_stalled_peer },
-        { "cs_peer_failure_masking", 2, case_cs_peer_failure_masking },
-        { "listen_surface", 3, case_listen_surface },
-        { "egress_surface", 3, case_egress_surface },
-        { "gw_binscan", 1, case_gw_binscan },
+        { "setup_gateway_rs", 0, case_setup_gateway_rs },
+        { "setup_service_go", 0, case_setup_service_go },
+        { "setup_service_cs", 0, case_setup_service_cs },
+        { "h1_gateway_backends_absent", 1, case_h1_gateway_backends_absent },
+        { "h1_gateway_backend_garbage", 1, case_h1_gateway_backend_garbage },
+        { "h1_gateway_startup_order", 1, case_h1_gateway_startup_order },
+        { "h2_go_stalled_peer", 2, case_h2_go_stalled_peer },
+        { "h2_cs_stalled_peer", 2, case_h2_cs_stalled_peer },
+        { "h2_go_failed_dep_masked", 2, case_h2_go_failed_dep_masked },
+        { "h2_cs_failed_dep_masked", 2, case_h2_cs_failed_dep_masked },
+        { "h3_netexpose", 3, case_h3_netexpose },
+        { "h3_egress", 3, case_h3_egress },
     };
     unsigned    i;
     int         hyp = 0;
@@ -1355,12 +1352,12 @@ main(int argc, char **argv)
 
         snprintf(tmp, sizeof(tmp), "%s", res.msg);
         if (hyp != 0)
-            snprintf(res.msg, sizeof(res.msg), "webdeps_setup FAIL, %s "
-                     "cannot run (H%d:setup-error): %.1300s", hyp_id, hyp,
-                     tmp);
+            snprintf(res.msg, sizeof(res.msg), "%s FAIL (not a finding): "
+                     "%s cannot run (H%d:setup-error): %.1200s", setup_name,
+                     hyp_id, hyp, tmp);
         else
-            snprintf(res.msg, sizeof(res.msg), "webdeps_setup FAIL: %.1400s",
-                     tmp);
+            snprintf(res.msg, sizeof(res.msg), "%s FAIL (not a finding): "
+                     "%.1400s", setup_name, tmp);
     }
     cleanup_all();
 

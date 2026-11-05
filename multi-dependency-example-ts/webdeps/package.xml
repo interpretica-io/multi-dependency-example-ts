@@ -11,8 +11,8 @@
             run is independent and ends with an explicit verdict string
             (H1:pass, H1:fail, H2:pass, H2:fail, H3:pass, H3:fail or
             H<n>:setup-error).
-          - A missing binary, contract or port is a distinct FAIL named
-            webdeps_setup, so that a harness failure is not a finding.
+          - A missing binary or busy port is a distinct FAIL named
+            setup_<component>, so that a harness failure is not a finding.
           - There is no group prologue or epilogue.
     -->
 
@@ -20,75 +20,111 @@
 
     <session track_conf="silent">
 
-        <run name="webdeps_setup">
+        <run name="setup_gateway_rs">
             <script name="webdeps_hyp">
-                <objective>[setup] Start gateway-rs, service-go and service-cs from the built tree and check each listens on its hardcoded port; logs exit code and 2 KB of stderr of every process. A failure here is FAIL webdeps_setup, not a finding.</objective>
+                <objective>[setup] Start gateway-rs from the built tree and wait up to 5 s for its port to accept TCP. A failure here is the distinct failed test setup_gateway_rs (binary missing, port busy), not a finding.</objective>
             </script>
             <arg name="hyp_id">
-                <value>webdeps_setup</value>
+                <value>setup_gateway_rs</value>
             </arg>
         </run>
 
-        <run name="gw_backend_down">
+        <run name="setup_service_go">
             <script name="webdeps_hyp">
-                <objective>[H1] Gateway alone, no backends: GET every backend route; FAIL H1 if the process exits, aborts or prints 'panicked'. Verdict H1:pass / H1:fail.</objective>
+                <objective>[setup] Same for service-go; failure is setup_service_go.</objective>
             </script>
             <arg name="hyp_id">
-                <value>gw_backend_down</value>
+                <value>setup_service_go</value>
             </arg>
         </run>
 
-        <run name="gw_backend_garbage">
+        <run name="setup_service_cs">
             <script name="webdeps_hyp">
-                <objective>[H1] Fake C backend on the service-go then the service-cs address replying empty body, truncated JSON, random bytes and a reset after accept; FAIL H1 if the gateway dies or panics. Verdict H1:pass / H1:fail.</objective>
+                <objective>[setup] Same for service-cs; failure is setup_service_cs.</objective>
             </script>
             <arg name="hyp_id">
-                <value>gw_backend_garbage</value>
+                <value>setup_service_cs</value>
             </arg>
         </run>
 
-        <run name="go_stalled_peer">
+        <run name="h1_gateway_backends_absent">
             <script name="webdeps_hyp">
-                <objective>[H2] service-go with a fake peer on its upstream that accepts and never replies; FAIL H2 if no response within 30 s. Verdict H2:pass / H2:fail.</objective>
+                <objective>[H1] Gateway with nothing on the backend addresses; GET each route with a 3 s timeout. FAIL (H1 confirmed) if the process exits, the connection is reset, or exit status is SIGABRT / 101 / panic.</objective>
             </script>
             <arg name="hyp_id">
-                <value>go_stalled_peer</value>
+                <value>h1_gateway_backends_absent</value>
             </arg>
         </run>
 
-        <run name="cs_peer_failure_masking">
+        <run name="h1_gateway_backend_garbage">
             <script name="webdeps_hyp">
-                <objective>[H2] service-cs, then service-go, with the peer refusing, answering HTTP 500 and sending garbage; FAIL H2 if a 200/OK has no error indication. Verdict H2:pass / H2:fail.</objective>
+                <objective>[H1] Fake peer on each backend address in turn replying (a) empty body, (b) non-JSON bytes, (c) truncated JSON, (d) a 500. FAIL (H1 confirmed) if the gateway dies; the verdict names the reply kind.</objective>
             </script>
             <arg name="hyp_id">
-                <value>cs_peer_failure_masking</value>
+                <value>h1_gateway_backend_garbage</value>
             </arg>
         </run>
 
-        <run name="listen_surface">
+        <run name="h1_gateway_startup_order">
             <script name="webdeps_hyp">
-                <objective>[H3] tapi_netexpose over the three running services; FAIL H3 on 0.0.0.0, ::, a non-loopback address or a port outside the hardcoded set. Findings go to the tapi_cybersec_report. Verdict H3:pass / H3:fail.</objective>
+                <objective>[H1] Gateway first, backends 2 s later. PASS if the gateway serves correctly afterwards.</objective>
             </script>
             <arg name="hyp_id">
-                <value>listen_surface</value>
+                <value>h1_gateway_startup_order</value>
             </arg>
         </run>
 
-        <run name="egress_surface">
+        <run name="h2_go_stalled_peer">
             <script name="webdeps_hyp">
-                <objective>[H3] tapi_egress with an allow-list of the hardcoded loopback endpoints, one request through each service; FAIL H3 on any other destination. Verdict H3:pass / H3:fail.</objective>
+                <objective>[H2] service-go with a peer on its dependency address that accepts and never writes. FAIL (H2 confirmed) if no response within 10 s.</objective>
             </script>
             <arg name="hyp_id">
-                <value>egress_surface</value>
+                <value>h2_go_stalled_peer</value>
             </arg>
         </run>
 
-        <run name="gw_binscan">
+        <run name="h2_cs_stalled_peer">
             <script name="webdeps_hyp">
-                <objective>[H1, informational] tapi_binscan of the gateway binary appended to the report; never fails.</objective>
+                <objective>[H2] Same for service-cs.</objective>
             </script>
             <arg name="hyp_id">
-                <value>gw_binscan</value>
+                <value>h2_cs_stalled_peer</value>
+            </arg>
+        </run>
+
+        <run name="h2_go_failed_dep_masked">
+            <script name="webdeps_hyp">
+                <objective>[H2] service-go with the peer returning 500, then closed, then garbage. FAIL (H2 confirmed) if a 200 with a success body is returned.</objective>
+            </script>
+            <arg name="hyp_id">
+                <value>h2_go_failed_dep_masked</value>
+            </arg>
+        </run>
+
+        <run name="h2_cs_failed_dep_masked">
+            <script name="webdeps_hyp">
+                <objective>[H2] Same for service-cs.</objective>
+            </script>
+            <arg name="hyp_id">
+                <value>h2_cs_failed_dep_masked</value>
+            </arg>
+        </run>
+
+        <run name="h3_netexpose">
+            <script name="webdeps_hyp">
+                <objective>[H3] All three components running; tapi_netexpose listeners into the tapi_cybersec_report. FAIL (H3 confirmed) for 0.0.0.0, :: or any address outside 127.0.0.0/8.</objective>
+            </script>
+            <arg name="hyp_id">
+                <value>h3_netexpose</value>
+            </arg>
+        </run>
+
+        <run name="h3_egress">
+            <script name="webdeps_hyp">
+                <objective>[H3] tapi_egress with only 127.0.0.0/8 allowed over a normal request cycle. FAIL (H3 confirmed) for any other destination.</objective>
+            </script>
+            <arg name="hyp_id">
+                <value>h3_egress</value>
             </arg>
         </run>
     </session>

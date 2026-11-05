@@ -1131,35 +1131,51 @@
             <objective/>
             <notes/>
             <iter result="PASSED">
-              <arg name="hyp_id">webdeps_setup</arg>
+              <arg name="hyp_id">setup_gateway_rs</arg>
               <notes/>
             </iter>
             <iter result="PASSED">
-              <arg name="hyp_id">gw_backend_down</arg>
+              <arg name="hyp_id">setup_service_go</arg>
               <notes/>
             </iter>
             <iter result="PASSED">
-              <arg name="hyp_id">gw_backend_garbage</arg>
+              <arg name="hyp_id">setup_service_cs</arg>
               <notes/>
             </iter>
             <iter result="PASSED">
-              <arg name="hyp_id">go_stalled_peer</arg>
+              <arg name="hyp_id">h1_gateway_backends_absent</arg>
               <notes/>
             </iter>
             <iter result="PASSED">
-              <arg name="hyp_id">cs_peer_failure_masking</arg>
+              <arg name="hyp_id">h1_gateway_backend_garbage</arg>
               <notes/>
             </iter>
             <iter result="PASSED">
-              <arg name="hyp_id">listen_surface</arg>
+              <arg name="hyp_id">h1_gateway_startup_order</arg>
               <notes/>
             </iter>
             <iter result="PASSED">
-              <arg name="hyp_id">egress_surface</arg>
+              <arg name="hyp_id">h2_go_stalled_peer</arg>
               <notes/>
             </iter>
             <iter result="PASSED">
-              <arg name="hyp_id">gw_binscan</arg>
+              <arg name="hyp_id">h2_cs_stalled_peer</arg>
+              <notes/>
+            </iter>
+            <iter result="PASSED">
+              <arg name="hyp_id">h2_go_failed_dep_masked</arg>
+              <notes/>
+            </iter>
+            <iter result="PASSED">
+              <arg name="hyp_id">h2_cs_failed_dep_masked</arg>
+              <notes/>
+            </iter>
+            <iter result="PASSED">
+              <arg name="hyp_id">h3_netexpose</arg>
+              <notes/>
+            </iter>
+            <iter result="PASSED">
+              <arg name="hyp_id">h3_egress</arg>
               <notes/>
             </iter>
           </test>

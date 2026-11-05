@@ -39,7 +39,7 @@ for **maximum evidence**:
 |---|---|---|
 | `ring` | suite model (`lib/tsapi_mde_ring`) | `propagation` (72 it.), `reference`, `sweep`, `determinism`, `entry_matrix`: every stage line checked against a reference model of the five formulas |
 | `web` | suite (`lib/tsapi_mde_web`) | `cycle`, `latency`, `contract`, `robustness`, `h1_gateway_backends`, `h2_stalled_peer` (hypotheses H1, H2) |
-| `webdeps` | tsf-cybersec (netexpose, egress, binscan) | `webdeps_hyp`, one source run once per test: `webdeps_setup`, `gw_backend_down`, `gw_backend_garbage` (H1), `go_stalled_peer`, `cs_peer_failure_masking` (H2), `listen_surface`, `egress_surface` (H3), `gw_binscan` (informational); every verdict carries `H<n>:pass`, `H<n>:fail` or `H<n>:setup-error`; a missing binary, port or tool is a distinct FAIL `webdeps_setup`, not a finding |
+| `webdeps` | tsf-cybersec (netexpose, egress) | `webdeps_hyp`, one source run once per test: `setup_gateway_rs`, `setup_service_go`, `setup_service_cs`, `h1_gateway_backends_absent`, `h1_gateway_backend_garbage`, `h1_gateway_startup_order` (H1), `h2_go_stalled_peer`, `h2_cs_stalled_peer`, `h2_go_failed_dep_masked`, `h2_cs_failed_dep_masked` (H2), `h3_netexpose`, `h3_egress` (H3); every verdict names its hypothesis (`H<n>:pass` / `H<n>:fail`); a missing binary or busy port is a distinct FAIL `setup_<component>`, not a finding |
 | `graph` | binutils | `links`, `symbols`, `cycle_closure` (DOT graph artifact) |
 | `binary` | tsf-cybersec (binscan, objdump) | `hardening`, `hardening_matrix`, `disasm_defect`, `linked_libs` |
 | `devtool` | tsf-devtool | `rebuild_pycore`, `make_stub`, `reproducible` |
