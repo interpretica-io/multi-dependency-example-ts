@@ -73,6 +73,37 @@ extern te_errno tsapi_mde_web_start(tsapi_mde_session *session,
                                     tsapi_mde_web *web);
 
 /**
+ * Reset a tier to "nothing started" with the contract filled in; call it
+ * before tsapi_mde_web_start_one().
+ *
+ * @param web       Tier.
+ */
+extern void tsapi_mde_web_init(tsapi_mde_web *web);
+
+/**
+ * Start one service of the tier and wait until it announces its URL.
+ * Services started one after another on the same tier run together.
+ *
+ * @param session   Session.
+ * @param dut       Example.
+ * @param web       Tier; stop it with tsapi_mde_web_stop().
+ * @param idx       Index of the service (contract order).
+ *
+ * @return Status code.
+ */
+extern te_errno tsapi_mde_web_start_one(tsapi_mde_session *session,
+                                        const tsapi_mde_dut *dut,
+                                        tsapi_mde_web *web, unsigned int idx);
+
+/**
+ * Stop one service of the tier, leaving the others running.
+ *
+ * @param web       Tier.
+ * @param idx       Index of the service.
+ */
+extern void tsapi_mde_web_stop_one(tsapi_mde_web *web, unsigned int idx);
+
+/**
  * Stop whatever of the tier was started.
  *
  * @param web       Tier.

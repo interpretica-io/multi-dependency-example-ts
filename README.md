@@ -38,14 +38,14 @@ for **maximum evidence**:
 | Group | Modules | Tests |
 |---|---|---|
 | `ring` | suite model (`lib/tsapi_mde_ring`) | `propagation` (72 it.), `reference`, `sweep`, `determinism`, `entry_matrix`: every stage line checked against a reference model of the five formulas |
-| `web` | suite (`lib/tsapi_mde_web`) | `cycle`, `latency`, `contract`, `robustness` |
+| `web` | suite (`lib/tsapi_mde_web`) | `cycle`, `latency`, `contract`, `robustness`, `h1_gateway_backends`, `h2_stalled_peer` (hypotheses H1, H2) |
 | `graph` | binutils | `links`, `symbols`, `cycle_closure` (DOT graph artifact) |
 | `binary` | tsf-cybersec (binscan, objdump) | `hardening`, `hardening_matrix`, `disasm_defect`, `linked_libs` |
 | `devtool` | tsf-devtool | `rebuild_pycore`, `make_stub`, `reproducible` |
 | `package` | tsf-package | `dut_runtime_deps` |
 | `fs` | tsf-fs | `perm_audit`, `secrets`, `integrity` |
 | `memmap` | tsf-memorymap | `elf`, `proc` |
-| `exposure` | tsf-cybersec (netexpose, egress, sniffrules, frida) | `listeners`, `reachability`, `egress`, `sniff`, `frida` |
+| `exposure` | tsf-cybersec (netexpose, egress, sniffrules, frida) | `listeners`, `reachability`, `egress`, `sniff`, `frida`, `h3_endpoints` (hypothesis H3) |
 | `http` | tsf-http | `headers`, `methods`, `redirects`, `load_curve` |
 | `fuzz` | tsf-fuzz | `ring_abi` (libFuzzer + ASan on the ring's C ABI), `replay` |
 | `container` | tsf-container | `ring_inside` (the ring walked inside images it was not built for) |

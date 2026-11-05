@@ -8,6 +8,7 @@ tests = [
     'egress',
     'sniff',
     'frida',
+    'h3_endpoints',
 ]
 
 foreach test : tests

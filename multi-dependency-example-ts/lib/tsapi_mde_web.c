@@ -111,11 +111,9 @@ out:
 }
 
 /* See description in tsapi_mde_web.h */
-te_errno
-tsapi_mde_web_start(tsapi_mde_session *session, const tsapi_mde_dut *dut,
-                    tsapi_mde_web *web)
+void
+tsapi_mde_web_init(tsapi_mde_web *web)
 {
-    te_errno     rc;
     unsigned int i;
 
     memset(web, 0, sizeof(*web));
@@ -124,6 +122,48 @@ tsapi_mde_web_start(tsapi_mde_session *session, const tsapi_mde_dut *dut,
         web->svc[i].name = contract[i].name;
         web->svc[i].port = contract[i].port;
     }
+}
+
+/* See description in tsapi_mde_web.h */
+te_errno
+tsapi_mde_web_start_one(tsapi_mde_session *session, const tsapi_mde_dut *dut,
+                        tsapi_mde_web *web, unsigned int idx)
+{
+    te_errno rc;
+
+    if (idx >= TSAPI_MDE_WEB_N)
+        return TE_RC(TE_TAPI, TE_EINVAL);
+
+    /* stop() skips the services that have no job. */
+    web->n_started = TSAPI_MDE_WEB_N;
+    rc = service_start(session, dut, &web->svc[idx]);
+    if (rc == 0)
+        RING("%s listens on %u after %.3f s", web->svc[idx].name,
+             web->svc[idx].port, web->svc[idx].start_s);
+
+    return rc;
+}
+
+/* See description in tsapi_mde_web.h */
+void
+tsapi_mde_web_stop_one(tsapi_mde_web *web, unsigned int idx)
+{
+    if (idx < TSAPI_MDE_WEB_N && web->svc[idx].job != NULL)
+    {
+        tapi_job_destroy(web->svc[idx].job, -1);
+        web->svc[idx].job = NULL;
+    }
+}
+
+/* See description in tsapi_mde_web.h */
+te_errno
+tsapi_mde_web_start(tsapi_mde_session *session, const tsapi_mde_dut *dut,
+                    tsapi_mde_web *web)
+{
+    te_errno     rc;
+    unsigned int i;
+
+    tsapi_mde_web_init(web);
 
     for (i = 0; i < TSAPI_MDE_WEB_N; i++)
     {

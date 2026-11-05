@@ -1108,6 +1108,14 @@
             <objective/>
             <notes/>
           </test>
+          <test name="h1_gateway_backends" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="h2_stalled_peer" type="script">
+            <objective/>
+            <notes/>
+          </test>
           <test name="epilogue" type="script">
             <objective/>
             <notes/>
@@ -1424,6 +1432,10 @@
             <notes/>
           </test>
           <test name="sniff" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="h3_endpoints" type="script">
             <objective/>
             <notes/>
           </test>

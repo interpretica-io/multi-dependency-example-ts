@@ -14,6 +14,7 @@
           - @ref mde-exposure-egress       - outgoing connections during walks
           - @ref mde-exposure-sniff        - traffic rules over a captured walk
           - @ref mde-exposure-frida        - connect() traced inside gateway-rs
+          - @ref mde-exposure-h3           - loopback-only listeners and egress (H3)
 
           @par Notes:
           - The agent shares the host network: the socket tables hold the
@@ -301,6 +302,42 @@
             </arg>
             <arg name="hops">
                 <value>5</value>
+            </arg>
+        </run>
+
+        <!-- @page mde-exposure-h3 H3: Loopback-only Endpoints
+              @objective Settle H3: the hardcoded loopback endpoints are the
+                         only ones in use and no listener is exposed.
+
+              @par Test Parameters:
+              | Parameter    | Values            | Description                  |
+              |==============|===================|==============================|
+              | min_severity | high / critical   | Lowest finding severity that fails the report gate |
+
+              @par Scenario:
+              -# Take the listener baseline, start the tier and some walks.
+              -# tapi_netexpose_check() with 8081-8083 allowed on loopback
+                 only; list listeners of the tier and of the agent's user
+                 started after the baseline; one on 0.0.0.0 or a
+                 non-loopback address counts as exposed.
+              -# tapi_egress snapshots; a destination outside
+                 127.0.0.1:8081-8083 and outside loopback counts as egress.
+              -# tapi_binscan on the three binaries: NX, PIE, RELRO, canary
+                 as info findings in the report (not in the verdict).
+              -# Exposed or egress: "H3 PROVEN", test fails; else "H3
+                 DISPROVEN".
+        -->
+        <run name="h3_endpoints">
+            <script name="h3_endpoints">
+                <objective>
+                    Check listeners and egress of the tier are loopback only.
+
+                    @md
+                </objective>
+            </script>
+
+            <arg name="min_severity">
+                <value>high</value>
             </arg>
         </run>
     </session>
