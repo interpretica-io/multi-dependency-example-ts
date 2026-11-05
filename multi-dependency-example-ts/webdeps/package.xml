@@ -7,10 +7,12 @@
                      between gateway-rs, service-go and service-cs.
 
           @par Notes:
-          - One test source, run once per case id (argument hyp_id); every
-            run is independent and ends with a PASS, FAIL or SKIP verdict
-            whose text starts with the case id.
-          - A missing binary, contract or port is a SKIP with the reason.
+          - One test source, run once per test name (argument hyp_id); every
+            run is independent and ends with an explicit verdict string
+            (H1:pass, H1:fail, H2:pass, H2:fail, H3:pass, H3:fail or
+            H<n>:setup-error).
+          - A missing binary, contract or port is a distinct FAIL named
+            webdeps_setup, so that a harness failure is not a finding.
           - There is no group prologue or epilogue.
     -->
 
@@ -18,84 +20,75 @@
 
     <session track_conf="silent">
 
-        <run name="webdeps_h1a">
+        <run name="webdeps_setup">
             <script name="webdeps_hyp">
-                <objective>[H1-a] Gateway alone, no backends: must stay alive (no 'panicked at') and answer a clean error or 5xx within 5 s.</objective>
+                <objective>[setup] Start gateway-rs, service-go and service-cs from the built tree and check each listens on its hardcoded port; logs exit code and 2 KB of stderr of every process. A failure here is FAIL webdeps_setup, not a finding.</objective>
             </script>
             <arg name="hyp_id">
-                <value>H1-a</value>
+                <value>webdeps_setup</value>
             </arg>
         </run>
 
-        <run name="webdeps_h1b">
+        <run name="gw_backend_down">
             <script name="webdeps_hyp">
-                <objective>[H1-b] Gateway with fake backends sending garbage, invalid JSON, empty body and a 10 MB body: alive after each case.</objective>
+                <objective>[H1] Gateway alone, no backends: GET every backend route; FAIL H1 if the process exits, aborts or prints 'panicked'. Verdict H1:pass / H1:fail.</objective>
             </script>
             <arg name="hyp_id">
-                <value>H1-b</value>
+                <value>gw_backend_down</value>
             </arg>
         </run>
 
-        <run name="webdeps_h1c">
+        <run name="gw_backend_garbage">
             <script name="webdeps_hyp">
-                <objective>[H1-c] Backends and gateway up, service-go then service-cs killed: gateway survives and returns an error status.</objective>
+                <objective>[H1] Fake C backend on the service-go then the service-cs address replying empty body, truncated JSON, random bytes and a reset after accept; FAIL H1 if the gateway dies or panics. Verdict H1:pass / H1:fail.</objective>
             </script>
             <arg name="hyp_id">
-                <value>H1-c</value>
+                <value>gw_backend_garbage</value>
             </arg>
         </run>
 
-        <run name="webdeps_h2a">
+        <run name="go_stalled_peer">
             <script name="webdeps_hyp">
-                <objective>[H2-a] service-go with a fake peer that accepts and never replies; FAIL if still blocked at 15 s.</objective>
+                <objective>[H2] service-go with a fake peer on its upstream that accepts and never replies; FAIL H2 if no response within 30 s. Verdict H2:pass / H2:fail.</objective>
             </script>
             <arg name="hyp_id">
-                <value>H2-a</value>
+                <value>go_stalled_peer</value>
             </arg>
         </run>
 
-        <run name="webdeps_h2b">
+        <run name="cs_peer_failure_masking">
             <script name="webdeps_hyp">
-                <objective>[H2-b] service-cs with a stalled fake peer; FAIL if still blocked at 15 s.</objective>
+                <objective>[H2] service-cs, then service-go, with the peer refusing, answering HTTP 500 and sending garbage; FAIL H2 if a 200/OK has no error indication. Verdict H2:pass / H2:fail.</objective>
             </script>
             <arg name="hyp_id">
-                <value>H2-b</value>
+                <value>cs_peer_failure_masking</value>
             </arg>
         </run>
 
-        <run name="webdeps_h2c">
+        <run name="listen_surface">
             <script name="webdeps_hyp">
-                <objective>[H2-c] service-cs and service-go with the upstream answering 500, then refusing: FAIL if 200 (error swallowed).</objective>
+                <objective>[H3] tapi_netexpose over the three running services; FAIL H3 on 0.0.0.0, ::, a non-loopback address or a port outside the hardcoded set. Findings go to the tapi_cybersec_report. Verdict H3:pass / H3:fail.</objective>
             </script>
             <arg name="hyp_id">
-                <value>H2-c</value>
+                <value>listen_surface</value>
             </arg>
         </run>
 
-        <run name="webdeps_h3a">
+        <run name="egress_surface">
             <script name="webdeps_hyp">
-                <objective>[H3-a] tapi_netexpose listeners per process: FAIL on 0.0.0.0 or :: or a port outside the hardcoded set.</objective>
+                <objective>[H3] tapi_egress with an allow-list of the hardcoded loopback endpoints, one request through each service; FAIL H3 on any other destination. Verdict H3:pass / H3:fail.</objective>
             </script>
             <arg name="hyp_id">
-                <value>H3-a</value>
+                <value>egress_surface</value>
             </arg>
         </run>
 
-        <run name="webdeps_h3b">
+        <run name="gw_binscan">
             <script name="webdeps_hyp">
-                <objective>[H3-b] tapi_egress with an allow-list of the hardcoded loopback endpoints: FAIL on any other destination.</objective>
+                <objective>[H1, informational] tapi_binscan of the gateway binary appended to the report; never fails.</objective>
             </script>
             <arg name="hyp_id">
-                <value>H3-b</value>
-            </arg>
-        </run>
-
-        <run name="webdeps_h3c">
-            <script name="webdeps_hyp">
-                <objective>[H3-c] tapi_binscan of the three binaries, informational only, never fails.</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>H3-c</value>
+                <value>gw_binscan</value>
             </arg>
         </run>
     </session>

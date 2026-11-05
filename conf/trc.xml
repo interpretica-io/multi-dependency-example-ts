@@ -1131,39 +1131,35 @@
             <objective/>
             <notes/>
             <iter result="PASSED">
-              <arg name="hyp_id">H1-a</arg>
+              <arg name="hyp_id">webdeps_setup</arg>
               <notes/>
             </iter>
             <iter result="PASSED">
-              <arg name="hyp_id">H1-b</arg>
+              <arg name="hyp_id">gw_backend_down</arg>
               <notes/>
             </iter>
             <iter result="PASSED">
-              <arg name="hyp_id">H1-c</arg>
+              <arg name="hyp_id">gw_backend_garbage</arg>
               <notes/>
             </iter>
             <iter result="PASSED">
-              <arg name="hyp_id">H2-a</arg>
+              <arg name="hyp_id">go_stalled_peer</arg>
               <notes/>
             </iter>
             <iter result="PASSED">
-              <arg name="hyp_id">H2-b</arg>
+              <arg name="hyp_id">cs_peer_failure_masking</arg>
               <notes/>
             </iter>
             <iter result="PASSED">
-              <arg name="hyp_id">H2-c</arg>
+              <arg name="hyp_id">listen_surface</arg>
               <notes/>
             </iter>
             <iter result="PASSED">
-              <arg name="hyp_id">H3-a</arg>
+              <arg name="hyp_id">egress_surface</arg>
               <notes/>
             </iter>
             <iter result="PASSED">
-              <arg name="hyp_id">H3-b</arg>
-              <notes/>
-            </iter>
-            <iter result="PASSED">
-              <arg name="hyp_id">H3-c</arg>
+              <arg name="hyp_id">gw_binscan</arg>
               <notes/>
             </iter>
           </test>
