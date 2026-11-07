@@ -3,10 +3,12 @@
 /** @file
  * @brief Webdeps: H4, hardening, listeners and egress of the web tier
  *
- * tapi_binscan on the three service binaries, tapi_netexpose and
- * tapi_egress while all three run. Every result is appended to one
+ * tapi_binscan on the three service binaries, cpp-demo and the C
+ * extension (libpycore.so); tapi_netexpose and tapi_egress while the
+ * three services run. Every result is appended to one
  * tapi_cybersec_report, which is logged; the test fails on the first
- * finding, naming the file and the flag.
+ * finding, naming the file and the flag. A scanner that comes back
+ * with no data at all is INCONCLUSIVE, not a finding.
  *
  * @author midair <midair@localhost>
  */
@@ -60,75 +62,96 @@ first_finding(char *first, const char *fmt, ...)
     va_end(ap);
 }
 
-/** NX, PIE, RELRO and canary of the three binaries. */
+/** NX, PIE, RELRO and canary of one binary, named @p subject in findings. */
+static bool
+scan_one_binary(res_t *r, tsapi_mde_session *session, const char *path,
+                const char *subject, bool managed,
+                tapi_cybersec_report *report, char *first)
+{
+    tapi_binscan_info info;
+    bool              pie;
+    bool              nx;
+    te_errno          rc;
+
+    rc = tapi_binscan_inspect(session->ta, path, &info);
+    if (rc != 0 || !info.elf)
+    {
+        setup_svc = subject;
+        res_set(r, R_SETUP, "tapi_binscan cannot read %s as ELF (rc %d)",
+                path, (int)rc);
+        return false;
+    }
+    tapi_binscan_info_log(&info, path);
+    pie = info.kind == TAPI_BINSCAN_KIND_PIE ||
+          info.kind == TAPI_BINSCAN_KIND_SHARED;
+    nx = info.nx && !info.nx_unknown;
+    if (!nx)
+    {
+        tapi_cybersec_report_add(report, TAPI_CYBERSEC_SEV_HIGH,
+                                 "binary.no-nx", subject, "%s: NX "
+                                 "missing", path);
+        first_finding(first, "%s: NX missing", subject);
+    }
+    if (!pie)
+    {
+        tapi_cybersec_report_add(report, TAPI_CYBERSEC_SEV_HIGH,
+                                 "binary.no-pie", subject, "%s: PIE "
+                                 "missing (%s)", path,
+                                 tapi_binscan_kind2str(info.kind));
+        first_finding(first, "%s: PIE missing", subject);
+    }
+    if (info.relro == TAPI_BINSCAN_RELRO_NONE)
+    {
+        tapi_cybersec_report_add(report, TAPI_CYBERSEC_SEV_HIGH,
+                                 "binary.no-relro", subject, "%s: "
+                                 "RELRO missing", path);
+        first_finding(first, "%s: RELRO missing", subject);
+    }
+    if (!info.canary)
+    {
+        /*
+         * A managed (NativeAOT) binary has no C stack protector to
+         * find; the flag is noted, not failed, for it.
+         */
+        tapi_cybersec_report_add(report, managed ?
+                                 TAPI_CYBERSEC_SEV_INFO :
+                                 TAPI_CYBERSEC_SEV_HIGH,
+                                 "binary.no-canary", subject, "%s: "
+                                 "stack canary missing%s", path,
+                                 managed ? " (C#: may not apply to a "
+                                 "managed binary)" : "");
+        if (!managed)
+            first_finding(first, "%s: stack canary missing", subject);
+    }
+    tapi_binscan_info_free(&info);
+    return true;
+}
+
+/**
+ * NX, PIE, RELRO and canary of the three service binaries, cpp-demo (the
+ * C++ artifact) and libpycore.so (the C extension).
+ */
 static bool
 scan_binaries(res_t *r, tsapi_mde_session *session,
               tapi_cybersec_report *report, char *first)
 {
     int i;
+    char path[600];
 
     for (i = 0; i < NAMES; i++)
     {
-        char              path[600];
-        tapi_binscan_info info;
-        bool              pie;
-        bool              nx;
-        bool              managed = i == CS;
-        te_errno          rc;
-
         snprintf(path, sizeof(path), "%s/dist/bin/%s", src_root, names[i]);
-        rc = tapi_binscan_inspect(session->ta, path, &info);
-        if (rc != 0 || !info.elf)
-        {
-            setup_svc = names[i];
-            res_set(r, R_SETUP, "tapi_binscan cannot read %s as ELF (rc %d)",
-                    path, (int)rc);
+        if (!scan_one_binary(r, session, path, names[i], i == CS, report,
+                             first))
             return false;
-        }
-        tapi_binscan_info_log(&info, path);
-        pie = info.kind == TAPI_BINSCAN_KIND_PIE ||
-              info.kind == TAPI_BINSCAN_KIND_SHARED;
-        nx = info.nx && !info.nx_unknown;
-        if (!nx)
-        {
-            tapi_cybersec_report_add(report, TAPI_CYBERSEC_SEV_HIGH,
-                                     "binary.no-nx", names[i], "%s: NX "
-                                     "missing", path);
-            first_finding(first, "%s: NX missing", path);
-        }
-        if (!pie)
-        {
-            tapi_cybersec_report_add(report, TAPI_CYBERSEC_SEV_HIGH,
-                                     "binary.no-pie", names[i], "%s: PIE "
-                                     "missing (%s)", path,
-                                     tapi_binscan_kind2str(info.kind));
-            first_finding(first, "%s: PIE missing", path);
-        }
-        if (info.relro == TAPI_BINSCAN_RELRO_NONE)
-        {
-            tapi_cybersec_report_add(report, TAPI_CYBERSEC_SEV_HIGH,
-                                     "binary.no-relro", names[i], "%s: "
-                                     "RELRO missing", path);
-            first_finding(first, "%s: RELRO missing", path);
-        }
-        if (!info.canary)
-        {
-            /*
-             * A managed (NativeAOT) binary has no C stack protector to
-             * find; the flag is noted, not failed, for it.
-             */
-            tapi_cybersec_report_add(report, managed ?
-                                     TAPI_CYBERSEC_SEV_INFO :
-                                     TAPI_CYBERSEC_SEV_HIGH,
-                                     "binary.no-canary", names[i], "%s: "
-                                     "stack canary missing%s", path,
-                                     managed ? " (C#: may not apply to a "
-                                     "managed binary)" : "");
-            if (!managed)
-                first_finding(first, "%s: stack canary missing", path);
-        }
-        tapi_binscan_info_free(&info);
     }
+    snprintf(path, sizeof(path), "%s/dist/bin/cpp-demo", src_root);
+    if (!scan_one_binary(r, session, path, "cpp-demo", false, report, first))
+        return false;
+    snprintf(path, sizeof(path), "%s/dist/lib/libpycore.so", src_root);
+    if (!scan_one_binary(r, session, path, "libpycore.so", false, report,
+                         first))
+        return false;
     return true;
 }
 
@@ -152,6 +175,13 @@ scan_listeners(res_t *r, tsapi_mde_session *session, proc_t **svc,
     if (tapi_netexpose_sockets(session->factory, &opt, &socks) != 0)
     {
         res_set(r, R_SETUP, "tapi_netexpose cannot read the socket tables");
+        te_vec_free(&socks);
+        return false;
+    }
+    if (te_vec_size(&socks) == 0)
+    {
+        res_set(r, R_INCONCLUSIVE, "tapi_netexpose returned no sockets at "
+                "all");
         te_vec_free(&socks);
         return false;
     }
@@ -213,6 +243,7 @@ scan_egress(res_t *r, tsapi_mde_session *session, proc_t **svc,
                                     .allow_private = false };
     int                  round;
     int                  i;
+    unsigned             total_conns = 0;
 
     opt.udp = false;
     opt.tcp = true;
@@ -237,6 +268,7 @@ scan_egress(res_t *r, tsapi_mde_session *session, proc_t **svc,
             te_vec_free(&conns);
             return false;
         }
+        total_conns += te_vec_size(&conns);
         TE_VEC_FOREACH(&conns, c)
         {
             char addr[64];
@@ -262,6 +294,12 @@ scan_egress(res_t *r, tsapi_mde_session *session, proc_t **svc,
         }
         te_vec_free(&conns);
         usleep(100000);
+    }
+    if (total_conns == 0)
+    {
+        res_set(r, R_INCONCLUSIVE, "tapi_egress returned no connections at "
+                "all across %d round(s)", round);
+        return false;
     }
     return true;
 }

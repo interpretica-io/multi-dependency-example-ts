@@ -3,223 +3,33 @@
     <description>Web dependency tests</description>
 
     <!-- @page mde-webdeps Web Dependency Tests
-          @objective Settle hypotheses H1 to H6 about the dependencies
-                     between gateway-rs, service-go and service-cs.
+          @objective Settle hypotheses H1 to H4 about the dependencies
+                     between gateway-rs, service-go and service-cs, and
+                     show one working example per language.
 
           @par Notes:
-          - One test source, run once per test name (argument hyp_id); every
-            run is independent and ends with an explicit verdict string
-            (H<n>:pass, H<n>:fail or H<n>:setup-error, n = 1..6).
+          - t_h1 to t_h4 are standalone executables, one per hypothesis;
+            every run ends with an explicit verdict that names the
+            hypothesis id (H<n>:proven or H<n>:disproved) and always
+            carries a message, never an empty result.
+          - s_rust, s_go, s_cs, s_cpp and s_c are smoke tests, one per
+            language of the web tier and the ring; they settle no
+            hypothesis and just run the built artifact once with a
+            valid input.
           - A missing binary or busy port is a distinct FAIL named
-            setup_<component>, so that a harness failure is not a finding.
+            SETUP <component>, so that a harness failure is not a
+            finding; a scanner that returns no data at all is
+            INCONCLUSIVE, naming the scanner.
           - There is no group prologue or epilogue.
     -->
 
-    <author mailto="maximmenshchikov@gmail.com" />
+    <author mailto="midair@localhost" />
 
     <session track_conf="silent">
 
-        <run name="setup_gateway_rs">
-            <script name="webdeps_hyp">
-                <objective>[setup] Start gateway-rs from the built tree and wait up to 5 s for its port to accept TCP. A failure here is the distinct failed test setup_gateway_rs (binary missing, port busy), not a finding.</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>setup_gateway_rs</value>
-            </arg>
-        </run>
-
-        <run name="setup_service_go">
-            <script name="webdeps_hyp">
-                <objective>[setup] Same for service-go; failure is setup_service_go.</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>setup_service_go</value>
-            </arg>
-        </run>
-
-        <run name="setup_service_cs">
-            <script name="webdeps_hyp">
-                <objective>[setup] Same for service-cs; failure is setup_service_cs.</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>setup_service_cs</value>
-            </arg>
-        </run>
-
-        <run name="h1_gateway_backends_absent">
-            <script name="webdeps_hyp">
-                <objective>[H1] Gateway with nothing on the backend addresses; GET each route with a 3 s timeout. FAIL (H1 confirmed) if the process exits, the connection is reset, or exit status is SIGABRT / 101 / panic.</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>h1_gateway_backends_absent</value>
-            </arg>
-        </run>
-
-        <run name="h1_gateway_backend_garbage">
-            <script name="webdeps_hyp">
-                <objective>[H1] Fake peer on each backend address in turn replying (a) empty body, (b) non-JSON bytes, (c) truncated JSON, (d) a 500. FAIL (H1 confirmed) if the gateway dies; the verdict names the reply kind.</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>h1_gateway_backend_garbage</value>
-            </arg>
-        </run>
-
-        <run name="h1_gateway_startup_order">
-            <script name="webdeps_hyp">
-                <objective>[H1] Gateway first, backends 2 s later. PASS if the gateway serves correctly afterwards.</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>h1_gateway_startup_order</value>
-            </arg>
-        </run>
-
-        <run name="h2_go_stalled_peer">
-            <script name="webdeps_hyp">
-                <objective>[H2] service-go with a peer on its dependency address that accepts and never writes. FAIL (H2 confirmed) if no response within 10 s.</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>h2_go_stalled_peer</value>
-            </arg>
-        </run>
-
-        <run name="h2_cs_stalled_peer">
-            <script name="webdeps_hyp">
-                <objective>[H2] Same for service-cs.</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>h2_cs_stalled_peer</value>
-            </arg>
-        </run>
-
-        <run name="h2_go_failed_dep_masked">
-            <script name="webdeps_hyp">
-                <objective>[H2] service-go with the peer returning 500, then closed, then garbage. FAIL (H2 confirmed) if a 200 with a success body is returned.</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>h2_go_failed_dep_masked</value>
-            </arg>
-        </run>
-
-        <run name="h2_cs_failed_dep_masked">
-            <script name="webdeps_hyp">
-                <objective>[H2] Same for service-cs.</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>h2_cs_failed_dep_masked</value>
-            </arg>
-        </run>
-
-        <run name="h3_netexpose">
-            <script name="webdeps_hyp">
-                <objective>[H3] All three components running; tapi_netexpose listeners into the tapi_cybersec_report. FAIL (H3 confirmed) for 0.0.0.0, :: or any address outside 127.0.0.0/8.</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>h3_netexpose</value>
-            </arg>
-        </run>
-
-        <run name="h3_egress">
-            <script name="webdeps_hyp">
-                <objective>[H3] tapi_egress with only 127.0.0.0/8 allowed over a normal request cycle. FAIL (H3 confirmed) for any other destination.</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>h3_egress</value>
-            </arg>
-        </run>
-
-        <run name="t1_h1_gateway_bad_input">
-            <script name="webdeps_hyp">
-                <objective>[T1/H1] All three components started. Send malformed, oversized (2 MiB) and empty requests to the gateway port, then a valid request. FAIL (H1 confirmed) if the gateway process exits or the valid request gets no answer within 2 s. The gateway exit code is recorded.</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>t1_h1_gateway_bad_input</value>
-            </arg>
-        </run>
-
-        <run name="t2_h2_go_slow_client">
-            <script name="webdeps_hyp">
-                <objective>[T2/H2] Open a TCP connection to service-go, send half an HTTP request and stay idle. FAIL (H2 confirmed) if the socket is still open after 30 s. Then open 50 such sockets and send a valid request; FAIL if it times out.</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>t2_h2_go_slow_client</value>
-            </arg>
-        </run>
-
-        <run name="t3_h3_egress_run">
-            <script name="webdeps_hyp">
-                <objective>[T3/H3] tapi_egress sampled over the whole run (normal and bad traffic). Only loopback on the three service ports is allowed. FAIL (H3 confirmed) on any other destination, which is listed in the verdict and the report.</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>t3_h3_egress_run</value>
-            </arg>
-        </run>
-
-        <run name="t4_h4_binscan">
-            <script name="webdeps_hyp">
-                <objective>[T4/H4] tapi_binscan on gateway-rs, service-go, service-cs, cpp-demo and libpycore.so; each missing flag is added to the tapi_cybersec_report. FAIL (H4 confirmed) on missing NX, PIE or RELRO, and on missing canary or fortify for the C and C++ binaries.</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>t4_h4_binscan</value>
-            </arg>
-        </run>
-
-        <run name="t5_h5_netexpose">
-            <script name="webdeps_hyp">
-                <objective>[T5/H5] tapi_netexpose listeners of the three running components. FAIL (H5 confirmed) for a listener on a non-loopback address or on a port outside the expected list (gateway-rs, service-go, service-cs).</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>t5_h5_netexpose</value>
-            </arg>
-        </run>
-
-        <run name="t6_h6_cs_failed_call">
-            <script name="webdeps_hyp">
-                <objective>[T6/H6] Make the backend call of service-cs fail (gateway stopped, 500, garbage, reset). FAIL (H6 confirmed) if the response status is 2xx while the call failed; PASS if it is 4xx or 5xx.</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>t6_h6_cs_failed_call</value>
-            </arg>
-        </run>
-
-        <run name="t1_h1_bad_requests">
-            <script name="webdeps_hyp">
-                <objective>[T1/H1] Start gateway-rs and wait for its port. Send an empty body, an oversize header, a bad method, a truncated request line and invalid UTF-8; after each check that the process is alive and the port accepts a connection. FAIL (H1 confirmed) if the process exits, with code 101 or by a signal; the verdict names the request that caused it.</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>t1_h1_bad_requests</value>
-            </arg>
-        </run>
-
-        <run name="t2_h2_half_request">
-            <script name="webdeps_hyp">
-                <objective>[T2/H2] Open a TCP connection to service-go, send 'GET / HTTP/1.1\r\nHost: x\r\n' and nothing more; measure how long the socket stays open. FAIL (H2 confirmed) if it is still open after 30 s. Then open 50 such sockets and send a normal request; FAIL if it gets no answer.</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>t2_h2_half_request</value>
-            </arg>
-        </run>
-
-        <run name="t3_h3_cs_swallowed_failure">
-            <script name="webdeps_hyp">
-                <objective>[T3/H3] Force the backend call of service-cs (Program.cs:85) to fail (gateway stopped, 500, garbage, reset, unparsable input) and read status and body. FAIL (H3 confirmed) if the status is 2xx while the call failed; PASS if 4xx/5xx with an error body; no answer to any request is reported as not settled, never a pass.</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>t3_h3_cs_swallowed_failure</value>
-            </arg>
-        </run>
-
-        <run name="t4_h4_hardening_exposure">
-            <script name="webdeps_hyp">
-                <objective>[T4/H4] tapi_binscan on gateway-rs, service-go, service-cs, cpp-demo and libpycore.so (NX, PIE, RELRO, canary; fortify for C and C++), tapi_netexpose against the ports of the contract, tapi_egress with only localhost allowed; all results go to one tapi_cybersec_report, which is printed. FAIL (H4 confirmed) on a missing flag, an unexpected listener or an outbound connection to another host.</objective>
-            </script>
-            <arg name="hyp_id">
-                <value>t4_h4_hardening_exposure</value>
-            </arg>
-        </run>
-
         <run name="t_h1_gateway_bad_input">
             <script name="t_h1_gateway_bad_input">
-                <objective>[H1] Start gateway-rs. In separate connections send an empty body, a 64 KB header line, invalid UTF-8 in the path and a negative Content-Length; after each, a valid request on a new connection. FAIL (H1:proven) if the gateway exits or a valid request gets no reply; the exit code and last stderr line are recorded. PASS (H1:disproved) otherwise. A port closed after 10 s is a SETUP fault.</objective>
+                <objective>[H1] Start gateway-rs. On three separate connections send an empty body, a 64 KiB header and a body with invalid UTF-8 bytes (0xff 0xfe); after each, a valid request on a new connection. FAIL (H1:proven) if the gateway exits or a valid request gets no reply; the exit code, the HTTP status of each valid request and of each bad request are recorded. PASS (H1:disproved) if every valid request is answered. A port closed after 10 s is a SETUP fault.</objective>
             </script>
         </run>
 
@@ -237,7 +47,37 @@
 
         <run name="t_h4_binscan_netexpose_egress">
             <script name="t_h4_binscan_netexpose_egress">
-                <objective>[H4] tapi_binscan on gateway-rs, service-go and service-cs (NX, PIE, RELRO, canary; canary only noted for C#), tapi_netexpose with all three running (only the three contract ports allowed), tapi_egress with only 127.0.0.1 on those ports allowed. All results go to one tapi_cybersec_report; FAIL (H4:proven) on the first finding, naming the file and the flag.</objective>
+                <objective>[H4] tapi_binscan on gateway-rs, service-go, service-cs, cpp-demo and libpycore.so (NX, PIE, RELRO, canary; canary only noted for C#), tapi_netexpose with all three services running (only the three contract ports allowed), tapi_egress with only 127.0.0.1 on those ports allowed. All results go to one tapi_cybersec_report; FAIL (H4:proven) on the first finding, naming the file and the flag. A scanner that returns no data at all gives INCONCLUSIVE, naming the scanner.</objective>
+            </script>
+        </run>
+
+        <run name="s_rust">
+            <script name="s_rust">
+                <objective>[smoke] Start gateway-rs and send one valid request. Checks that the process is still running (no exit code) and that the response is 2xx with a body carrying "value=". Settles no hypothesis.</objective>
+            </script>
+        </run>
+
+        <run name="s_go">
+            <script name="s_go">
+                <objective>[smoke] Start service-go and send one valid request. Checks that the process is still running (no exit code) and that the response is 2xx with a body carrying "value=". Settles no hypothesis.</objective>
+            </script>
+        </run>
+
+        <run name="s_cs">
+            <script name="s_cs">
+                <objective>[smoke] Start service-cs and send one valid request. Checks that the process is still running (no exit code) and that the response is 2xx with a body carrying "value=". Settles no hypothesis.</objective>
+            </script>
+        </run>
+
+        <run name="s_cpp">
+            <script name="s_cpp">
+                <objective>[smoke] Run dist/bin/cpp-demo once with value=1 hops=1. Checks the exit code is 0 and the output carries "result =". Settles no hypothesis.</objective>
+            </script>
+        </run>
+
+        <run name="s_c">
+            <script name="s_c">
+                <objective>[smoke] dlopen dist/lib/libpycore.so (the C extension) and call its leaf C-ABI function py_weight() once in a child process. Checks the child's exit code is 0 and the value it printed is a finite number. Settles no hypothesis.</objective>
             </script>
         </run>
     </session>

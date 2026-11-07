@@ -17,6 +17,7 @@ test_deps = [
     dependency('openssl'),
     dependency('zlib'),
     cc.find_library('m'),
+    cc.find_library('dl'), # webdeps/s_c.c: dlopen() the C extension.
 ]
 
 # The tsf-* libraries come first: a dependant has to be named before what

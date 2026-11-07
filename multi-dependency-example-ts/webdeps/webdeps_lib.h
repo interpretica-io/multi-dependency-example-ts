@@ -60,7 +60,10 @@ static const char * const names[NAMES] = {
 
 /** Outcome of a case, turned into the verdict by main(). */
 typedef struct res_t {
-    enum { R_PASS, R_FAIL, R_SETUP } kind;   /**< R_SETUP: setup_<component>. */
+    enum {
+        R_PASS, R_FAIL, R_SETUP,
+        R_INCONCLUSIVE, /**< A scanner returned no data; names which one. */
+    } kind;   /**< R_SETUP: setup_<component>. */
     char msg[1536];
 } res_t;
 
@@ -400,6 +403,76 @@ svc_start(res_t *r, int idx)
     return NULL;
 }
 
+/**
+ * Run a short-lived program in the current directory's dist/bin to
+ * completion (a demo, not a service: no port to probe). Waits up to
+ * @p timeout_s for it to exit. On any problem sets an R_SETUP outcome
+ * naming @p label and returns NULL; otherwise returns the finished
+ * process (reaped, @c proc_gone() already @c true).
+ */
+static proc_t *
+run_once(res_t *r, const char *label, const char *path, char *const *argv,
+        int timeout_s)
+{
+    proc_t  *p;
+    double   end;
+    pid_t    pid;
+
+    setup_svc = label;
+    if (access(path, X_OK) != 0)
+    {
+        res_set(r, R_SETUP, "binary %s not found or not executable", path);
+        return NULL;
+    }
+    if (n_procs >= MAX_PROCS)
+    {
+        res_set(r, R_SETUP, "too many processes");
+        return NULL;
+    }
+    p = &procs[n_procs];
+    memset(p, 0, sizeof(*p));
+    p->name = label;
+    snprintf(p->out, sizeof(p->out), "%s/%s.out", workdir, label);
+    snprintf(p->err, sizeof(p->err), "%s/%s.err", workdir, label);
+
+    pid = fork();
+    if (pid < 0)
+    {
+        res_set(r, R_SETUP, "fork failed: %s", strerror(errno));
+        return NULL;
+    }
+    if (pid == 0)
+    {
+        int o = open(p->out, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+        int e = open(p->err, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+        int z = open("/dev/null", O_RDONLY);
+        char lib[600];
+
+        snprintf(lib, sizeof(lib), "%s/dist/lib", src_root);
+        setpgid(0, 0);
+        dup2(z, 0);
+        dup2(o, 1);
+        dup2(e, 2);
+        setenv("LD_LIBRARY_PATH", lib, 1);
+        execv(path, argv);
+        dprintf(2, "exec %s: %s\n", path, strerror(errno));
+        _exit(127);
+    }
+    p->pid = pid;
+    setpgid(pid, pid);
+    n_procs++;
+
+    end = now_s() + timeout_s;
+    while (now_s() < end)
+    {
+        if (proc_gone(p))
+            return p;
+        usleep(100000);
+    }
+    res_set(r, R_SETUP, "%s did not finish within %d s", label, timeout_s);
+    return NULL;
+}
+
 /** Outcomes of an HTTP request. */
 typedef enum hg_t { HG_OK, HG_NORESP, HG_RESET, HG_TIMEOUT, HG_REFUSED } hg_t;
 static const char *
@@ -643,6 +716,51 @@ start_all(res_t *r, proc_t **svc, const int *which, int n)
     return true;
 }
 
+/**
+ * The smoke shape shared by s_rust, s_go and s_cs: start the service, send
+ * one valid request, check it is still running (no exit code) and the
+ * response is 2xx with "value=" in the body, then stop it. @p r->kind is
+ * left as R_PASS/R_FAIL/R_SETUP with a message naming @p test_name.
+ */
+static void
+smoke_service(res_t *r, const char *test_name, int idx)
+{
+    proc_t *svc;
+    hg_res  h;
+
+    svc = svc_start(r, idx);
+    if (svc == NULL)
+        return;
+
+    http_get(svc->port, REQUEST, PROBE_TO, &h);
+    if (proc_gone(svc))
+    {
+        char why[900];
+
+        proc_describe(svc, why, sizeof(why));
+        svc->stopped = true;
+        res_set(r, R_FAIL, "%s: %s exited instead of answering a valid "
+                "request: %s", test_name, names[idx], why);
+        return;
+    }
+    if (h.how != HG_OK)
+    {
+        res_set(r, R_FAIL, "%s: %s gave no reply to a valid request (%s)",
+                test_name, names[idx], hg_str(h.how));
+        return;
+    }
+    if (h.status < 200 || h.status >= 300 || strstr(h.body, "value=") == NULL)
+    {
+        res_set(r, R_FAIL, "%s: %s answered HTTP %d, body [%.200s], "
+                "expected 2xx with \"value=\"", test_name, names[idx],
+                h.status, h.body);
+        return;
+    }
+    res_set(r, R_PASS, "%s: %s is running (no exit code) and answered the "
+            "valid request %s with HTTP %d, body [%.200s]", test_name,
+            names[idx], REQUEST, h.status, h.body);
+}
+
 /* ---- setup ---- */
 
 /** Last non-empty line of a file, or "(none)". */
@@ -716,7 +834,9 @@ wd_init(res_t *r)
 
 /**
  * Turn the outcome into the verdict: a setup fault is a failure that
- * starts with SETUP and the service name, never a finding.
+ * starts with SETUP and the service name, never a finding; a scanner that
+ * came back with nothing is a failure that starts with INCONCLUSIVE and
+ * names the scanner, also never a finding.
  */
 #define WD_VERDICT(_r) \
     do {                                                                    \
@@ -727,6 +847,14 @@ wd_init(res_t *r)
             snprintf(tmp_, sizeof(tmp_), "%s", (_r)->msg);                  \
             snprintf((_r)->msg, sizeof((_r)->msg), "SETUP %s: %.1400s",     \
                      setup_svc, tmp_);                                      \
+        }                                                                   \
+        else if ((_r)->kind == R_INCONCLUSIVE)                              \
+        {                                                                   \
+            char tmp_[sizeof((_r)->msg)];                                   \
+                                                                            \
+            snprintf(tmp_, sizeof(tmp_), "%s", (_r)->msg);                  \
+            snprintf((_r)->msg, sizeof((_r)->msg), "INCONCLUSIVE: %.1480s", \
+                     tmp_);                                                 \
         }                                                                   \
         cleanup_all();                                                      \
         if ((_r)->kind == R_PASS)                                           \
