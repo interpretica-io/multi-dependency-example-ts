@@ -1125,99 +1125,59 @@
       <test name="webdeps" type="package">
         <objective/>
         <notes/>
-        <iter result="PASSED">
+        <iter result="FAILED">
           <notes/>
-          <test name="webdeps_hyp" type="script">
+          <test name="t_h1_gateway_bad_input" type="script">
             <objective/>
             <notes/>
-            <iter result="PASSED">
-              <arg name="hyp_id">setup_gateway_rs</arg>
-              <notes/>
+          </test>
+          <test name="t_h2_go_slow_client" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="t_h3_cs_swallowed_error" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <notes>DUT: Program.cs:85 catches the backend's exception and returns null, which Handle() turns into a 200 OK that only says "unreachable" in the body text; the caller cannot tell the failure from a success by status code.</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>t_h3_cs_swallowed_error H3:proven: service-cs answered HTTP 200 with its backend unreachable, body [[service-cs] hops=3      1.0000 ->     4.5450   ((v * 0.5 + 4) * cpp_weight, FFI into libcppcore)|[service-cs] upstream gateway-rs unreachable|value=4.545|]; control with the backend up: HTTP 200</verdict>
+                </result>
+              </results>
             </iter>
-            <iter result="PASSED">
-              <arg name="hyp_id">setup_service_go</arg>
-              <notes/>
+          </test>
+          <test name="t_h4_binscan_netexpose_egress" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <notes>DUT build posture: gateway-rs (Rust) and cpp-demo/libpycore.so (C/C++) are built without a stack protector, and service-go is built non-PIE; listeners and egress are clean (the three contract ports only, no outbound destination outside 127.0.0.1).</notes>
+              <results>
+                <result value="FAILED">
+                  <verdict>t_h4_binscan_netexpose_egress H4:proven: first finding: gateway-rs: stack canary missing; report has 8 finding(s) at or above INFO, 5 at or above HIGH</verdict>
+                </result>
+              </results>
             </iter>
-            <iter result="PASSED">
-              <arg name="hyp_id">setup_service_cs</arg>
-              <notes/>
-            </iter>
-            <iter result="PASSED">
-              <arg name="hyp_id">h1_gateway_backends_absent</arg>
-              <notes/>
-            </iter>
-            <iter result="PASSED">
-              <arg name="hyp_id">h1_gateway_backend_garbage</arg>
-              <notes/>
-            </iter>
-            <iter result="PASSED">
-              <arg name="hyp_id">h1_gateway_startup_order</arg>
-              <notes/>
-            </iter>
-            <iter result="PASSED">
-              <arg name="hyp_id">h2_go_stalled_peer</arg>
-              <notes/>
-            </iter>
-            <iter result="PASSED">
-              <arg name="hyp_id">h2_cs_stalled_peer</arg>
-              <notes/>
-            </iter>
-            <iter result="PASSED">
-              <arg name="hyp_id">h2_go_failed_dep_masked</arg>
-              <notes/>
-            </iter>
-            <iter result="PASSED">
-              <arg name="hyp_id">h2_cs_failed_dep_masked</arg>
-              <notes/>
-            </iter>
-            <iter result="PASSED">
-              <arg name="hyp_id">h3_netexpose</arg>
-              <notes/>
-            </iter>
-            <iter result="PASSED">
-              <arg name="hyp_id">h3_egress</arg>
-              <notes/>
-            </iter>
-            <iter result="PASSED">
-              <arg name="hyp_id">t1_h1_gateway_bad_input</arg>
-              <notes/>
-            </iter>
-            <iter result="PASSED">
-              <arg name="hyp_id">t2_h2_go_slow_client</arg>
-              <notes/>
-            </iter>
-            <iter result="PASSED">
-              <arg name="hyp_id">t3_h3_egress_run</arg>
-              <notes/>
-            </iter>
-            <iter result="PASSED">
-              <arg name="hyp_id">t4_h4_binscan</arg>
-              <notes/>
-            </iter>
-            <iter result="PASSED">
-              <arg name="hyp_id">t5_h5_netexpose</arg>
-              <notes/>
-            </iter>
-            <iter result="PASSED">
-              <arg name="hyp_id">t6_h6_cs_failed_call</arg>
-              <notes/>
-            </iter>
-            <iter result="PASSED">
-              <arg name="hyp_id">t1_h1_bad_requests</arg>
-              <notes/>
-            </iter>
-            <iter result="PASSED">
-              <arg name="hyp_id">t2_h2_half_request</arg>
-              <notes/>
-            </iter>
-            <iter result="PASSED">
-              <arg name="hyp_id">t3_h3_cs_swallowed_failure</arg>
-              <notes/>
-            </iter>
-            <iter result="PASSED">
-              <arg name="hyp_id">t4_h4_hardening_exposure</arg>
-              <notes/>
-            </iter>
+          </test>
+          <test name="s_rust" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="s_go" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="s_cs" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="s_cpp" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="s_c" type="script">
+            <objective/>
+            <notes/>
           </test>
         </iter>
       </test>
