@@ -1,9 +1,14 @@
 # Copyright (C) 2026 Maxim Menshikov
 
-# One small test, run once per hypothesis case (see package.xml).
+# webdeps_hyp is run once per hypothesis case; the t_h* tests are standalone
+# (they share webdeps_lib.h). See package.xml.
 # No group prologue/epilogue: a setup problem must never fail the session.
 tests = [
     'webdeps_hyp',
+    't_h1_gateway_bad_input',
+    't_h2_go_slow_client',
+    't_h3_cs_swallowed_error',
+    't_h4_binscan_netexpose_egress',
 ]
 
 foreach test : tests

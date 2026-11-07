@@ -216,5 +216,29 @@
                 <value>t4_h4_hardening_exposure</value>
             </arg>
         </run>
+
+        <run name="t_h1_gateway_bad_input">
+            <script name="t_h1_gateway_bad_input">
+                <objective>[H1] Start gateway-rs. In separate connections send an empty body, a 64 KB header line, invalid UTF-8 in the path and a negative Content-Length; after each, a valid request on a new connection. FAIL (H1:proven) if the gateway exits or a valid request gets no reply; the exit code and last stderr line are recorded. PASS (H1:disproved) otherwise. A port closed after 10 s is a SETUP fault.</objective>
+            </script>
+        </run>
+
+        <run name="t_h2_go_slow_client">
+            <script name="t_h2_go_slow_client">
+                <objective>[H2] Start service-go, send a request without the final blank line and measure how long the server holds the socket, up to 60 s. FAIL (H2:proven) if it is still held at 60 s; PASS (H2:disproved) with the time otherwise. Then 200 such sockets are opened and a valid request on a new one is timed against 5 s (recorded).</objective>
+            </script>
+        </run>
+
+        <run name="t_h3_cs_swallowed_error">
+            <script name="t_h3_cs_swallowed_error">
+                <objective>[H3] Start service-cs with its backend (gateway-rs) not running and send the request that reaches the backend call. FAIL (H3:proven) on a 2xx, with status and body recorded; PASS (H3:disproved) on 4xx/5xx. Control: with the backend up the same request must give 2xx.</objective>
+            </script>
+        </run>
+
+        <run name="t_h4_binscan_netexpose_egress">
+            <script name="t_h4_binscan_netexpose_egress">
+                <objective>[H4] tapi_binscan on gateway-rs, service-go and service-cs (NX, PIE, RELRO, canary; canary only noted for C#), tapi_netexpose with all three running (only the three contract ports allowed), tapi_egress with only 127.0.0.1 on those ports allowed. All results go to one tapi_cybersec_report; FAIL (H4:proven) on the first finding, naming the file and the flag.</objective>
+            </script>
+        </run>
     </session>
 </package>
