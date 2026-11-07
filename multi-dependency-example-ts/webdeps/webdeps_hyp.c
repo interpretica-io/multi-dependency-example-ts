@@ -674,13 +674,6 @@ fake_count(int fd)
     return c;
 }
 
-/** Whether a process is alive and its port still accepts connections. */
-static bool
-svc_alive(proc_t *p)
-{
-    return !proc_gone(p) && port_accepts(p->port);
-}
-
 static void
 append(char *dst, size_t size, const char *fmt, ...)
 {
