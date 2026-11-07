@@ -10,7 +10,7 @@ ENV UID=${uid}
 ENV GID=${gid}
 ENV DOCKER_GID=${docker_gid}
 
-RUN if [ "$DOCKER_GID" != "${GID}" ] ; then groupadd --gid ${DOCKER_GID} docker ; fi
+RUN if [ "$DOCKER_GID" != "${GID}" ] && ! getent group ${DOCKER_GID} > /dev/null ; then groupadd --gid ${DOCKER_GID} docker ; fi
 
 RUN if [ ! -d /home/${USER} ] ; then mkdir -p /home/${USER} && chmod -R 777 /home/${USER} ; fi 
 
@@ -117,12 +117,16 @@ ENV NODE_PATH=/opt/playwright/node_modules
 
 RUN echo "${USER} ALL=NOPASSWD: ALL" >> /etc/sudoers
 
-RUN if [ "$DOCKER_GID" != "${GID}" ] ; then groupadd --gid ${GID} ${USER} ; fi
+RUN if [ "$DOCKER_GID" != "${GID}" ] && ! getent group ${GID} > /dev/null ; then groupadd --gid ${GID} ${USER} ; fi
 
-RUN useradd --system \
+RUN id -u ${USER} > /dev/null 2>&1 || useradd --system \
             --gid ${GID} --gid ${DOCKER_GID} \
             --uid ${UID} \
             --shell /bin/bash \
             ${USER}
+# A base image's own system account of the same name (e.g. www-data) may
+# already own ${USER}, with a home directory that is not writable by it;
+# point it at the one made writable above instead.
+RUN usermod -d /home/${USER} ${USER}
 RUN usermod -a -G ${DOCKER_GID} ${USER}
 RUN usermod -a -G docker ${USER}
