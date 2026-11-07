@@ -1202,6 +1202,22 @@
               <arg name="hyp_id">t6_h6_cs_failed_call</arg>
               <notes/>
             </iter>
+            <iter result="PASSED">
+              <arg name="hyp_id">t1_h1_bad_requests</arg>
+              <notes/>
+            </iter>
+            <iter result="PASSED">
+              <arg name="hyp_id">t2_h2_half_request</arg>
+              <notes/>
+            </iter>
+            <iter result="PASSED">
+              <arg name="hyp_id">t3_h3_cs_swallowed_failure</arg>
+              <notes/>
+            </iter>
+            <iter result="PASSED">
+              <arg name="hyp_id">t4_h4_hardening_exposure</arg>
+              <notes/>
+            </iter>
           </test>
         </iter>
       </test>

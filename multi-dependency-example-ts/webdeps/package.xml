@@ -180,5 +180,41 @@
                 <value>t6_h6_cs_failed_call</value>
             </arg>
         </run>
+
+        <run name="t1_h1_bad_requests">
+            <script name="webdeps_hyp">
+                <objective>[T1/H1] Start gateway-rs and wait for its port. Send an empty body, an oversize header, a bad method, a truncated request line and invalid UTF-8; after each check that the process is alive and the port accepts a connection. FAIL (H1 confirmed) if the process exits, with code 101 or by a signal; the verdict names the request that caused it.</objective>
+            </script>
+            <arg name="hyp_id">
+                <value>t1_h1_bad_requests</value>
+            </arg>
+        </run>
+
+        <run name="t2_h2_half_request">
+            <script name="webdeps_hyp">
+                <objective>[T2/H2] Open a TCP connection to service-go, send 'GET / HTTP/1.1\r\nHost: x\r\n' and nothing more; measure how long the socket stays open. FAIL (H2 confirmed) if it is still open after 30 s. Then open 50 such sockets and send a normal request; FAIL if it gets no answer.</objective>
+            </script>
+            <arg name="hyp_id">
+                <value>t2_h2_half_request</value>
+            </arg>
+        </run>
+
+        <run name="t3_h3_cs_swallowed_failure">
+            <script name="webdeps_hyp">
+                <objective>[T3/H3] Force the backend call of service-cs (Program.cs:85) to fail (gateway stopped, 500, garbage, reset, unparsable input) and read status and body. FAIL (H3 confirmed) if the status is 2xx while the call failed; PASS if 4xx/5xx with an error body; no answer to any request is reported as not settled, never a pass.</objective>
+            </script>
+            <arg name="hyp_id">
+                <value>t3_h3_cs_swallowed_failure</value>
+            </arg>
+        </run>
+
+        <run name="t4_h4_hardening_exposure">
+            <script name="webdeps_hyp">
+                <objective>[T4/H4] tapi_binscan on gateway-rs, service-go, service-cs, cpp-demo and libpycore.so (NX, PIE, RELRO, canary; fortify for C and C++), tapi_netexpose against the ports of the contract, tapi_egress with only localhost allowed; all results go to one tapi_cybersec_report, which is printed. FAIL (H4 confirmed) on a missing flag, an unexpected listener or an outbound connection to another host.</objective>
+            </script>
+            <arg name="hyp_id">
+                <value>t4_h4_hardening_exposure</value>
+            </arg>
+        </run>
     </session>
 </package>

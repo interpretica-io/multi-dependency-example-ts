@@ -1702,8 +1702,11 @@ out:
     tsapi_mde_session_fini(&session);
 }
 
-static void
-case_t4_h4_binscan(res_t *r)
+/** Hardening flags of the five binaries under test, into @p report. */
+static bool
+binscan_all(res_t *r, tsapi_mde_session *session,
+            tapi_cybersec_report *report, char *missing, char *detail,
+            bool canary_all, unsigned *n_missing_out)
 {
     static const struct {
         const char *label;
@@ -1716,19 +1719,9 @@ case_t4_h4_binscan(res_t *r)
         { "cpp-demo", "dist/bin/cpp-demo", true },
         { "libpycore.so", "dist/lib/libpycore.so", true },
     };
-    tsapi_mde_session    session = { .ta = NULL };
-    tapi_cybersec_report report;
-    char                 missing[1200] = "";
-    char                 detail[900] = "";
     unsigned             i;
     unsigned             n_missing = 0;
 
-    if (tsapi_mde_session_init(&session, "t4_binscan") != 0)
-    {
-        res_set(r, R_SETUP, "no session on the agent for tapi_binscan");
-        return;
-    }
-    tapi_cybersec_report_init(&report);
     for (i = 0; i < sizeof(bins) / sizeof(bins[0]); i++)
     {
         char              path[600];
@@ -1744,15 +1737,15 @@ case_t4_h4_binscan(res_t *r)
         {
             setup_name_for(label);
             res_set(r, R_SETUP, "built artifact %s not found", path);
-            goto out;
+            return false;
         }
-        rc = tapi_binscan_inspect(session.ta, path, &info);
+        rc = tapi_binscan_inspect(session->ta, path, &info);
         if (rc != 0 || !info.elf)
         {
             setup_name_for(label);
             res_set(r, R_SETUP, "tapi_binscan cannot read %s as ELF "
                     "(rc %d)", path, (int)rc);
-            goto out;
+            return false;
         }
         tapi_binscan_info_log(&info, path);
         pie = info.kind == TAPI_BINSCAN_KIND_PIE ||
@@ -1764,34 +1757,34 @@ case_t4_h4_binscan(res_t *r)
             append(flags, sizeof(flags), "PIE ");
         if (info.relro == TAPI_BINSCAN_RELRO_NONE)
             append(flags, sizeof(flags), "RELRO ");
-        if (bins[i].c_family && !info.canary)
+        if ((bins[i].c_family || canary_all) && !info.canary)
             append(flags, sizeof(flags), "canary ");
         if (bins[i].c_family && !info.fortify)
             append(flags, sizeof(flags), "fortify ");
         if (!nx)
-            tapi_cybersec_report_add(&report, TAPI_CYBERSEC_SEV_HIGH,
+            tapi_cybersec_report_add(report, TAPI_CYBERSEC_SEV_HIGH,
                                      "binary.no-nx", label, "H4: NX missing");
         if (!pie)
-            tapi_cybersec_report_add(&report, TAPI_CYBERSEC_SEV_HIGH,
+            tapi_cybersec_report_add(report, TAPI_CYBERSEC_SEV_HIGH,
                                      "binary.no-pie", label,
                                      "H4: PIE missing (%s)",
                                      tapi_binscan_kind2str(info.kind));
         if (info.relro == TAPI_BINSCAN_RELRO_NONE)
-            tapi_cybersec_report_add(&report, TAPI_CYBERSEC_SEV_HIGH,
+            tapi_cybersec_report_add(report, TAPI_CYBERSEC_SEV_HIGH,
                                      "binary.no-relro", label,
                                      "H4: RELRO missing");
         else if (info.relro == TAPI_BINSCAN_RELRO_PARTIAL)
-            tapi_cybersec_report_add(&report, TAPI_CYBERSEC_SEV_LOW,
+            tapi_cybersec_report_add(report, TAPI_CYBERSEC_SEV_LOW,
                                      "binary.partial-relro", label,
                                      "H4: only partial RELRO");
         if (!info.canary)
-            tapi_cybersec_report_add(&report, bins[i].c_family ?
+            tapi_cybersec_report_add(report, bins[i].c_family || canary_all ?
                                      TAPI_CYBERSEC_SEV_HIGH :
                                      TAPI_CYBERSEC_SEV_INFO,
                                      "binary.no-canary", label,
                                      "H4: stack canary missing");
         if (!info.fortify)
-            tapi_cybersec_report_add(&report, bins[i].c_family ?
+            tapi_cybersec_report_add(report, bins[i].c_family ?
                                      TAPI_CYBERSEC_SEV_HIGH :
                                      TAPI_CYBERSEC_SEV_INFO,
                                      "binary.no-fortify", label,
@@ -1799,14 +1792,36 @@ case_t4_h4_binscan(res_t *r)
         if (flags[0] != '\0')
         {
             n_missing++;
-            append(missing, sizeof(missing), "%s lacks %s; ", label, flags);
+            append(missing, 1200, "%s lacks %s; ", label, flags);
         }
-        append(detail, sizeof(detail), "%s [PIE=%s NX=%s RELRO=%s "
+        append(detail, 900, "%s [PIE=%s NX=%s RELRO=%s "
                "canary=%s fortify=%s] ", label, pie ? "yes" : "no",
                nx ? "yes" : "no", tapi_binscan_relro2str(info.relro),
                info.canary ? "yes" : "no", info.fortify ? "yes" : "no");
         tapi_binscan_info_free(&info);
     }
+    *n_missing_out = n_missing;
+    return true;
+}
+
+static void
+case_t4_h4_binscan(res_t *r)
+{
+    tsapi_mde_session    session = { .ta = NULL };
+    tapi_cybersec_report report;
+    char                 missing[1200] = "";
+    char                 detail[900] = "";
+    unsigned             n_missing = 0;
+
+    if (tsapi_mde_session_init(&session, "t4_binscan") != 0)
+    {
+        res_set(r, R_SETUP, "no session on the agent for tapi_binscan");
+        return;
+    }
+    tapi_cybersec_report_init(&report);
+    if (!binscan_all(r, &session, &report, missing, detail, false,
+                      &n_missing))
+        goto out;
     tapi_cybersec_report_log(&report);
     if (n_missing > 0)
         res_set(r, R_FAIL, "t4_h4_binscan %s (H4 confirmed): missing "
@@ -1964,6 +1979,531 @@ case_t6_h6_cs_failed_call(res_t *r)
                 detail);
 }
 
+/* ---- Iteration 2: tests 1-4 settling H1-H4 of the new list ---- */
+
+/** Wait up to @p wait_s for the process to be gone; true when it is. */
+static bool
+exited_within(proc_t *p, double wait_s)
+{
+    double end = now_s() + wait_s;
+
+    while (!proc_gone(p) && now_s() < end)
+        usleep(50000);
+    return proc_gone(p);
+}
+
+/** "exit code N" / "killed by signal N" of a gone process, flagging 101. */
+static void
+how_it_ended(proc_t *p, char *buf, size_t size)
+{
+    if (WIFSIGNALED(p->status))
+        snprintf(buf, size, "killed by signal %d", WTERMSIG(p->status));
+    else if (WEXITSTATUS(p->status) == 101)
+        snprintf(buf, size, "exit code 101 (Rust panic)");
+    else
+        snprintf(buf, size, "exit code %d", WEXITSTATUS(p->status));
+}
+
+#define BIG_HEADER  (256u * 1024)
+
+static void
+case_t1_h1_bad_requests(res_t *r)
+{
+    static const char invalid_utf8[] =
+        "GET /ring?value=\xff\xfe\xc0\xaf\xed\xa0\x80&hops=\xc3\x28 "
+        "HTTP/1.1\r\nHost: x\r\n\r\n";
+    static const char bad_method[] =
+        "BREW /ring HTTP/1.1\r\nHost: x\r\n\r\n";
+    static const char truncated[] = "GET /ri";
+    static const char empty_body[] =
+        "POST /ring HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n";
+    static const char * const names_[] = {
+        "empty body", "oversize header", "bad method",
+        "truncated request line", "invalid UTF-8",
+    };
+    proc_t  *svc[NAMES] = { NULL };
+    const int which[] = { GW };
+    char     detail[1200] = "";
+    char     why[900] = "";
+    char     how[128] = "";
+    char    *big;
+    unsigned i;
+    int      culprit = -1;
+    bool     refused = false;
+
+    if (!start_all(r, svc, which, 1))
+        return;
+    big = malloc(BIG_HEADER + 64);
+    if (big == NULL)
+    {
+        res_set(r, R_SETUP, "cannot allocate the oversize header");
+        return;
+    }
+    for (i = 0; i < sizeof(names_) / sizeof(names_[0]); i++)
+    {
+        bool gone;
+        bool accepts = false;
+        int  n;
+        int  k;
+
+        switch (i)
+        {
+            case 0:
+                raw_send(svc[GW]->port, empty_body, sizeof(empty_body) - 1,
+                         false, 300);
+                break;
+            case 1:
+                n = snprintf(big, 64, "GET /ring HTTP/1.1\r\nX-Big: ");
+                memset(big + n, 'B', BIG_HEADER);
+                memcpy(big + n + BIG_HEADER, "\r\n\r\n", 4);
+                raw_send(svc[GW]->port, big, n + BIG_HEADER + 4, false, 300);
+                break;
+            case 2:
+                raw_send(svc[GW]->port, bad_method, sizeof(bad_method) - 1,
+                         false, 300);
+                break;
+            case 3:
+                raw_send(svc[GW]->port, truncated, sizeof(truncated) - 1,
+                         true, 300);
+                break;
+            default:
+                raw_send(svc[GW]->port, invalid_utf8,
+                         sizeof(invalid_utf8) - 1, false, 300);
+                break;
+        }
+        gone = exited_within(svc[GW], 0.3);
+        for (k = 0; !gone && k < 10 && !accepts; k++)
+        {
+            accepts = port_accepts(svc[GW]->port);
+            if (!accepts)
+                usleep(100000);
+        }
+        if (!gone)
+            gone = proc_gone(svc[GW]);
+        append(detail, sizeof(detail), "[%s: %s] ", names_[i],
+               gone ? "process exited" : accepts ? "alive, port open" :
+               "alive, port closed");
+        if (gone || !accepts)
+        {
+            culprit = (int)i;
+            refused = !gone;
+            break;
+        }
+    }
+    free(big);
+    if (culprit >= 0)
+    {
+        if (!refused)
+        {
+            proc_describe(svc[GW], why, sizeof(why));
+            how_it_ended(svc[GW], how, sizeof(how));
+        }
+        RING("t1: request that ended the gateway: %s", names_[culprit]);
+        if (refused)
+            res_set(r, R_FAIL, "t1_h1_bad_requests %s (H1 confirmed): "
+                    "request '%s' left the gateway running but its port no "
+                    "longer accepts connections. Sent: %s", HV(1, false),
+                    names_[culprit], detail);
+        else
+            res_set(r, R_FAIL, "t1_h1_bad_requests %s (H1 confirmed): "
+                    "request '%s' ended the gateway: %s. Sent: %s. Log: %s",
+                    HV(1, false), names_[culprit], how, detail, why);
+    }
+    else
+        res_set(r, R_PASS, "t1_h1_bad_requests %s: gateway alive and its "
+                "port open after each of the five bad requests (exit "
+                "status: none, still running). Sent: %s", HV(1, true),
+                detail);
+}
+
+#define HALF_LIMIT  30
+#define HALF_SOCKS  50
+
+static const char half_request[] = "GET / HTTP/1.1\r\nHost: x\r\n";
+
+static void
+case_t2_h2_half_request(res_t *r)
+{
+    proc_t  *svc[NAMES] = { NULL };
+    int      socks[HALF_SOCKS];
+    int      s;
+    int      i;
+    int      opened = 0;
+    double   t0;
+    double   end;
+    double   closed_after = -1;
+    hg_res   h;
+    char     part2[300];
+    bool     answers;
+
+    if (!start_tier(r, svc))
+        return;
+    s = connect_loop(svc[GO]->port);
+    if (s < 0 || write(s, half_request, sizeof(half_request) - 1) < 0)
+    {
+        res_set(r, R_SETUP, "cannot open a connection to service-go");
+        if (s >= 0)
+            close(s);
+        return;
+    }
+    t0 = now_s();
+    end = t0 + HALF_LIMIT;
+    for (;;)
+    {
+        struct pollfd pfd = { .fd = s, .events = POLLIN };
+        double        left = end - now_s();
+        char          b[512];
+
+        if (left <= 0 || poll(&pfd, 1, (int)(left * 1000) + 1) == 0)
+            break;
+        if (read(s, b, sizeof(b)) <= 0)
+        {
+            closed_after = now_s() - t0;
+            break;
+        }
+    }
+    close(s);
+    RING("t2: service-go held the half request for %s",
+         closed_after >= 0 ? "less than the limit" : "the whole 30 s");
+
+    for (i = 0; i < HALF_SOCKS; i++)
+    {
+        socks[i] = connect_loop(svc[GO]->port);
+        if (socks[i] >= 0)
+        {
+            opened++;
+            if (write(socks[i], half_request, sizeof(half_request) - 1) < 0)
+                RING("t2: write on half-open socket %d failed", i);
+        }
+    }
+    http_get(svc[GO]->port, REQUEST, PROBE_TO, &h);
+    answers = h.how == HG_OK;
+    snprintf(part2, sizeof(part2), "with %d half-open sockets a normal "
+             "request: %s, HTTP %d in %.2f s, process %s", opened,
+             hg_str(h.how), h.status, h.elapsed,
+             proc_gone(svc[GO]) ? "DEAD" : "alive");
+    for (i = 0; i < HALF_SOCKS; i++)
+    {
+        if (socks[i] >= 0)
+            close(socks[i]);
+    }
+    if (closed_after < 0 || !answers)
+        res_set(r, R_FAIL, "t2_h2_half_request %s (H2 confirmed): %s%s%s",
+                HV(2, false),
+                closed_after < 0 ? "service-go still held the half-sent "
+                                   "request socket open after 30 s" : "",
+                (closed_after < 0 && !answers) ? "; " : "",
+                part2);
+    else
+        res_set(r, R_PASS, "t2_h2_half_request %s: service-go closed the "
+                "half-sent request after %.1f s (limit %d s); %s",
+                HV(2, true), closed_after, HALF_LIMIT, part2);
+}
+
+/** Whether a body gives a reason: it names an error. */
+static bool
+body_has_reason(const char *body)
+{
+    const char *p = strstr(body, "\r\n\r\n");
+
+    p = p != NULL ? p + 4 : body;
+    return strstr(p, "error") != NULL || strstr(p, "Error") != NULL ||
+           strstr(p, "fail") != NULL || strstr(p, "unreachable") != NULL ||
+           strstr(p, "unavailable") != NULL || strstr(p, "bad") != NULL ||
+           strstr(p, "invalid") != NULL;
+}
+
+static void
+case_t3_h3_cs_swallowed_failure(res_t *r)
+{
+    static const struct { fake_t mode; const char *name; } backends[] = {
+        { F_SILENT, "backend stopped" }, { F_HTTP500, "backend HTTP 500" },
+        { F_GARBAGE, "backend garbage" }, { F_RESET, "backend reset" },
+    };
+    static const char * const inputs[] = {
+        "/ring?value=1&hops=3", "/ring?value=abc&hops=zz",
+    };
+    proc_t  *svc[NAMES] = { NULL };
+    char     detail[1500] = "";
+    char     masked[700] = "";
+    char     bodyless[700] = "";
+    hg_res   control;
+    unsigned k;
+    unsigned j;
+    unsigned forced = 0;
+
+    if (!start_tier(r, svc))
+        return;
+    http_get(svc[CS]->port, REQUEST, PROBE_TO, &control);
+    /* service-cs calls the gateway: take that backend away. */
+    proc_stop(svc[GW]);
+    if (port_accepts(tab_port[GW]))
+    {
+        res_set(r, R_SETUP, "cannot stop the backend of service-cs: "
+                "127.0.0.1:%u still accepts", tab_port[GW]);
+        return;
+    }
+    for (k = 0; k < sizeof(backends) / sizeof(backends[0]); k++)
+    {
+        int     cfd = -1;
+        proc_t *fake = NULL;
+
+        if (k != 0)
+        {
+            fake = fake_start(r, tab_port[GW], backends[k].mode, &cfd);
+            if (fake == NULL)
+                return;
+        }
+        for (j = 0; j < sizeof(inputs) / sizeof(inputs[0]); j++)
+        {
+            hg_res h;
+
+            http_get(svc[CS]->port, inputs[j], PROBE_TO, &h);
+            if (h.how != HG_OK)
+            {
+                append(masked, sizeof(masked), "%s, GET %s: %s; ",
+                       backends[k].name, inputs[j], hg_str(h.how));
+                append(detail, sizeof(detail), "[%s, GET %s: %s] ",
+                       backends[k].name, inputs[j], hg_str(h.how));
+                continue;
+            }
+            forced++;
+            append(detail, sizeof(detail), "[%s, GET %s: HTTP %d] ",
+                   backends[k].name, inputs[j], h.status);
+            if (h.status >= 200 && h.status < 300)
+                append(masked, sizeof(masked), "%s, GET %s: HTTP %d while "
+                       "the call failed; ", backends[k].name, inputs[j],
+                       h.status);
+            else if (!body_has_reason(h.body))
+                append(bodyless, sizeof(bodyless), "%s, GET %s: HTTP %d "
+                       "without an error body; ", backends[k].name,
+                       inputs[j], h.status);
+        }
+        if (fake != NULL)
+        {
+            close(cfd);
+            proc_stop(fake);
+        }
+    }
+    if (forced == 0)
+        res_set(r, R_SETUP, "H3 not settled: no failure of service-cs could "
+                "be forced and read (no HTTP answer to any request). %s",
+                detail);
+    else if (masked[0] != '\0')
+        res_set(r, R_FAIL, "t3_h3_cs_swallowed_failure %s (H3 confirmed): "
+                "service-cs hid a failed backend call: %s Healthy-tier "
+                "control: %s HTTP %d. All: %s", HV(3, false), masked,
+                hg_str(control.how), control.status, detail);
+    else if (bodyless[0] != '\0')
+        res_set(r, R_FAIL, "t3_h3_cs_swallowed_failure %s: status was 4xx/"
+                "5xx but %sAll: %s", HV(3, false), bodyless, detail);
+    else
+        res_set(r, R_PASS, "t3_h3_cs_swallowed_failure %s: service-cs "
+                "answered every failed backend call with 4xx/5xx and an "
+                "error body (%u forced). Healthy-tier control: %s HTTP %d. "
+                "%s", HV(3, true), forced, hg_str(control.how),
+                control.status, detail);
+}
+
+/** Listeners of the tier into @p report; names what is not as expected. */
+static bool
+exposure_into(res_t *r, tsapi_mde_session *session, proc_t **svc,
+              tapi_cybersec_report *report, char *bad, size_t bad_size,
+              char *detail, size_t detail_size)
+{
+    unsigned long        ino[NAMES][MAX_INO];
+    size_t               n_ino[NAMES];
+    tapi_netexpose_opt   opt = tapi_netexpose_default_opt;
+    te_vec               socks = TE_VEC_INIT(tapi_netexpose_socket);
+    const tapi_netexpose_socket *s;
+    unsigned             listeners = 0;
+    unsigned             others = 0;
+    int                  i;
+
+    opt.udp = false;
+    opt.tcp = true;
+    for (i = 0; i < NAMES; i++)
+        n_ino[i] = pid_inodes(svc[i]->pid, ino[i], MAX_INO);
+    if (tapi_netexpose_sockets(session->factory, &opt, &socks) != 0)
+    {
+        res_set(r, R_SETUP, "tapi_netexpose cannot read the socket tables");
+        te_vec_free(&socks);
+        return false;
+    }
+    TE_VEC_FOREACH(&socks, s)
+    {
+        char     addr[64];
+        int      o;
+        unsigned port;
+        bool     off_list;
+
+        if (!tapi_netexpose_socket_is_listening(s))
+            continue;
+        o = owner_of(svc, ino, n_ino, s->inode);
+        if (o < 0)
+        {
+            others++;
+            continue;
+        }
+        listeners++;
+        sock_addr(&s->local, addr, sizeof(addr));
+        port = sock_port(&s->local);
+        off_list = !port_in_contract(port);
+        append(detail, detail_size, "%s %s:%u%s; ", names[o], addr, port,
+               off_list ? " (NOT in the start list)" : "");
+        tapi_cybersec_report_add(report, off_list || !is_loopback(addr) ?
+                                 TAPI_CYBERSEC_SEV_HIGH :
+                                 TAPI_CYBERSEC_SEV_INFO, "net.listener",
+                                 names[o], "H4: listens on %s:%u", addr,
+                                 port);
+        if (off_list)
+            append(bad, bad_size, "%s listens on %s:%u, a port the start "
+                   "list (%u/%u/%u) does not name; ", names[o], addr, port,
+                   tab_port[0], tab_port[1], tab_port[2]);
+        if (!is_loopback(addr))
+            append(bad, bad_size, "%s listens on %s:%u, beyond localhost; ",
+                   names[o], addr, port);
+    }
+    tapi_cybersec_report_add(report, TAPI_CYBERSEC_SEV_INFO, "net.listener",
+                             "host", "H4: %u listener(s) of other processes",
+                             others);
+    te_vec_free(&socks);
+    if (listeners == 0)
+    {
+        res_set(r, R_SETUP, "tapi_netexpose found no listener of the three "
+                "processes");
+        return false;
+    }
+    return true;
+}
+
+/** Outbound connections of the tier against an allow list of localhost. */
+static bool
+egress_into(res_t *r, tsapi_mde_session *session, proc_t **svc,
+            tapi_cybersec_report *report, char *bad, size_t bad_size,
+            unsigned *seen)
+{
+    unsigned long        ino[NAMES][MAX_INO];
+    size_t               n_ino[NAMES];
+    tapi_netexpose_opt   opt = tapi_netexpose_default_opt;
+    tapi_egress_rule     rules[2] = {
+        { IPPROTO_TCP, "127.0.0.0/8", 1, 65535 },
+        { IPPROTO_TCP, "::1/128", 1, 65535 },
+    };
+    tapi_egress_policy   policy = { .n_rules = 2, .rules = rules,
+                                    .allow_loopback = false,
+                                    .allow_private = false };
+    int                  round;
+    int                  i;
+
+    opt.udp = false;
+    opt.tcp = true;
+    for (round = 0; round < 6; round++)
+    {
+        te_vec conns = TE_VEC_INIT(tapi_netexpose_socket);
+        const tapi_netexpose_socket *c;
+        hg_res h;
+
+        for (i = 0; i < NAMES; i++)
+            http_get(svc[i]->port, REQUEST, 5, &h);
+        for (i = 0; i < NAMES; i++)
+            n_ino[i] = pid_inodes(svc[i]->pid, ino[i], MAX_INO);
+        if (tapi_egress_snapshot(session->factory, &opt, &conns) != 0)
+        {
+            res_set(r, R_SETUP, "tapi_egress cannot read the connections");
+            te_vec_free(&conns);
+            return false;
+        }
+        TE_VEC_FOREACH(&conns, c)
+        {
+            char addr[64];
+            int  o = owner_of(svc, ino, n_ino, c->inode);
+
+            if (o < 0 || c->inode == 0 || sock_port(&c->remote) == 0)
+                continue;
+            sock_addr(&c->remote, addr, sizeof(addr));
+            (*seen)++;
+            if (!tapi_egress_policy_allows(&policy, IPPROTO_TCP,
+                                           CONST_SA(&c->remote)))
+            {
+                char one[128];
+
+                snprintf(one, sizeof(one), "%s -> %s:%u; ", names[o], addr,
+                         sock_port(&c->remote));
+                if (strstr(bad, one) == NULL)
+                    append(bad, bad_size, "%s", one);
+                tapi_cybersec_report_add(report, TAPI_CYBERSEC_SEV_HIGH,
+                                         "net.unexpected-egress", names[o],
+                                         "H4: outbound to %s:%u", addr,
+                                         sock_port(&c->remote));
+            }
+        }
+        te_vec_free(&conns);
+        usleep(100000);
+    }
+    return true;
+}
+
+static void
+case_t4_h4_hardening_exposure(res_t *r)
+{
+    proc_t              *svc[NAMES] = { NULL };
+    tsapi_mde_session    session = { .ta = NULL };
+    tapi_cybersec_report report;
+    char                 missing[1200] = "";
+    char                 bins[900] = "";
+    char                 listen_bad[900] = "";
+    char                 listen_all[900] = "";
+    char                 out_bad[900] = "";
+    unsigned             n_missing = 0;
+    unsigned             seen = 0;
+    char                 problems[1800] = "";
+
+    if (!start_tier(r, svc))
+        return;
+    if (tsapi_mde_session_init(&session, "t4_hardening") != 0)
+    {
+        res_set(r, R_SETUP, "no session on the agent for the scanners");
+        return;
+    }
+    tapi_cybersec_report_init(&report);
+    if (!binscan_all(r, &session, &report, missing, bins, true, &n_missing) ||
+        !exposure_into(r, &session, svc, &report, listen_bad,
+                       sizeof(listen_bad), listen_all, sizeof(listen_all)) ||
+        !egress_into(r, &session, svc, &report, out_bad, sizeof(out_bad),
+                     &seen))
+        goto out;
+
+    /* All results are in one report: print it. */
+    tapi_cybersec_report_log(&report);
+    RING("t4: cybersec report: %u finding(s) at or above INFO, %u at or "
+         "above HIGH", tapi_cybersec_report_count(&report,
+         TAPI_CYBERSEC_SEV_INFO), tapi_cybersec_report_count(&report,
+         TAPI_CYBERSEC_SEV_HIGH));
+    if (n_missing > 0)
+        append(problems, sizeof(problems), "hardening: %s", missing);
+    if (listen_bad[0] != '\0')
+        append(problems, sizeof(problems), "ports: %s", listen_bad);
+    if (out_bad[0] != '\0')
+        append(problems, sizeof(problems), "egress to a host other than "
+               "localhost: %s", out_bad);
+    if (problems[0] != '\0')
+        res_set(r, R_FAIL, "t4_h4_hardening_exposure %s (H4 confirmed): "
+                "%s Scanned: %s Listeners: %s Outbound seen: %u. Report "
+                "has %u finding(s)", HV(4, false), problems, bins,
+                listen_all, seen, tapi_cybersec_report_count(&report,
+                TAPI_CYBERSEC_SEV_INFO));
+    else
+        res_set(r, R_PASS, "t4_h4_hardening_exposure %s: every binary has "
+                "NX, PIE, RELRO and a canary (fortify on C/C++), listeners "
+                "are exactly the start-list ports on localhost, %u "
+                "outbound connection(s) all to localhost. Scanned: %s "
+                "Listeners: %s", HV(4, true), seen, bins, listen_all);
+out:
+    tapi_cybersec_report_free(&report);
+    tsapi_mde_session_fini(&session);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -1992,6 +2532,10 @@ main(int argc, char **argv)
         { "t4_h4_binscan", 4, case_t4_h4_binscan },
         { "t5_h5_netexpose", 5, case_t5_h5_netexpose },
         { "t6_h6_cs_failed_call", 6, case_t6_h6_cs_failed_call },
+        { "t1_h1_bad_requests", 1, case_t1_h1_bad_requests },
+        { "t2_h2_half_request", 2, case_t2_h2_half_request },
+        { "t3_h3_cs_swallowed_failure", 3, case_t3_h3_cs_swallowed_failure },
+        { "t4_h4_hardening_exposure", 4, case_t4_h4_hardening_exposure },
     };
     unsigned    i;
     int         hyp = 0;
