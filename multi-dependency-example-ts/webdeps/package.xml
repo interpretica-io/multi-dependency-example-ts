@@ -3,14 +3,13 @@
     <description>Web dependency tests</description>
 
     <!-- @page mde-webdeps Web Dependency Tests
-          @objective Settle hypotheses H1, H2 and H3 about the dependencies
+          @objective Settle hypotheses H1 to H6 about the dependencies
                      between gateway-rs, service-go and service-cs.
 
           @par Notes:
           - One test source, run once per test name (argument hyp_id); every
             run is independent and ends with an explicit verdict string
-            (H1:pass, H1:fail, H2:pass, H2:fail, H3:pass, H3:fail or
-            H<n>:setup-error).
+            (H<n>:pass, H<n>:fail or H<n>:setup-error, n = 1..6).
           - A missing binary or busy port is a distinct FAIL named
             setup_<component>, so that a harness failure is not a finding.
           - There is no group prologue or epilogue.
@@ -125,6 +124,60 @@
             </script>
             <arg name="hyp_id">
                 <value>h3_egress</value>
+            </arg>
+        </run>
+
+        <run name="t1_h1_gateway_bad_input">
+            <script name="webdeps_hyp">
+                <objective>[T1/H1] All three components started. Send malformed, oversized (2 MiB) and empty requests to the gateway port, then a valid request. FAIL (H1 confirmed) if the gateway process exits or the valid request gets no answer within 2 s. The gateway exit code is recorded.</objective>
+            </script>
+            <arg name="hyp_id">
+                <value>t1_h1_gateway_bad_input</value>
+            </arg>
+        </run>
+
+        <run name="t2_h2_go_slow_client">
+            <script name="webdeps_hyp">
+                <objective>[T2/H2] Open a TCP connection to service-go, send half an HTTP request and stay idle. FAIL (H2 confirmed) if the socket is still open after 30 s. Then open 50 such sockets and send a valid request; FAIL if it times out.</objective>
+            </script>
+            <arg name="hyp_id">
+                <value>t2_h2_go_slow_client</value>
+            </arg>
+        </run>
+
+        <run name="t3_h3_egress_run">
+            <script name="webdeps_hyp">
+                <objective>[T3/H3] tapi_egress sampled over the whole run (normal and bad traffic). Only loopback on the three service ports is allowed. FAIL (H3 confirmed) on any other destination, which is listed in the verdict and the report.</objective>
+            </script>
+            <arg name="hyp_id">
+                <value>t3_h3_egress_run</value>
+            </arg>
+        </run>
+
+        <run name="t4_h4_binscan">
+            <script name="webdeps_hyp">
+                <objective>[T4/H4] tapi_binscan on gateway-rs, service-go, service-cs, cpp-demo and libpycore.so; each missing flag is added to the tapi_cybersec_report. FAIL (H4 confirmed) on missing NX, PIE or RELRO, and on missing canary or fortify for the C and C++ binaries.</objective>
+            </script>
+            <arg name="hyp_id">
+                <value>t4_h4_binscan</value>
+            </arg>
+        </run>
+
+        <run name="t5_h5_netexpose">
+            <script name="webdeps_hyp">
+                <objective>[T5/H5] tapi_netexpose listeners of the three running components. FAIL (H5 confirmed) for a listener on a non-loopback address or on a port outside the expected list (gateway-rs, service-go, service-cs).</objective>
+            </script>
+            <arg name="hyp_id">
+                <value>t5_h5_netexpose</value>
+            </arg>
+        </run>
+
+        <run name="t6_h6_cs_failed_call">
+            <script name="webdeps_hyp">
+                <objective>[T6/H6] Make the backend call of service-cs fail (gateway stopped, 500, garbage, reset). FAIL (H6 confirmed) if the response status is 2xx while the call failed; PASS if it is 4xx or 5xx.</objective>
+            </script>
+            <arg name="hyp_id">
+                <value>t6_h6_cs_failed_call</value>
             </arg>
         </run>
     </session>

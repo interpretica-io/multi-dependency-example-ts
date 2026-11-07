@@ -1178,6 +1178,30 @@
               <arg name="hyp_id">h3_egress</arg>
               <notes/>
             </iter>
+            <iter result="PASSED">
+              <arg name="hyp_id">t1_h1_gateway_bad_input</arg>
+              <notes/>
+            </iter>
+            <iter result="PASSED">
+              <arg name="hyp_id">t2_h2_go_slow_client</arg>
+              <notes/>
+            </iter>
+            <iter result="PASSED">
+              <arg name="hyp_id">t3_h3_egress_run</arg>
+              <notes/>
+            </iter>
+            <iter result="PASSED">
+              <arg name="hyp_id">t4_h4_binscan</arg>
+              <notes/>
+            </iter>
+            <iter result="PASSED">
+              <arg name="hyp_id">t5_h5_netexpose</arg>
+              <notes/>
+            </iter>
+            <iter result="PASSED">
+              <arg name="hyp_id">t6_h6_cs_failed_call</arg>
+              <notes/>
+            </iter>
           </test>
         </iter>
       </test>
