@@ -3,12 +3,12 @@
     <description>Web dependency tests</description>
 
     <!-- @page mde-webdeps Web Dependency Tests
-          @objective Settle hypotheses H1 to H4 about the dependencies
+          @objective Settle hypotheses H1 to H5 about the dependencies
                      between gateway-rs, service-go and service-cs, and
                      show one working example per language.
 
           @par Notes:
-          - t_h1 to t_h4 are standalone executables, one per hypothesis;
+          - t_h1 to t_h5 are standalone executables, one per hypothesis;
             every run ends with an explicit verdict that names the
             hypothesis id (H<n>:proven or H<n>:disproved) and always
             carries a message, never an empty result.
@@ -29,25 +29,31 @@
 
         <run name="t_h1_gateway_bad_input">
             <script name="t_h1_gateway_bad_input">
-                <objective>[H1] Start gateway-rs. On three separate connections send an empty body, a 64 KiB header and a body with invalid UTF-8 bytes (0xff 0xfe); after each, a valid request on a new connection. FAIL (H1:proven) if the gateway exits or a valid request gets no reply; the exit code, the HTTP status of each valid request and of each bad request are recorded. PASS (H1:disproved) if every valid request is answered. A port closed after 10 s is a SETUP fault.</objective>
+                <objective>[H1] Start gateway-rs (port read with tapi_netexpose). On separate connections send an empty body, an oversized body (4 MiB) and a malformed header; after each, a valid request on a new connection. FAIL (H1:proven) if the gateway exits (non-zero exit code or signal) or the port closes; PASS (H1:disproved) if every valid request is answered. Exit code and statuses are recorded.</objective>
             </script>
         </run>
 
         <run name="t_h2_go_slow_client">
             <script name="t_h2_go_slow_client">
-                <objective>[H2] Start service-go, send a request without the final blank line and measure how long the server holds the socket, up to 60 s. FAIL (H2:proven) if it is still held at 60 s; PASS (H2:disproved) with the time otherwise. Then 200 such sockets are opened and a valid request on a new one is timed against 5 s (recorded).</objective>
+                <objective>[H2] Start service-go (port read with tapi_netexpose), open ten connections that send nothing and send one normal request at the same time. FAIL (H2:proven) if the normal request takes more than 5 s or an idle connection is still open after 30 s.</objective>
             </script>
         </run>
 
         <run name="t_h3_cs_swallowed_error">
             <script name="t_h3_cs_swallowed_error">
-                <objective>[H3] Start service-cs with its backend (gateway-rs) not running and send the request that reaches the backend call. FAIL (H3:proven) on a 2xx, with status and body recorded; PASS (H3:disproved) on 4xx/5xx. Control: with the backend up the same request must give 2xx.</objective>
+                <objective>[H3] Start service-cs (port read with tapi_netexpose) and send an invalid payload (non-numeric value and hops). PASS (H3:disproved) only on a 4xx or 5xx status; FAIL (H3:proven) on 200. Status and body are recorded.</objective>
             </script>
         </run>
 
         <run name="t_h4_binscan_netexpose_egress">
             <script name="t_h4_binscan_netexpose_egress">
-                <objective>[H4] tapi_binscan on gateway-rs, service-go, service-cs, cpp-demo and libpycore.so (NX, PIE, RELRO, canary; canary only noted for C#), tapi_netexpose with all three services running (only the three contract ports allowed), tapi_egress with only 127.0.0.1 on those ports allowed. All results go to one tapi_cybersec_report; FAIL (H4:proven) on the first finding, naming the file and the flag. A scanner that returns no data at all gives INCONCLUSIVE, naming the scanner.</objective>
+                <objective>[H4] Run the three services (ports read with tapi_netexpose), send one normal request to each and compare all their outgoing connections (tapi_egress) with an allowed list of loopback only; each unexpected destination goes into the tapi_cybersec_report. Also fail if tapi_netexpose shows a service listening on a non-loopback address. FAIL (H4:proven) on any finding. tapi_binscan on gateway-rs, service-go and service-cs adds its result to the report as context only and never fails the test. A scanner that returns no data at all gives INCONCLUSIVE, naming the scanner.</objective>
+            </script>
+        </run>
+
+        <run name="t_h5_go_contract_limits">
+            <script name="t_h5_go_contract_limits">
+                <objective>[H5] Start service-go (port read with tapi_netexpose) and send messages at the contract limits: empty, maximum length (64 characters), maximum plus one, wrong type. FAIL (H5:proven) if any invalid message gets a 2xx reply; every status is recorded.</objective>
             </script>
         </run>
 

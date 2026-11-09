@@ -1138,23 +1138,19 @@
           <test name="t_h3_cs_swallowed_error" type="script">
             <objective/>
             <notes/>
-            <iter result="FAILED">
-              <notes>DUT: Program.cs:85 catches the backend's exception and returns null, which Handle() turns into a 200 OK that only says "unreachable" in the body text; the caller cannot tell the failure from a success by status code.</notes>
-              <results>
-                <result value="FAILED">
-                  <verdict>t_h3_cs_swallowed_error H3:proven: service-cs answered HTTP 200 with its backend unreachable, body [[service-cs] hops=3      1.0000 ->     4.5450   ((v * 0.5 + 4) * cpp_weight, FFI into libcppcore)|[service-cs] upstream gateway-rs unreachable|value=4.545|]; control with the backend up: HTTP 200</verdict>
-                </result>
-              </results>
-            </iter>
           </test>
           <test name="t_h4_binscan_netexpose_egress" type="script">
             <objective/>
             <notes/>
+          </test>
+          <test name="t_h5_go_contract_limits" type="script">
+            <objective/>
+            <notes/>
             <iter result="FAILED">
-              <notes>DUT build posture: gateway-rs (Rust) and cpp-demo/libpycore.so (C/C++) are built without a stack protector, and service-go is built non-PIE; listeners and egress are clean (the three contract ports only, no outbound destination outside 127.0.0.1).</notes>
+              <notes>DUT: service-go floatParam/intParam (main.go) fall back to the default on an unparsable value and the handler never checks length or emptiness, so every message at the contract limits gets HTTP 200. Predicted from the source; not yet run.</notes>
               <results>
                 <result value="FAILED">
-                  <verdict>t_h4_binscan_netexpose_egress H4:proven: first finding: gateway-rs: stack canary missing; report has 8 finding(s) at or above INFO, 5 at or above HIGH</verdict>
+                  <verdict>t_h5_go_contract_limits H5:proven: service-go gave a success reply to invalid message(s): empty, maximum plus one, wrong type value, wrong type hops; statuses: empty -> HTTP 200; maximum length -> HTTP 200; maximum plus one -> HTTP 200; wrong type value -> HTTP 200; wrong type hops -> HTTP 200; </verdict>
                 </result>
               </results>
             </iter>

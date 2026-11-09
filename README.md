@@ -39,7 +39,7 @@ for **maximum evidence**:
 |---|---|---|
 | `ring` | suite model (`lib/tsapi_mde_ring`) | `propagation` (72 it.), `reference`, `sweep`, `determinism`, `entry_matrix`: every stage line checked against a reference model of the five formulas |
 | `web` | suite (`lib/tsapi_mde_web`) | `cycle`, `latency`, `contract`, `robustness`, `h1_gateway_backends`, `h2_stalled_peer` (hypotheses H1, H2) |
-| `webdeps` | tsf-cybersec (netexpose, egress, binscan) | `t_h1_gateway_bad_input` (H1), `t_h2_go_slow_client` (H2), `t_h3_cs_swallowed_error` (H3), `t_h4_binscan_netexpose_egress` (H4): standalone executables on `webdeps_lib.h`, each with an `H<n>:proven` / `H<n>:disproved` verdict and a `SETUP <service>` failure when a port stays closed for 10 s or `INCONCLUSIVE` when a scanner returns no data; plus `s_rust`, `s_go`, `s_cs`, `s_cpp`, `s_c`: one smoke test per language, settling no hypothesis |
+| `webdeps` | tsf-cybersec (netexpose, egress, binscan) | `t_h1_gateway_bad_input` (H1), `t_h2_go_slow_client` (H2), `t_h3_cs_swallowed_error` (H3), `t_h4_binscan_netexpose_egress` (H4), `t_h5_go_contract_limits` (H5): standalone executables on `webdeps_lib.h`, each with an `H<n>:proven` / `H<n>:disproved` verdict and a `SETUP <service>` failure when a port stays closed for 10 s or `INCONCLUSIVE` when a scanner returns no data; plus `s_rust`, `s_go`, `s_cs`, `s_cpp`, `s_c`: one smoke test per language, settling no hypothesis |
 | `graph` | binutils | `links`, `symbols`, `cycle_closure` (DOT graph artifact) |
 | `binary` | tsf-cybersec (binscan, objdump) | `hardening`, `hardening_matrix`, `disasm_defect`, `linked_libs` |
 | `devtool` | tsf-devtool | `rebuild_pycore`, `make_stub`, `reproducible` |

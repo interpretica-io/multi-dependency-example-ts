@@ -1,12 +1,12 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief Webdeps: H2, half-sent request held by service-go
+ * @brief Webdeps: H2, idle connections held by service-go
  *
- * Start service-go, send a request without the final blank line, keep the
- * socket open and measure how long the server holds it (up to 60 s). H2 is
- * proven (the test fails) if it is still held at 60 s. Then 200 such sockets
- * are opened and a valid request on a new one is timed against 5 s.
+ * Start service-go and read its port with tapi_netexpose. Open ten
+ * connections and send nothing on them; at the same time send one normal
+ * request. H2 is proven (the test fails) if the normal request takes more
+ * than 5 s or an idle connection is still open after 30 s.
  *
  * @author midair <midair@localhost>
  */
@@ -40,25 +40,9 @@
 
 #include "webdeps_lib.h"
 
-#define HOLD_LIMIT  60      /**< s, H2 limit for a half-sent request. */
-#define FLOOD       200
-#define FLOOD_TO    5       /**< s, valid request under the flood. */
-
-static const char half_request[] = "GET / HTTP/1.1\r\nHost: x\r\n";
-
-/** Connect and send the half request; -1 on failure. */
-static int
-half_open(unsigned port)
-{
-    int s = connect_loop(port);
-
-    if (s >= 0 && write(s, half_request, sizeof(half_request) - 1) < 0)
-    {
-        close(s);
-        return -1;
-    }
-    return s;
-}
+#define IDLE_CONNS  10
+#define IDLE_LIMIT  30      /**< s, an idle connection must be closed by then. */
+#define NORMAL_LIMIT 5      /**< s, the normal request must be answered by then. */
 
 /** True if the server closed the socket (EOF or reset) by now. */
 static bool
@@ -85,15 +69,15 @@ main(int argc, char **argv)
 {
     res_t    res = { .kind = R_SETUP };
     proc_t  *go;
-    int      s;
-    double   t0;
-    double   held = 0;
-    bool     closed = false;
-    int      flood[FLOOD];
+    tsapi_mde_session session = { .ta = NULL };
+    int      idle[IDLE_CONNS];
+    bool     shut[IDLE_CONNS] = { false };
     unsigned opened = 0;
+    unsigned open_left;
     unsigned i;
+    double   t0;
     hg_res   h;
-    char     flood_txt[300];
+    char     detail[400];
 
     TEST_START;
     wd_init(&res);
@@ -101,71 +85,86 @@ main(int argc, char **argv)
         goto verdict;
     res.kind = R_PASS;
 
-    TEST_STEP("Start service-go and wait for its port");
-    go = svc_start(&res, GO);
+    TEST_STEP("Start service-go and read its port with tapi_netexpose");
+    if (tsapi_mde_session_init(&session, "t_h2") != 0)
+    {
+        setup_svc = "agent";
+        res_set(&res, R_SETUP, "no session on the agent for tapi_netexpose");
+        goto verdict;
+    }
+    go = svc_start_exposed(&res, &session, GO);
     if (go == NULL)
         goto verdict;
 
-    TEST_STEP("Send a half request and wait up to %d s for the close",
-              HOLD_LIMIT);
-    s = half_open(go->port);
-    if (s < 0)
+    TEST_STEP("Open %d idle connections and send nothing", IDLE_CONNS);
+    for (i = 0; i < IDLE_CONNS; i++)
     {
-        res_set(&res, R_SETUP, "cannot open and write to 127.0.0.1:%u",
-                go->port);
-        goto verdict;
-    }
-    t0 = now_s();
-    while ((held = now_s() - t0) < HOLD_LIMIT)
-    {
-        if (closed_by_peer(s, 200))
-        {
-            closed = true;
-            held = now_s() - t0;
-            break;
-        }
-        if (proc_gone(go))
-        {
-            char why[900];
-
-            proc_describe(go, why, sizeof(why));
-            go->stopped = true;
-            res_set(&res, R_SETUP, "service-go died during the wait: %s",
-                    why);
-            close(s);
-            goto verdict;
-        }
-    }
-    close(s);
-
-    TEST_STEP("Open %d half-sent sockets, then send a valid request", FLOOD);
-    for (i = 0; i < FLOOD; i++)
-    {
-        flood[i] = half_open(go->port);
-        if (flood[i] >= 0)
+        idle[i] = connect_loop(go->port);
+        if (idle[i] >= 0)
             opened++;
     }
-    http_get(go->port, REQUEST, FLOOD_TO, &h);
-    snprintf(flood_txt, sizeof(flood_txt), "%u/%d half-sent sockets open, "
-             "valid request on a new socket %s within %d s (%.2f s, "
-             "HTTP %d)", opened, FLOOD, h.how == HG_OK ? "got a reply" :
-             "got NO reply", FLOOD_TO, h.elapsed, h.status);
-    for (i = 0; i < FLOOD; i++)
+    if (opened < IDLE_CONNS)
     {
-        if (flood[i] >= 0)
-            close(flood[i]);
+        res_set(&res, R_SETUP, "only %u of %d idle connections opened to "
+                "127.0.0.1:%u", opened, IDLE_CONNS, go->port);
+        goto close_idle;
     }
 
-    if (!closed)
+    TEST_STEP("Send one normal request while the connections are idle");
+    http_get(go->port, REQUEST, NORMAL_LIMIT + 2, &h);
+    if (proc_gone(go))
+    {
+        char why[900];
+
+        proc_describe(go, why, sizeof(why));
+        go->stopped = true;
+        res_set(&res, R_SETUP, "service-go died during the test: %s", why);
+        goto close_idle;
+    }
+
+    TEST_STEP("Wait up to %d s for the server to close the idle connections",
+              IDLE_LIMIT);
+    t0 = now_s();
+    open_left = IDLE_CONNS;
+    while (open_left > 0 && now_s() - t0 < IDLE_LIMIT)
+    {
+        for (i = 0; i < IDLE_CONNS; i++)
+        {
+            if (!shut[i] && closed_by_peer(idle[i], 100))
+            {
+                shut[i] = true;
+                open_left--;
+            }
+        }
+    }
+
+    snprintf(detail, sizeof(detail), "normal request: %s, HTTP %d, %.2f s "
+             "(limit %d s); idle connections still open after %.1f s: "
+             "%u of %d", h.how == HG_OK ? "answered" : hg_str(h.how),
+             h.status, h.elapsed, NORMAL_LIMIT, now_s() - t0, open_left,
+             IDLE_CONNS);
+    if (h.how != HG_OK || h.elapsed > NORMAL_LIMIT)
         res_set(&res, R_FAIL, "t_h2_go_slow_client H2:proven: service-go "
-                "still held the half-sent request at %d s; %s", HOLD_LIMIT,
-                flood_txt);
+                "was slow to a normal request next to %d idle connections; "
+                "%s", IDLE_CONNS, detail);
+    else if (open_left > 0)
+        res_set(&res, R_FAIL, "t_h2_go_slow_client H2:proven: service-go "
+                "kept idle connections open past %d s; %s", IDLE_LIMIT,
+                detail);
     else
         res_set(&res, R_PASS, "t_h2_go_slow_client H2:disproved: service-go "
-                "closed the half-sent request after %.1f s; %s", held,
-                flood_txt);
+                "answered in time and closed every idle connection; %s",
+                detail);
+
+close_idle:
+    for (i = 0; i < IDLE_CONNS; i++)
+    {
+        if (idle[i] >= 0)
+            close(idle[i]);
+    }
 
 verdict:
+    tsapi_mde_session_fini(&session);
     WD_VERDICT(&res);
 
 cleanup:

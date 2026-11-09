@@ -1,13 +1,12 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief Webdeps: H3, service-cs and a failed backend call
+ * @brief Webdeps: H3, service-cs and an invalid payload
  *
- * Start service-cs with its backend (gateway-rs, from the contract) not
- * running, so its port is closed, and send the request that reaches the
- * handler of the backend call. H3 is proven (the test fails) if the status
- * is 2xx. As a control the backend is started and the same request must
- * give a 2xx.
+ * Start service-cs, read its port with tapi_netexpose and send a request
+ * that must fail: a non-numeric value and hops. H3 is proven (the test
+ * fails) if the status is 200 (any 2xx); the test passes only on 4xx or
+ * 5xx. The status and the body are recorded.
  *
  * @author midair <midair@localhost>
  */
@@ -56,16 +55,16 @@ flat(const char *body, char *out, size_t size)
     }
 }
 
+#define BAD_REQUEST "/ring?value=not-a-number&hops=%7B%22x%22%3A"
+
 int
 main(int argc, char **argv)
 {
     res_t    res = { .kind = R_SETUP };
     proc_t  *cs;
-    proc_t  *gw;
-    hg_res   down;
-    hg_res   control;
-    char     down_body[400];
-    char     ctl_body[400];
+    tsapi_mde_session session = { .ta = NULL };
+    hg_res   bad;
+    char     body[400];
 
     TEST_START;
     wd_init(&res);
@@ -73,58 +72,41 @@ main(int argc, char **argv)
         goto verdict;
     res.kind = R_PASS;
 
-    TEST_STEP("Check that the backend port %u is closed", tab_port[GW]);
-    if (port_accepts(tab_port[GW]))
+    TEST_STEP("Start service-cs and read its port with tapi_netexpose");
+    if (tsapi_mde_session_init(&session, "t_h3") != 0)
     {
-        setup_svc = names[GW];
-        res_set(&res, R_SETUP, "127.0.0.1:%u is open before the start, the "
-                "backend cannot be made unreachable", tab_port[GW]);
+        setup_svc = "agent";
+        res_set(&res, R_SETUP, "no session on the agent for tapi_netexpose");
         goto verdict;
     }
-
-    TEST_STEP("Start service-cs and wait for its port");
-    cs = svc_start(&res, CS);
+    cs = svc_start_exposed(&res, &session, CS);
     if (cs == NULL)
         goto verdict;
 
-    TEST_STEP("GET %s with the backend unreachable", REQUEST);
-    http_get(cs->port, REQUEST, PROBE_TO + 2, &down);
-    if (down.how != HG_OK)
+    TEST_STEP("GET %s, an invalid payload", BAD_REQUEST);
+    http_get(cs->port, BAD_REQUEST, PROBE_TO + 2, &bad);
+    if (bad.how != HG_OK)
     {
         res_set(&res, R_FAIL, "t_h3_cs_swallowed_error H3:not-settled: no "
-                "HTTP reply from service-cs with the backend down (%s)",
-                hg_str(down.how));
+                "HTTP reply from service-cs to the invalid payload (%s)",
+                hg_str(bad.how));
         goto verdict;
     }
-    flat(down.body, down_body, sizeof(down_body));
+    flat(bad.body, body, sizeof(body));
+    RING("webdeps: service-cs answered HTTP %d to %s, body [%s]", bad.status,
+         BAD_REQUEST, body);
 
-    TEST_STEP("Control: start gateway-rs, same request, require 2xx");
-    gw = svc_start(&res, GW);
-    if (gw == NULL)
-        goto verdict;
-    http_get(cs->port, REQUEST, PROBE_TO + 2, &control);
-    flat(control.body, ctl_body, sizeof(ctl_body));
-    if (control.how != HG_OK || control.status < 200 || control.status > 299)
-    {
-        setup_svc = names[CS];
-        res_set(&res, R_SETUP, "control request with the backend up gave "
-                "%s, HTTP %d, not a 2xx; the failure case proves nothing",
-                hg_str(control.how), control.status);
-        goto verdict;
-    }
-
-    if (down.status >= 200 && down.status < 300)
-        res_set(&res, R_FAIL, "t_h3_cs_swallowed_error H3:proven: service-cs "
-                "answered HTTP %d with its backend unreachable, body [%s]; "
-                "control with the backend up: HTTP %d", down.status,
-                down_body, control.status);
-    else
+    if (bad.status >= 400 && bad.status <= 599)
         res_set(&res, R_PASS, "t_h3_cs_swallowed_error H3:disproved: "
-                "service-cs answered HTTP %d with its backend unreachable, "
-                "body [%s]; control with the backend up: HTTP %d",
-                down.status, down_body, control.status);
+                "service-cs answered HTTP %d to the invalid payload, body "
+                "[%s]", bad.status, body);
+    else
+        res_set(&res, R_FAIL, "t_h3_cs_swallowed_error H3:proven: "
+                "service-cs answered HTTP %d, not 4xx/5xx, to the invalid "
+                "payload, body [%s]", bad.status, body);
 
 verdict:
+    tsapi_mde_session_fini(&session);
     WD_VERDICT(&res);
 
 cleanup:

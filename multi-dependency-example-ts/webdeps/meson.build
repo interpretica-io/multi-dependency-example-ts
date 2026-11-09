@@ -8,6 +8,7 @@ tests = [
     't_h2_go_slow_client',
     't_h3_cs_swallowed_error',
     't_h4_binscan_netexpose_egress',
+    't_h5_go_contract_limits',
     's_rust',
     's_go',
     's_cs',

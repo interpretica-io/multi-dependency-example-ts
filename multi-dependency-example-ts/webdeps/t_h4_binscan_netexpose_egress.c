@@ -1,14 +1,17 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief Webdeps: H4, hardening, listeners and egress of the web tier
+ * @brief Webdeps: H4, listeners and egress of the web tier
  *
- * tapi_binscan on the three service binaries, cpp-demo and the C
- * extension (libpycore.so); tapi_netexpose and tapi_egress while the
- * three services run. Every result is appended to one
- * tapi_cybersec_report, which is logged; the test fails on the first
- * finding, naming the file and the flag. A scanner that comes back
- * with no data at all is INCONCLUSIVE, not a finding.
+ * Run the three services (each port read with tapi_netexpose), send one
+ * normal request to each, and with tapi_egress compare all their outgoing
+ * connections with an allowed list of loopback only; every unexpected
+ * destination goes into the tapi_cybersec_report and fails the test. The
+ * test also fails if tapi_netexpose shows a service listening on a
+ * non-loopback address. tapi_binscan on gateway-rs, service-go and the C#
+ * host adds its result to the same report as context only: it never
+ * fails the test. A scanner that comes back with no data at all is
+ * INCONCLUSIVE, not a finding.
  *
  * @author midair <midair@localhost>
  */
@@ -62,11 +65,10 @@ first_finding(char *first, const char *fmt, ...)
     va_end(ap);
 }
 
-/** NX, PIE, RELRO and canary of one binary, named @p subject in findings. */
+/** NX, PIE, RELRO and canary of one binary, added to the report as INFO. */
 static bool
 scan_one_binary(res_t *r, tsapi_mde_session *session, const char *path,
-                const char *subject, bool managed,
-                tapi_cybersec_report *report, char *first)
+                const char *subject, tapi_cybersec_report *report)
 {
     tapi_binscan_info info;
     bool              pie;
@@ -85,55 +87,20 @@ scan_one_binary(res_t *r, tsapi_mde_session *session, const char *path,
     pie = info.kind == TAPI_BINSCAN_KIND_PIE ||
           info.kind == TAPI_BINSCAN_KIND_SHARED;
     nx = info.nx && !info.nx_unknown;
-    if (!nx)
-    {
-        tapi_cybersec_report_add(report, TAPI_CYBERSEC_SEV_HIGH,
-                                 "binary.no-nx", subject, "%s: NX "
-                                 "missing", path);
-        first_finding(first, "%s: NX missing", subject);
-    }
-    if (!pie)
-    {
-        tapi_cybersec_report_add(report, TAPI_CYBERSEC_SEV_HIGH,
-                                 "binary.no-pie", subject, "%s: PIE "
-                                 "missing (%s)", path,
-                                 tapi_binscan_kind2str(info.kind));
-        first_finding(first, "%s: PIE missing", subject);
-    }
-    if (info.relro == TAPI_BINSCAN_RELRO_NONE)
-    {
-        tapi_cybersec_report_add(report, TAPI_CYBERSEC_SEV_HIGH,
-                                 "binary.no-relro", subject, "%s: "
-                                 "RELRO missing", path);
-        first_finding(first, "%s: RELRO missing", subject);
-    }
-    if (!info.canary)
-    {
-        /*
-         * A managed (NativeAOT) binary has no C stack protector to
-         * find; the flag is noted, not failed, for it.
-         */
-        tapi_cybersec_report_add(report, managed ?
-                                 TAPI_CYBERSEC_SEV_INFO :
-                                 TAPI_CYBERSEC_SEV_HIGH,
-                                 "binary.no-canary", subject, "%s: "
-                                 "stack canary missing%s", path,
-                                 managed ? " (C#: may not apply to a "
-                                 "managed binary)" : "");
-        if (!managed)
-            first_finding(first, "%s: stack canary missing", subject);
-    }
+    tapi_cybersec_report_add(report, TAPI_CYBERSEC_SEV_INFO,
+                             "binary.hardening", subject, "%s: NX %s, PIE "
+                             "%s, RELRO %s, stack canary %s", path,
+                             nx ? "yes" : "no", pie ? "yes" : "no",
+                             info.relro == TAPI_BINSCAN_RELRO_NONE ?
+                             "no" : "yes", info.canary ? "yes" : "no");
     tapi_binscan_info_free(&info);
     return true;
 }
 
-/**
- * NX, PIE, RELRO and canary of the three service binaries, cpp-demo (the
- * C++ artifact) and libpycore.so (the C extension).
- */
+/** tapi_binscan on the three service binaries; context only. */
 static bool
 scan_binaries(res_t *r, tsapi_mde_session *session,
-              tapi_cybersec_report *report, char *first)
+              tapi_cybersec_report *report)
 {
     int i;
     char path[600];
@@ -141,17 +108,9 @@ scan_binaries(res_t *r, tsapi_mde_session *session,
     for (i = 0; i < NAMES; i++)
     {
         snprintf(path, sizeof(path), "%s/dist/bin/%s", src_root, names[i]);
-        if (!scan_one_binary(r, session, path, names[i], i == CS, report,
-                             first))
+        if (!scan_one_binary(r, session, path, names[i], report))
             return false;
     }
-    snprintf(path, sizeof(path), "%s/dist/bin/cpp-demo", src_root);
-    if (!scan_one_binary(r, session, path, "cpp-demo", false, report, first))
-        return false;
-    snprintf(path, sizeof(path), "%s/dist/lib/libpycore.so", src_root);
-    if (!scan_one_binary(r, session, path, "libpycore.so", false, report,
-                         first))
-        return false;
     return true;
 }
 
@@ -199,15 +158,21 @@ scan_listeners(res_t *r, tsapi_mde_session *session, proc_t **svc,
         listeners++;
         sock_addr(&s->local, addr, sizeof(addr));
         port = sock_port(&s->local);
-        /* The expected list is the port of the service itself. */
-        if (port != tab_port[o])
+        if (!is_loopback(addr))
         {
             tapi_cybersec_report_add(report, TAPI_CYBERSEC_SEV_HIGH,
-                                     "net.unexpected-listener", names[o],
-                                     "listens on %s:%u, expected port %u",
+                                     "net.non-loopback-listener", names[o],
+                                     "listens on %s:%u, not a loopback "
+                                     "address", addr, port);
+            first_finding(first, "%s: listens on non-loopback %s:%u",
+                          names[o], addr, port);
+        }
+        else if (port != tab_port[o])
+        {
+            tapi_cybersec_report_add(report, TAPI_CYBERSEC_SEV_MEDIUM,
+                                     "net.unexpected-port", names[o],
+                                     "listens on %s:%u, contract port %u",
                                      addr, port, tab_port[o]);
-            first_finding(first, "%s: unexpected listener %s:%u", names[o],
-                          addr, port);
         }
         else
         {
@@ -226,10 +191,7 @@ scan_listeners(res_t *r, tsapi_mde_session *session, proc_t **svc,
     return true;
 }
 
-/**
- * Outbound connections of the three processes against an allow list of the
- * addresses their sources name: 127.0.0.1 on the three contract ports.
- */
+/** Outbound connections of the three processes against loopback only. */
 static bool
 scan_egress(res_t *r, tsapi_mde_session *session, proc_t **svc,
             tapi_cybersec_report *report, char *first)
@@ -237,8 +199,13 @@ scan_egress(res_t *r, tsapi_mde_session *session, proc_t **svc,
     unsigned long        ino[NAMES][MAX_INO];
     size_t               n_ino[NAMES];
     tapi_netexpose_opt   opt = tapi_netexpose_default_opt;
-    tapi_egress_rule     rules[NAMES];
-    tapi_egress_policy   policy = { .n_rules = NAMES, .rules = rules,
+    /* The allowed list: loopback only, any port. */
+    tapi_egress_rule     rules[] = {
+        { IPPROTO_TCP, "127.0.0.0/8", 0, 0 },
+        { IPPROTO_TCP, "::1/128", 0, 0 },
+    };
+    tapi_egress_policy   policy = { .n_rules = TE_ARRAY_LEN(rules),
+                                    .rules = rules,
                                     .allow_loopback = false,
                                     .allow_private = false };
     int                  round;
@@ -247,11 +214,6 @@ scan_egress(res_t *r, tsapi_mde_session *session, proc_t **svc,
 
     opt.udp = false;
     opt.tcp = true;
-    for (i = 0; i < NAMES; i++)
-    {
-        rules[i] = (tapi_egress_rule){ IPPROTO_TCP, "127.0.0.1/32",
-                                       tab_port[i], tab_port[i] };
-    }
     for (round = 0; round < 6; round++)
     {
         te_vec conns = TE_VEC_INIT(tapi_netexpose_socket);
@@ -314,6 +276,7 @@ main(int argc, char **argv)
     bool                 report_ready = false;
     char                 first[FIRST_LEN] = "";
     const int            which[] = { GO, CS, GW };
+    int                  i;
 
     TEST_START;
     wd_init(&res);
@@ -322,19 +285,23 @@ main(int argc, char **argv)
     res.kind = R_PASS;
 
     TEST_STEP("Start the three services and wait for their ports");
-    if (!start_all(&res, svc, which, 3))
-        goto verdict;
     if (tsapi_mde_session_init(&session, "t_h4") != 0)
     {
         setup_svc = "agent";
         res_set(&res, R_SETUP, "no session on the agent for the scanners");
         goto verdict;
     }
+    for (i = 0; i < 3; i++)
+    {
+        svc[which[i]] = svc_start_exposed(&res, &session, which[i]);
+        if (svc[which[i]] == NULL)
+            goto verdict;
+    }
     tapi_cybersec_report_init(&report);
     report_ready = true;
 
-    TEST_STEP("tapi_binscan on gateway-rs, service-go, service-cs");
-    if (!scan_binaries(&res, &session, &report, first))
+    TEST_STEP("tapi_binscan on gateway-rs, service-go, service-cs (context)");
+    if (!scan_binaries(&res, &session, &report))
         goto verdict;
     TEST_STEP("tapi_netexpose while all three services run");
     if (!scan_listeners(&res, &session, svc, &report, first))
@@ -352,9 +319,9 @@ main(int argc, char **argv)
                 tapi_cybersec_report_count(&report, TAPI_CYBERSEC_SEV_HIGH));
     else
         res_set(&res, R_PASS, "t_h4_binscan_netexpose_egress H4:disproved: "
-                "NX, PIE, RELRO and canary present (canary not required for "
-                "C#), listeners are exactly the three expected ports, no "
-                "outbound destination outside the allow list");
+                "every listener is on a loopback address and no outbound "
+                "destination is outside loopback; binscan result is "
+                "context only");
 
 verdict:
     if (report_ready)

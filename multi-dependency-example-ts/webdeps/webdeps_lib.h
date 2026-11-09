@@ -690,6 +690,56 @@ is_loopback(const char *addr)
     return strncmp(addr, "127.", 4) == 0 || strcmp(addr, "::1") == 0;
 }
 
+/**
+ * Start a service and read the port it listens on from tapi_netexpose: the
+ * listening TCP socket owned by the new process (matched by socket inode)
+ * becomes @c p->port. A service with no listener there is an R_SETUP fault.
+ */
+static proc_t *
+svc_start_exposed(res_t *r, tsapi_mde_session *session, int idx)
+{
+    unsigned long        ino[MAX_INO];
+    tapi_netexpose_opt   opt = tapi_netexpose_default_opt;
+    te_vec               socks = TE_VEC_INIT(tapi_netexpose_socket);
+    const tapi_netexpose_socket *s;
+    proc_t              *p = svc_start(r, idx);
+    size_t               n;
+    unsigned             port = 0;
+    size_t               k;
+
+    if (p == NULL)
+        return NULL;
+    opt.udp = false;
+    opt.tcp = true;
+    n = pid_inodes(p->pid, ino, MAX_INO);
+    if (tapi_netexpose_sockets(session->factory, &opt, &socks) != 0)
+    {
+        res_set(r, R_SETUP, "tapi_netexpose cannot read the socket tables");
+        te_vec_free(&socks);
+        return NULL;
+    }
+    TE_VEC_FOREACH(&socks, s)
+    {
+        if (!tapi_netexpose_socket_is_listening(s))
+            continue;
+        for (k = 0; k < n; k++)
+        {
+            if (ino[k] == s->inode && port == 0)
+                port = sock_port(&s->local);
+        }
+    }
+    te_vec_free(&socks);
+    if (port == 0)
+    {
+        res_set(r, R_SETUP, "tapi_netexpose shows no listening port of %s",
+                names[idx]);
+        return NULL;
+    }
+    p->port = port;
+    RING("webdeps: %s listens on port %u (tapi_netexpose)", names[idx], port);
+    return p;
+}
+
 static void
 exit_code_str(proc_t *p, char *buf, size_t size)
 {
