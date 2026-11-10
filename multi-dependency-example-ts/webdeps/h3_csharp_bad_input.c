@@ -3,12 +3,14 @@
 /** @file
  * @brief Webdeps: H3, the swallowed error in service-cs
  *
+ * A plain TCP/HTTP client with its own client timeouts.
+ *
  * Program.cs:85 catches HttpRequestException and TaskCanceledException
  * around the GET to the upstream gateway-rs and turns them into "no
  * result". The only input that makes the code throw inside that try block
  * is a request with a hop budget above zero while gateway-rs is not
  * listening: the connect is refused. Start service-cs alone (its port is
- * read with tapi_netexpose), send that bad input (hops=3), and as a
+ * listening), send that bad input (hops=3), and as a
  * control a valid one (hops=0, which never calls the upstream). A request
  * with an unparsable value is sent as well and only recorded.
  *
@@ -46,9 +48,8 @@ flat(const char *body, char *out, size_t size)
 int
 main(int argc, char **argv)
 {
-    res_t    res = { .kind = R_SETUP };
+    res_t    res = { .kind = R_PASS };
     proc_t  *cs;
-    tsapi_mde_session session = { .ta = NULL };
     hg_res   control;
     hg_res   bad;
     hg_res   parse;
@@ -57,19 +58,9 @@ main(int argc, char **argv)
     char     pbody[200];
 
     TEST_START;
-    wd_init(&res);
-    if (res.kind != R_SETUP)
-        goto verdict;
-    res.kind = R_PASS;
 
-    TEST_STEP("Start service-cs alone and read its port with tapi_netexpose");
-    if (tsapi_mde_session_init(&session, "h3") != 0)
-    {
-        setup_svc = "agent";
-        res_set(&res, R_SETUP, "no session on the agent for tapi_netexpose");
-        goto verdict;
-    }
-    cs = svc_start_exposed(&res, &session, CS);
+    TEST_STEP("Start service-cs alone and wait for its port");
+    cs = svc_start_or_fail(&res, "H3", CS);
     if (cs == NULL)
         goto verdict;
 
@@ -86,14 +77,14 @@ main(int argc, char **argv)
     http_get(cs->port, PARSE_REQUEST, PROBE_TO + 2, &parse);
     flat(parse.body, pbody, sizeof(pbody));
 
-    RING("webdeps: service-cs control HTTP %d [%s]; bad input HTTP %d [%s]; "
-         "unparsable value HTTP %d [%s]", control.status, cbody, bad.status,
-         body, parse.status, pbody);
+    RING("webdeps: service-cs control HTTP %d [%s] in %.2f s; bad input HTTP %d [%s] in "
+         "%.2f s; unparsable value HTTP %d [%s]", control.status, cbody,
+         control.elapsed, bad.status, body, bad.elapsed, parse.status,
+         pbody);
 
     if (control.how != HG_OK || bad.how != HG_OK)
     {
-        setup_svc = "service-cs";
-        res_set(&res, R_SETUP, "no HTTP reply (control: %s, bad input: %s); "
+        res_set(&res, R_FAIL, "H3 FAIL: no HTTP reply (control: %s, bad input: %s); "
                 "control status %d, bad input status %d",
                 hg_str(control.how), hg_str(bad.how), control.status,
                 bad.status);
@@ -101,13 +92,14 @@ main(int argc, char **argv)
     }
     if (bad.status >= 400 && bad.status <= 599)
         res_set(&res, R_PASS, "H3 PASS: bad input HTTP %d, control HTTP %d; "
-                "bad input body [%s]", bad.status, control.status, body);
+                "bad input body [%s]; bad input took %.2f s", bad.status,
+                control.status, body, bad.elapsed);
     else
         res_set(&res, R_FAIL, "H3 FAIL: bad input HTTP %d, control HTTP %d; "
-                "bad input body [%s]", bad.status, control.status, body);
+                "bad input body [%s]; bad input took %.2f s", bad.status,
+                control.status, body, bad.elapsed);
 
 verdict:
-    tsapi_mde_session_fini(&session);
     HYP_VERDICT(&res, "H3");
 
 cleanup:

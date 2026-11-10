@@ -1119,7 +1119,7 @@
         <notes/>
         <iter result="FAILED">
           <notes/>
-          <test name="h1_gateway_panic" type="script">
+          <test name="h1_gateway_bad_request" type="script">
             <objective/>
             <notes/>
           </test>

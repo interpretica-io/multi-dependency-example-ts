@@ -942,4 +942,32 @@ wd_init(res_t *r)
         TEST_VERDICT("%s", (_r)->msg);                                      \
     } while (0)
 
+/**
+ * Plain-client tests: start a service and wait for its listen port; when
+ * that does not work, turn the outcome into an R_FAIL that reads
+ * "<id> FAIL: service did not start: <name> (<detail>)".
+ */
+static proc_t *
+svc_start_or_fail(res_t *r, const char *id, int idx)
+{
+    proc_t *p;
+    char    detail[900];
+
+    wd_init(r);
+    p = (r->kind == R_SETUP) ? NULL : svc_start(r, idx);
+    if (p != NULL)
+        return p;
+    snprintf(detail, sizeof(detail), "%.890s", r->msg);
+    res_set(r, R_FAIL, "%s FAIL: service did not start: %s (%s)", id,
+            names[idx], detail);
+    return NULL;
+}
+
+/** Process state by pid: true while it has not exited. */
+static bool
+pid_alive(proc_t *p)
+{
+    return !proc_gone(p) && kill(p->pid, 0) == 0;
+}
+
 #endif /* MDE_WEBDEPS_LIB_H */

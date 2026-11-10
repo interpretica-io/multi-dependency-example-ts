@@ -3,11 +3,13 @@
 /** @file
  * @brief Webdeps: H4, the contract of service-go
  *
+ * A plain TCP/HTTP client with its own client timeouts.
+ *
  * The contract check in contract.go accepts a row only if it has five
  * columns and its port column parses as an integer (the checks at
  * contract.go:49 and :53, after the open at :33). Its message form for
  * /ring is: value is a number and hops is an integer. Start service-go
- * (its port is read with tapi_netexpose) and send one message that follows
+ * and send one message that follows
  * that contract (value=1, hops=1) and one that breaks it by the same
  * condition (value=abc, hops=x, neither parses).
  *
@@ -46,28 +48,17 @@ reply_str(const hg_res *h, char *out, size_t size)
 int
 main(int argc, char **argv)
 {
-    res_t    res = { .kind = R_SETUP };
+    res_t    res = { .kind = R_PASS };
     proc_t  *go;
-    tsapi_mde_session session = { .ta = NULL };
     hg_res   valid;
     hg_res   broken;
     char     vstr[400];
     char     bstr[400];
 
     TEST_START;
-    wd_init(&res);
-    if (res.kind != R_SETUP)
-        goto verdict;
-    res.kind = R_PASS;
 
-    TEST_STEP("Start service-go and read its port with tapi_netexpose");
-    if (tsapi_mde_session_init(&session, "h4") != 0)
-    {
-        setup_svc = "agent";
-        res_set(&res, R_SETUP, "no session on the agent for tapi_netexpose");
-        goto verdict;
-    }
-    go = svc_start_exposed(&res, &session, GO);
+    TEST_STEP("Start service-go and wait for its port");
+    go = svc_start_or_fail(&res, "H4", GO);
     if (go == NULL)
         goto verdict;
 
@@ -78,8 +69,7 @@ main(int argc, char **argv)
 
     if (valid.how != HG_OK || broken.how != HG_OK)
     {
-        setup_svc = "service-go";
-        res_set(&res, R_SETUP, "no HTTP reply (valid message: %s, broken "
+        res_set(&res, R_FAIL, "H4 FAIL: no HTTP reply (valid message: %s, broken "
                 "message: %s)", hg_str(valid.how), hg_str(broken.how));
         goto verdict;
     }
@@ -99,7 +89,6 @@ main(int argc, char **argv)
                 VALID_MSG, vstr, BROKEN_MSG, bstr);
 
 verdict:
-    tsapi_mde_session_fini(&session);
     HYP_VERDICT(&res, "H4");
 
 cleanup:

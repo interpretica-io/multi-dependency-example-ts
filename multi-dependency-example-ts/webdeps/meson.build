@@ -4,7 +4,7 @@
 # package.xml. No group prologue/epilogue: a setup problem must never fail
 # the session.
 tests = [
-    'h1_gateway_panic',
+    'h1_gateway_bad_request',
     'h2_stalled_peer',
     'h3_csharp_bad_input',
     'h4_go_contract',

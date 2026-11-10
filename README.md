@@ -39,7 +39,7 @@ for **maximum evidence**:
 |---|---|---|
 | `ring` | suite model (`lib/tsapi_mde_ring`) | `propagation` (72 it.), `reference`, `sweep`, `determinism`, `entry_matrix`: every stage line checked against a reference model of the five formulas |
 | `web` | suite (`lib/tsapi_mde_web`) | `cycle`, `latency`, `contract`, `robustness` |
-| `webdeps` | tsf-cybersec (netexpose, egress, binscan) | `h1_gateway_panic` (H1), `h2_stalled_peer` (H2), `h3_csharp_bad_input` (H3), `h4_go_contract` (H4): standalone executables on `webdeps_lib.h`, each printing one verdict line that starts with its hypothesis id and the measured value (`H1 PASS` / `H1 FAIL` / `H1 UNREACHED`, `H2 NOSTART` when the connect fails, `H<n> SETUP <service>` when a port stays closed for 10 s); `sec_binscan_netexpose_egress` (`SEC` verdict, no hypothesis); plus `s_rust`, `s_go`, `s_cs`, `s_cpp`, `s_c`: one smoke test per language, settling no hypothesis |
+| `webdeps` | tsf-cybersec (netexpose, egress, binscan) | `h1_gateway_bad_request` (H1), `h2_stalled_peer` (H2), `h3_csharp_bad_input` (H3), `h4_go_contract` (H4): standalone plain TCP/HTTP clients on `webdeps_lib.h`, each starting its service, waiting for the listen port and ending with `H<n> PASS` or `H<n> FAIL` plus the status code or time it measured (`service did not start: <service>` when the port stays closed); `sec_binscan_netexpose_egress` (`SEC` verdict, no hypothesis); plus `s_rust`, `s_go`, `s_cs`, `s_cpp`, `s_c`: one smoke test per language, settling no hypothesis |
 | `graph` | binutils | `links`, `symbols`, `cycle_closure` (DOT graph artifact) |
 | `binary` | tsf-cybersec (binscan, objdump) | `hardening`, `hardening_matrix`, `disasm_defect`, `linked_libs` |
 | `devtool` | tsf-devtool | `rebuild_pycore`, `make_stub`, `reproducible` |

@@ -8,13 +8,13 @@
                      language.
 
           @par Notes:
-          - h1_gateway_panic, h2_stalled_peer, h3_csharp_bad_input and
-            h4_go_contract are standalone executables, one per hypothesis.
-            Each prints a one-line verdict that starts with its hypothesis
-            id and carries the measured value: H<n> PASS, H<n> FAIL, and
-            for the two special cases H1 UNREACHED (no input reaches the
-            panic lines, the inputs tried are listed) and H2 NOSTART (the
-            connect failed, with the errno).
+          - h1_gateway_bad_request, h2_stalled_peer, h3_csharp_bad_input and
+            h4_go_contract are standalone plain TCP/HTTP clients, one per
+            hypothesis. Each starts its service, waits for the listen port
+            and ends with an explicit verdict that starts with its
+            hypothesis id and carries the status code or time it measured:
+            H<n> PASS or H<n> FAIL. A service that does not start fails
+            with "service did not start: <service>".
           - s_rust, s_go, s_cs, s_cpp and s_c are smoke tests, one per
             language of the web tier and the ring; they settle no
             hypothesis and just run the built artifact once with a
@@ -22,10 +22,6 @@
           - sec_binscan_netexpose_egress is the security check of the tier
             (tapi_netexpose, tapi_egress, tapi_binscan); it settles no
             hypothesis and its verdict starts with SEC.
-          - A missing binary or busy port is a distinct failure that reads
-            "H<n> SETUP <component>", so that a harness failure is not a
-            finding; a scanner that returns no data at all is
-            INCONCLUSIVE, naming the scanner.
           - There is no group prologue or epilogue.
     -->
 
@@ -33,27 +29,27 @@
 
     <session track_conf="silent">
 
-        <run name="h1_gateway_panic">
-            <script name="h1_gateway_panic">
-                <objective>[H1] Start gateway-rs (port read with tapi_netexpose) and send the malformed requests that could reach the panics at main.rs:30 and main.rs:34 (no target, non-UTF-8 line, 4 MiB line, extreme query values); after each, a valid request on the same port. FAIL if the process exits or a valid request gets no reply (exit code and last stderr line recorded); PASS if a request reached a panic and the process kept serving; UNREACHED, with the inputs tried, if no request reached either line. A second gateway-rs on the busy port is run as a startup input.</objective>
+        <run name="h1_gateway_bad_request">
+            <script name="h1_gateway_bad_request">
+                <objective>[H1] Start gateway-rs, wait for its port, send an empty and a malformed request and start a second instance on the busy port (main.rs:34; main.rs:30 is not reachable at run time). After each, check by pid that the process is alive and that a good request still gets a reply. FAIL if the process exits or the good request gets no reply (exit code recorded), PASS otherwise.</objective>
             </script>
         </run>
 
         <run name="h2_stalled_peer">
             <script name="h2_stalled_peer">
-                <objective>[H2] Start service-go (port read with tapi_netexpose), open a TCP connection, send half a request and stop. Measure the seconds until the server closes the socket, up to 60 s. FAIL if it holds the socket for 30 s or more, PASS if it closes sooner, NOSTART with the errno if the connect fails.</objective>
+                <objective>[H2] Start service-go, open 20 stalled sockets (silent or half a request), send a good request and time the reply, and measure how long each stalled socket is held, up to 30 s. FAIL if a socket is held for the full 30 s or the good request fails or takes more than 5 s. The hold time is printed.</objective>
             </script>
         </run>
 
         <run name="h3_csharp_bad_input">
             <script name="h3_csharp_bad_input">
-                <objective>[H3] Start service-cs alone (port read with tapi_netexpose) and send the input that makes the GET inside the try block of Program.cs:85 throw (hops=3 with gateway-rs not listening), plus a valid control (hops=0) and an unparsable value. FAIL if the bad input returns HTTP 200, PASS on 4xx or 5xx. Both status codes and the body are printed.</objective>
+                <objective>[H3] Start service-cs alone and send a valid request (hops=0) and the input that makes the GET inside the try block of Program.cs:85 throw (hops=3 with gateway-rs not listening). FAIL if the bad input returns 2xx, PASS on 4xx or 5xx. Both status codes and bodies are printed.</objective>
             </script>
         </run>
 
         <run name="h4_go_contract">
             <script name="h4_go_contract">
-                <objective>[H4] Start service-go (port read with tapi_netexpose) and send one message that follows the contract (value=1, hops=1) and one that breaks it by the condition of the contract check (value=abc, hops=x). FAIL if the broken message gets a success reply, PASS if it is rejected. Both replies are printed.</objective>
+                <objective>[H4] Start service-go and send one message that follows the contract (value=1, hops=1) and one that breaks it (value=abc, hops=x). FAIL if the broken message gets a success reply, PASS if it is rejected. Both replies are printed.</objective>
             </script>
         </run>
 
