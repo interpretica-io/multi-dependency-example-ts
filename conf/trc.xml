@@ -1108,14 +1108,6 @@
             <objective/>
             <notes/>
           </test>
-          <test name="h1_gateway_backends" type="script">
-            <objective/>
-            <notes/>
-          </test>
-          <test name="h2_stalled_peer" type="script">
-            <objective/>
-            <notes/>
-          </test>
           <test name="epilogue" type="script">
             <objective/>
             <notes/>
@@ -1127,33 +1119,25 @@
         <notes/>
         <iter result="FAILED">
           <notes/>
-          <test name="t_h1_gateway_bad_input" type="script">
+          <test name="h1_gateway_panic" type="script">
             <objective/>
             <notes/>
           </test>
-          <test name="t_h2_go_slow_client" type="script">
+          <test name="h2_stalled_peer" type="script">
             <objective/>
             <notes/>
           </test>
-          <test name="t_h3_cs_swallowed_error" type="script">
+          <test name="h3_csharp_bad_input" type="script">
             <objective/>
             <notes/>
           </test>
-          <test name="t_h4_binscan_netexpose_egress" type="script">
+          <test name="h4_go_contract" type="script">
             <objective/>
             <notes/>
           </test>
-          <test name="t_h5_go_contract_limits" type="script">
+          <test name="sec_binscan_netexpose_egress" type="script">
             <objective/>
             <notes/>
-            <iter result="FAILED">
-              <notes>DUT: service-go floatParam/intParam (main.go) fall back to the default on an unparsable value and the handler never checks length or emptiness, so every message at the contract limits gets HTTP 200. Predicted from the source; not yet run.</notes>
-              <results>
-                <result value="FAILED">
-                  <verdict>t_h5_go_contract_limits H5:proven: service-go gave a success reply to invalid message(s): empty, maximum plus one, wrong type value, wrong type hops; statuses: empty -> HTTP 200; maximum length -> HTTP 200; maximum plus one -> HTTP 200; wrong type value -> HTTP 200; wrong type hops -> HTTP 200; </verdict>
-                </result>
-              </results>
-            </iter>
           </test>
           <test name="s_rust" type="script">
             <objective/>

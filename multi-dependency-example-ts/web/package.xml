@@ -13,8 +13,6 @@
           - @ref mde-web-latency    - K requests per hop budget, latency charts
           - @ref mde-web-contract   - services.tab vs the running tier
           - @ref mde-web-robustness - malformed requests, the service survives
-          - @ref mde-web-h1         - gateway-rs with its backends absent or answering garbage (H1)
-          - @ref mde-web-h2         - a stalled or closed peer in the chain (H2)
 
           @par Notes:
           - The three services call each other in a cycle over HTTP on ports
@@ -240,67 +238,6 @@
                 <value>service-go</value>
                 <value>service-cs</value>
             </arg>
-        </run>
-
-        <!-- @page mde-web-h1 H1: Gateway without Backends
-              @objective Settle H1: gateway-rs hard-depends on its loopback
-                         backends and crashes when they are absent or bad.
-
-              @par Scenario:
-              -# Skip unless the tier, curl and python3 are available.
-              -# Phase no-backends: start gateway-rs alone, send one HTTP
-                 request, watch the process for 5 s (alive, exit status,
-                 signal).
-              -# Phases garbage and close: the same with fake listeners on
-                 127.0.0.1:8082 and :8083 that accept and answer garbage
-                 bytes / accept and close at once.
-              -# Charts: HTTP status and liveness per phase.
-              -# Abort, signal or non-zero exit in any phase: verdict
-                 "H1 PROVEN", test fails. Alive in every phase and
-                 answering: verdict "H1 DISPROVEN".
-
-              @par Expected Results:
-              - Gateway survives all phases: PASSED (H1 DISPROVEN).
-        -->
-        <run name="h1_gateway_backends">
-            <script name="h1_gateway_backends">
-                <objective>
-                    Start gateway-rs with absent and garbage backends and
-                    record whether it survives.
-
-                    @md
-                </objective>
-            </script>
-        </run>
-
-        <!-- @page mde-web-h2 H2: Stalled Peer in the Chain
-              @objective Settle H2: the chain has no timeout, a stalled peer
-                         hangs the caller or its failure is reported as
-                         success.
-
-              @par Scenario:
-              -# Skip unless the tier, curl and python3 are available.
-              -# Start the three services; replace service-cs (the peer of
-                 service-go) with a listener that accepts and never replies;
-                 GET the gateway with a 30 s cap and time it.
-              -# Restart the tier; stop gateway-rs (the peer of service-cs);
-                 GET service-cs and record the status.
-              -# No response in 30 s, a response slower than 10 s or a 2xx
-                 status with the peer dead: verdict "H2 PROVEN", test
-                 fails. Bounded non-2xx within 10 s in both cases: "H2
-                 DISPROVEN".
-
-              @par Expected Results:
-              - Both cases give a bounded error: PASSED (H2 DISPROVEN).
-        -->
-        <run name="h2_stalled_peer">
-            <script name="h2_stalled_peer">
-                <objective>
-                    Kill or stall a peer in the chain and time the answer.
-
-                    @md
-                </objective>
-            </script>
         </run>
     </session>
 </package>

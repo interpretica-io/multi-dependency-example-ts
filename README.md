@@ -38,19 +38,23 @@ for **maximum evidence**:
 | Group | Modules | Tests |
 |---|---|---|
 | `ring` | suite model (`lib/tsapi_mde_ring`) | `propagation` (72 it.), `reference`, `sweep`, `determinism`, `entry_matrix`: every stage line checked against a reference model of the five formulas |
-| `web` | suite (`lib/tsapi_mde_web`) | `cycle`, `latency`, `contract`, `robustness`, `h1_gateway_backends`, `h2_stalled_peer` (hypotheses H1, H2) |
-| `webdeps` | tsf-cybersec (netexpose, egress, binscan) | `t_h1_gateway_bad_input` (H1), `t_h2_go_slow_client` (H2), `t_h3_cs_swallowed_error` (H3), `t_h4_binscan_netexpose_egress` (H4), `t_h5_go_contract_limits` (H5): standalone executables on `webdeps_lib.h`, each with an `H<n>:proven` / `H<n>:disproved` verdict and a `SETUP <service>` failure when a port stays closed for 10 s or `INCONCLUSIVE` when a scanner returns no data; plus `s_rust`, `s_go`, `s_cs`, `s_cpp`, `s_c`: one smoke test per language, settling no hypothesis |
+| `web` | suite (`lib/tsapi_mde_web`) | `cycle`, `latency`, `contract`, `robustness` |
+| `webdeps` | tsf-cybersec (netexpose, egress, binscan) | `h1_gateway_panic` (H1), `h2_stalled_peer` (H2), `h3_csharp_bad_input` (H3), `h4_go_contract` (H4): standalone executables on `webdeps_lib.h`, each printing one verdict line that starts with its hypothesis id and the measured value (`H1 PASS` / `H1 FAIL` / `H1 UNREACHED`, `H2 NOSTART` when the connect fails, `H<n> SETUP <service>` when a port stays closed for 10 s); `sec_binscan_netexpose_egress` (`SEC` verdict, no hypothesis); plus `s_rust`, `s_go`, `s_cs`, `s_cpp`, `s_c`: one smoke test per language, settling no hypothesis |
 | `graph` | binutils | `links`, `symbols`, `cycle_closure` (DOT graph artifact) |
 | `binary` | tsf-cybersec (binscan, objdump) | `hardening`, `hardening_matrix`, `disasm_defect`, `linked_libs` |
 | `devtool` | tsf-devtool | `rebuild_pycore`, `make_stub`, `reproducible` |
 | `package` | tsf-package | `dut_runtime_deps` |
 | `fs` | tsf-fs | `perm_audit`, `secrets`, `integrity` |
 | `memmap` | tsf-memorymap | `elf`, `proc` |
-| `exposure` | tsf-cybersec (netexpose, egress, sniffrules, frida) | `listeners`, `reachability`, `egress`, `sniff`, `frida`, `h3_endpoints` (hypothesis H3) |
+| `exposure` | tsf-cybersec (netexpose, egress, sniffrules, frida) | `listeners`, `reachability`, `egress`, `sniff`, `frida`, `h3_endpoints` (hypothesis id SEC-H3, no longer the H3 of the web tests) |
 | `http` | tsf-http | `headers`, `methods`, `redirects`, `load_curve` |
 | `fuzz` | tsf-fuzz | `ring_abi` (libFuzzer + ASan on the ring's C ABI), `replay` |
 | `container` | tsf-container | `ring_inside` (the ring walked inside images it was not built for) |
 | `browser` | tsf-playwright | `walk_page` (screenshot, HAR, trace), `canary`, `network_shape`, `pw_project` |
+
+The `exposure/sniff`, `exposure/frida`, `browser` and `container` tests need
+prerequisites that the current agent lacks; they stay skipped and no
+hypothesis is read from them.
 
 What the container cannot do (capture on loopback, Frida) leads to a `SKIP`
 with a concrete reason, never a failure.

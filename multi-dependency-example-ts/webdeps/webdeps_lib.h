@@ -915,4 +915,31 @@ wd_init(res_t *r)
         TEST_VERDICT("%s", (_r)->msg);                                      \
     } while (0)
 
+/**
+ * Turn the outcome of a hypothesis test into the verdict. Every verdict
+ * starts with the hypothesis id @p _id; the test sets its own R_PASS and
+ * R_FAIL messages with that prefix. A setup fault reads "<id> SETUP
+ * <service>: ...", a scanner with no data "<id> INCONCLUSIVE: ...".
+ * R_PASS ends the test as a success, anything else fails it.
+ */
+#define HYP_VERDICT(_r, _id) \
+    do {                                                                    \
+        char tmp_[sizeof((_r)->msg)];                                       \
+                                                                            \
+        snprintf(tmp_, sizeof(tmp_), "%s", (_r)->msg);                      \
+        if ((_r)->kind == R_SETUP)                                          \
+            snprintf((_r)->msg, sizeof((_r)->msg), "%s SETUP %s: %.1400s",  \
+                     _id, setup_svc, tmp_);                                 \
+        else if ((_r)->kind == R_INCONCLUSIVE)                              \
+            snprintf((_r)->msg, sizeof((_r)->msg),                          \
+                     "%s INCONCLUSIVE: %.1400s", _id, tmp_);                \
+        cleanup_all();                                                      \
+        if ((_r)->kind == R_PASS)                                           \
+        {                                                                   \
+            RING_VERDICT("%s", (_r)->msg);                                  \
+            TEST_SUCCESS;                                                   \
+        }                                                                   \
+        TEST_VERDICT("%s", (_r)->msg);                                      \
+    } while (0)
+
 #endif /* MDE_WEBDEPS_LIB_H */

@@ -7,8 +7,6 @@ tests = [
     'latency',
     'contract',
     'robustness',
-    'h1_gateway_backends',
-    'h2_stalled_peer',
 ]
 
 foreach test : tests

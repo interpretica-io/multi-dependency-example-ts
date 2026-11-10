@@ -219,7 +219,7 @@ main(int argc, char **argv)
         {
             exposure_addr_str(&sock->local, &addr);
             n_exposed++;
-            TEST_ARTIFACT("H3 listener beyond loopback: tcp %s:%u uid=%u%s",
+            TEST_ARTIFACT("SEC listener beyond loopback: tcp %s:%u uid=%u%s",
                           addr.ptr, port, sock->uid,
                           is_web ? " (web tier port)" : "");
         }
@@ -313,7 +313,7 @@ next:
         te_string_reset(&path);
         te_string_append(&path, "%s/%s", dut.bin, web.svc[i].name);
         CHECK_RC(tapi_binscan_inspect(session.ta, path.ptr, &info));
-        TEST_ARTIFACT("H3 binscan %s: NX=%s PIE=%s RELRO=%s canary=%s",
+        TEST_ARTIFACT("SEC binscan %s: NX=%s PIE=%s RELRO=%s canary=%s",
                       web.svc[i].name,
                       info.nx_unknown ? "unknown" : (info.nx ? "yes" : "no"),
                       info.kind == TAPI_BINSCAN_KIND_PIE ? "yes" : "no",
@@ -352,16 +352,16 @@ next:
         te_string_free(&text);
     }
 
-    TEST_STEP("Decide on H3");
+    TEST_STEP("Decide on the exposure verdict");
     if (n_exposed > 0 || n_egress > 0)
     {
-        ERROR_VERDICT("H3 PROVEN: %u listener(s) beyond loopback, %u egress "
+        ERROR_VERDICT("SEC PROVEN: %u listener(s) beyond loopback, %u egress "
                       "destination(s) outside 127.0.0.1:8081-8083",
                       n_exposed, n_egress);
         TEST_STOP;
     }
 
-    RING_VERDICT("H3 DISPROVEN: all listeners of the web tier are on "
+    RING_VERDICT("SEC DISPROVEN: all listeners of the web tier are on "
                  "loopback and its egress stays within 127.0.0.1:8081-8083");
 
     TEST_SUCCESS;

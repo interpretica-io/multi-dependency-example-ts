@@ -84,8 +84,8 @@
         </run>
 
         <!-- @page mde-webdeps Web Dependency Tests
-              @objective Hypotheses H1-H4 about the dependencies between the
-                         web services, plus one smoke test per language.
+              @objective Hypotheses H1-H4 about the web services, plus a
+                         security check and one smoke test per language.
         -->
         <run>
             <package name="webdeps" />

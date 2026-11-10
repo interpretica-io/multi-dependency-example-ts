@@ -306,7 +306,7 @@
         </run>
 
         <!-- @page mde-exposure-h3 H3: Loopback-only Endpoints
-              @objective Settle H3: the hardcoded loopback endpoints are the
+              @objective Settle SEC-H3 (not the H3 of webdeps): the hardcoded loopback endpoints are the
                          only ones in use and no listener is exposed.
 
               @par Test Parameters:
@@ -324,7 +324,7 @@
                  127.0.0.1:8081-8083 and outside loopback counts as egress.
               -# tapi_binscan on the three binaries: NX, PIE, RELRO, canary
                  as info findings in the report (not in the verdict).
-              -# Exposed or egress: "H3 PROVEN", test fails; else "H3
+              -# Exposed or egress: "SEC PROVEN", test fails; else "SEC
                  DISPROVEN".
         -->
         <run name="h3_endpoints">

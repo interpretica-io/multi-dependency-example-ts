@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief Webdeps: H4, listeners and egress of the web tier
+ * @brief Webdeps: SEC, listeners and egress of the web tier
  *
  * Run the three services (each port read with tapi_netexpose), send one
  * normal request to each, and with tapi_egress compare all their outgoing
@@ -16,7 +16,7 @@
  * @author midair <midair@localhost>
  */
 
-#define TE_TEST_NAME    "webdeps/t_h4_binscan_netexpose_egress"
+#define TE_TEST_NAME    "webdeps/sec_binscan_netexpose_egress"
 
 #include "te_config.h"
 
@@ -285,7 +285,7 @@ main(int argc, char **argv)
     res.kind = R_PASS;
 
     TEST_STEP("Start the three services and wait for their ports");
-    if (tsapi_mde_session_init(&session, "t_h4") != 0)
+    if (tsapi_mde_session_init(&session, "sec_exposure") != 0)
     {
         setup_svc = "agent";
         res_set(&res, R_SETUP, "no session on the agent for the scanners");
@@ -312,13 +312,13 @@ main(int argc, char **argv)
 
     tapi_cybersec_report_log(&report);
     if (first[0] != '\0')
-        res_set(&res, R_FAIL, "t_h4_binscan_netexpose_egress H4:proven: "
+        res_set(&res, R_FAIL, "SEC FAIL: sec_binscan_netexpose_egress: "
                 "first finding: %s; report has %u finding(s) at or above "
                 "INFO, %u at or above HIGH", first,
                 tapi_cybersec_report_count(&report, TAPI_CYBERSEC_SEV_INFO),
                 tapi_cybersec_report_count(&report, TAPI_CYBERSEC_SEV_HIGH));
     else
-        res_set(&res, R_PASS, "t_h4_binscan_netexpose_egress H4:disproved: "
+        res_set(&res, R_PASS, "SEC PASS: sec_binscan_netexpose_egress: "
                 "every listener is on a loopback address and no outbound "
                 "destination is outside loopback; binscan result is "
                 "context only");
