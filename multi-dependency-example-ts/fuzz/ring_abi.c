@@ -86,6 +86,88 @@ abi_opt_init(tapi_fuzz_opt *opt, const char *harness, const char *corpus,
     opt->n_extra_args = TE_ARRAY_LEN(extra);
 }
 
+/** Exit status of a job as text. */
+static const char *
+abi_status_str(const tapi_job_status_t *st, bool completed, char *buf,
+               size_t size)
+{
+    if (!completed)
+        snprintf(buf, size, "no exit status (did not complete)");
+    else if (st->type == TAPI_JOB_STATUS_EXITED)
+        snprintf(buf, size, "exit code %d", st->value);
+    else if (st->type == TAPI_JOB_STATUS_SIGNALED)
+        snprintf(buf, size, "killed by signal %d", st->value);
+    else
+        snprintf(buf, size, "exit status unknown");
+
+    return buf;
+}
+
+/** Last line of the text, at most 240 bytes of it. */
+static const char *
+abi_last_line(const char *text, char *buf, size_t size)
+{
+    size_t      len = text != NULL ? strlen(text) : 0;
+    const char *p;
+
+    while (len > 0 && (text[len - 1] == '\n' || text[len - 1] == '\r'))
+        len--;
+    p = text;
+    while (p != NULL && p < text + len)
+    {
+        const char *nl = memchr(p, '\n', text + len - p);
+
+        if (nl == NULL)
+            break;
+        p = nl + 1;
+    }
+    snprintf(buf, size, "%.*s", p != NULL ? (int)MIN(len - (p - text), 240) : 0,
+             p != NULL ? p : "");
+
+    return buf;
+}
+
+/**
+ * Say why a campaign did not start or did not finish: the error of the
+ * start, the exit status of the harness and the last line it printed on
+ * stderr.
+ */
+static void
+abi_describe(const char *target, const char *what, te_errno rc,
+             const tapi_fuzz_app *app, char *buf, size_t size)
+{
+    tapi_devtool_output out;
+    char                st[64];
+    char                last[256];
+
+    if (app == NULL)
+    {
+        snprintf(buf, size, "FUZZ %s: the %s did not start: harness start "
+                 "error %s (no job was created)", target, what,
+                 te_rc_err2str(rc));
+        return;
+    }
+    tapi_fuzz_get_output(app, &out);
+    snprintf(buf, size, "FUZZ %s: the %s did not run to the end: harness "
+             "start error %s, %s, last stderr line [%s]", target, what,
+             te_rc_err2str(rc),
+             abi_status_str(&out.status, out.completed, st, sizeof(st)),
+             abi_last_line(out.err, last, sizeof(last)));
+}
+
+/** Run a campaign; on a failure give the verdict with the start error. */
+#define ABI_RUN(_what, _opt, _timeout_ms, _app) \
+    do {                                                                    \
+        char why_[600];                                                     \
+                                                                            \
+        rc = tapi_fuzz_do(session.factory, _opt, _timeout_ms, _app);        \
+        if (rc != 0)                                                        \
+        {                                                                   \
+            abi_describe(target, _what, rc, *(_app), why_, sizeof(why_));   \
+            TEST_VERDICT("%s", why_);                                       \
+        }                                                                   \
+    } while (0)
+
 int
 main(int argc, char **argv)
 {
@@ -190,11 +272,13 @@ main(int argc, char **argv)
     rc = mde_fuzz_build_harness(&session, &dut, target, false, base.ptr,
                                 &harness, &build_s);
     if (rc != 0)
-        TEST_VERDICT("clang cannot build the ring ABI harness");
+        TEST_VERDICT("FUZZ %s: clang cannot build the ring ABI harness: "
+                     "harness start error %s", target, te_rc_err2str(rc));
     rc = mde_fuzz_build_harness(&session, &dut, target, true, base.ptr,
                                 &ctl_harness, &ctl_build_s);
     if (rc != 0)
-        TEST_VERDICT("clang cannot build the control harness");
+        TEST_VERDICT("FUZZ %s: clang cannot build the control harness: "
+                     "harness start error %s", target, te_rc_err2str(rc));
     TEST_ARTIFACT("%s harness built in %.3f s, control in %.3f s", target,
                   build_s, ctl_build_s);
     CHECK_RC(tsapi_mde_sh(&session, MDE_FUZZ_TIMEOUT_MS, &sh,
@@ -211,20 +295,36 @@ main(int argc, char **argv)
     RING("Harness on value=1 hops=0:\nstdout:\n%s\nstderr:\n%s",
          te_string_value(&sh.out), te_string_value(&sh.err));
     if (!tsapi_mde_sh_ok(&sh))
-        TEST_VERDICT("The harness cannot call the stage through the ring "
-                     "libraries");
+    {
+        char st[64];
+        char last[256];
+
+        TEST_VERDICT("FUZZ %s: the harness cannot call the stage through "
+                     "the ring libraries: %s, last stderr line [%s]", target,
+                     !sh.started ? "harness start error, the shell did not "
+                     "start" : abi_status_str(&sh.status, true, st,
+                                              sizeof(st)),
+                     abi_last_line(te_string_value(&sh.err), last,
+                                   sizeof(last)));
+    }
     if (strstr(te_string_value(&sh.out), tag) == NULL)
-        TEST_VERDICT("The harness ran but the stage printed no trace line");
+        TEST_VERDICT("FUZZ %s: the harness started (exit code 0) but the stage "
+                     "printed no trace line", target);
     p = strstr(te_string_value(&sh.out), "result=");
     if (p == NULL)
-        TEST_VERDICT("The harness printed no result");
+        TEST_VERDICT("FUZZ %s: the harness started (exit code 0) but printed no "
+                     "result", target);
     observed = strtod(p + strlen("result="), NULL);
     expected = tsapi_mde_ring_predict(stage, 1.0, 0, &model);
     TEST_ARTIFACT("%s(1.0, 0): harness %.17g, model %.17g", target,
                   observed, expected);
+    RING("FUZZ %s: the harness started (exit code 0) and the ring code ran: "
+         "the stage printed its trace line and returned %.17g", target,
+         observed);
     if (fabs(observed - expected) > 1e-9 * MAX(1.0, fabs(expected)))
-        TEST_VERDICT("The harness result for value=1 hops=0 disagrees with "
-                     "the ring model");
+        TEST_VERDICT("FUZZ %s: the harness started and the ring code ran, "
+                     "but its result for value=1 hops=0 disagrees with the "
+                     "ring model", target);
 
     TEST_STEP("Known-bad control: a harness that aborts on 'X', seeded "
               "with 'X...', must be caught within seconds and triaged");
@@ -234,8 +334,8 @@ main(int argc, char **argv)
     abi_opt_init(&ctl_opt, ctl_harness.ptr, ctl_corpus.ptr, ctl_arts.ptr,
                  MDE_FUZZ_CONTROL_S);
     t0 = tsapi_mde_now();
-    CHECK_RC(tapi_fuzz_do(session.factory, &ctl_opt,
-                          (MDE_FUZZ_CONTROL_S + 120) * 1000, &ctl_app));
+    ABI_RUN("control campaign", &ctl_opt, (MDE_FUZZ_CONTROL_S + 120) * 1000,
+            &ctl_app);
     t_ctl = tsapi_mde_now() - t0;
     CHECK_RC(tapi_fuzz_crashes_collect(session.factory, &ctl_opt, NULL,
                                        MDE_FUZZ_TIMEOUT_MS, &ctl_crashes));
@@ -283,8 +383,7 @@ main(int argc, char **argv)
     abi_opt_init(&opt, harness.ptr, corpus.ptr, arts.ptr,
                  (unsigned int)duration);
     t0 = tsapi_mde_now();
-    CHECK_RC(tapi_fuzz_do(session.factory, &opt, (duration + 180) * 1000,
-                          &app));
+    ABI_RUN("campaign", &opt, (duration + 180) * 1000, &app);
     t_campaign = tsapi_mde_now() - t0;
 
     TEST_STEP("Read the campaign's statistics two ways");
@@ -456,8 +555,18 @@ main(int argc, char **argv)
     if (no_progress)
     {
         tapi_cybersec_report_log(&report.cyber);
-        TEST_VERDICT("The %s campaign made no progress: no evidence the "
-                     "harness fuzzed", target);
+        TEST_VERDICT("FUZZ %s: the campaign made no progress: no evidence "
+                     "the harness fuzzed", target);
+    }
+
+    {
+        char st[64];
+
+        RING_VERDICT("FUZZ %s: harness started, ring code ran; campaign "
+                     "%s after %.1f s, %.0f units executed (settles no "
+                     "hypothesis)", target,
+                     abi_status_str(&out.status, out.completed, st,
+                                    sizeof(st)), t_campaign, final_execs);
     }
 
     TEST_STEP("Decide on the report");
