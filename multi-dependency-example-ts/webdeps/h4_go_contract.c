@@ -34,7 +34,7 @@ reply_str(const hg_res *h, char *out, size_t size)
     size_t      i;
     char        flat[300];
 
-    snprintf(flat, sizeof(flat), "%s", p != NULL ? p + 4 : h->body);
+    snprintf(flat, sizeof(flat), "%.299s", p != NULL ? p + 4 : h->body);
     for (i = 0; flat[i] != '\0'; i++)
     {
         if (flat[i] == '\n' || flat[i] == '\r')

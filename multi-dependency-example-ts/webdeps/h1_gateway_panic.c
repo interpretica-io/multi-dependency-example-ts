@@ -163,7 +163,7 @@ main(int argc, char **argv)
         }
     }
     else
-        snprintf(second_info, sizeof(second_info), "second instance: %s",
+        snprintf(second_info, sizeof(second_info), "second instance: %.400s",
                  scratch.msg);
 
     if (reached)
