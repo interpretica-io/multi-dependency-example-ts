@@ -156,9 +156,9 @@ main(int argc, char **argv)
     TEST_STEP("Open a session and locate the example");
     TSAPI_MDE_OPEN_OR_SKIP(session, "exposure_egress", dut, session_up);
     if (!tsapi_mde_web_built(&session, &dut))
-        TEST_SKIP("The web tier is not built in this configuration");
+        TEST_VERDICT("The web tier is not built in this configuration");
     if (!tsapi_mde_have(&session, "curl"))
-        TEST_SKIP("There is no curl on the agent");
+        TEST_VERDICT("There is no curl on the agent");
 
     tsapi_mde_report_init(&report);
     report_up = true;

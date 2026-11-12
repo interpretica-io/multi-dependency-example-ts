@@ -178,7 +178,7 @@ main(int argc, char **argv)
     TEST_STEP("Skip unless the services and curl can be run");
     why = web_unavailable(&session, &dut);
     if (why != NULL)
-        TEST_SKIP("%s", why);
+        TEST_VERDICT("%s", why);
 
     TEST_STEP("Start the three HTTP services");
     web_up = true;

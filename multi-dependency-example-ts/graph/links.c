@@ -175,12 +175,12 @@ main(int argc, char **argv)
     why = graph_tools_unavailable(&session,
                                   strcmp(dut.dylib_ext, "dylib") == 0);
     if (why != NULL)
-        TEST_SKIP("%s", why);
+        TEST_VERDICT("%s", why);
 
     TEST_STEP("Read the linkage of every ring library");
     CHECK_RC(graph_libs_load(&session, &dut, &libs));
     if (!libs.lib[self].present)
-        TEST_SKIP("%s is missing - build the example first",
+        TEST_VERDICT("%s is missing - build the example first",
                   libs.lib[self].name);
     graph_chart_counts(&libs);
     for (i = 0; i < TSAPI_MDE_STAGE_N; i++)

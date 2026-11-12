@@ -96,9 +96,9 @@ main(int argc, char **argv)
     TSAPI_MDE_OPEN_OR_SKIP(session, "http_load", dut, session_up);
 
     if (!tapi_http_available(session.factory, 10000))
-        TEST_SKIP("There is no curl on the agent");
+        TEST_VERDICT("There is no curl on the agent");
     if (!tsapi_mde_web_built(&session, &dut))
-        TEST_SKIP("The web tier is not built");
+        TEST_VERDICT("The web tier is not built");
 
     TEST_STEP("Start the web tier and warm it up");
     web_up = true;

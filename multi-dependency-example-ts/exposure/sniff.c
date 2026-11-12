@@ -116,15 +116,15 @@ main(int argc, char **argv)
     TEST_STEP("Open a session and locate the example");
     TSAPI_MDE_OPEN_OR_SKIP(session, "exposure_sniff", dut, session_up);
     if (!tsapi_mde_web_built(&session, &dut))
-        TEST_SKIP("The web tier is not built in this configuration");
+        TEST_VERDICT("The web tier is not built in this configuration");
     if (!tsapi_mde_have(&session, "curl"))
-        TEST_SKIP("There is no curl on the agent");
+        TEST_VERDICT("There is no curl on the agent");
     if (!tsapi_mde_have(&session, "tcpdump"))
-        TEST_SKIP("There is no tcpdump on the agent");
+        TEST_VERDICT("There is no tcpdump on the agent");
     if (!exposure_sh_quiet(&session, "sudo -n true"))
-        TEST_SKIP("The agent cannot run tcpdump through sudo");
+        TEST_VERDICT("The agent cannot run tcpdump through sudo");
     if (!tsapi_mde_have(&session, "python3"))
-        TEST_SKIP("There is no python3 on the agent for the control");
+        TEST_VERDICT("There is no python3 on the agent for the control");
 
     tsapi_mde_report_init(&report);
     report_up = true;

@@ -357,16 +357,16 @@ main(int argc, char **argv)
     TSAPI_MDE_OPEN_OR_SKIP(session, "dev_pycore", dut, session_up);
 
     if (!tsapi_mde_have(&session, cc_name))
-        TEST_SKIP("%s is not installed on the agent", cc_name);
+        TEST_VERDICT("%s is not installed on the agent", cc_name);
     if (!tsapi_mde_have(&session, "python3-config"))
-        TEST_SKIP("python3-config is missing (no python3-dev)");
+        TEST_VERDICT("python3-config is missing (no python3-dev)");
     if (!tsapi_mde_have(&session, "nm") ||
         !tsapi_mde_have(&session, "readelf"))
-        TEST_SKIP("binutils are missing on the agent");
+        TEST_VERDICT("binutils are missing on the agent");
 
     te_string_append(&src, "%s/python/src/pycore.c", dut.root);
     if (!tsapi_mde_exists(&session, src.ptr))
-        TEST_SKIP("The source of the Python shim is missing");
+        TEST_VERDICT("The source of the Python shim is missing");
 
     TEST_STEP("Ask python3-config for the flags build.sh uses");
     CHECK_RC(tsapi_mde_sh(&session, 30000, &sh, "python3-config --includes"));

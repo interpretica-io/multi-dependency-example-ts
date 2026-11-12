@@ -49,7 +49,7 @@ main(int argc, char **argv)
     TEST_STEP("Skip unless the demo can be run");
     why = ring_demo_unavailable(&session, &dut, RING_DEMO_CPP);
     if (why != NULL)
-        TEST_SKIP("%s", why);
+        TEST_VERDICT("%s", why);
 
     TEST_STEP("The reference model must reproduce the README oracle");
     model_result = tsapi_mde_ring_predict(TSAPI_MDE_STAGE_RUST, REF_VALUE,

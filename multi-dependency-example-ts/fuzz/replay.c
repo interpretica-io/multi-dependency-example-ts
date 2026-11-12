@@ -151,7 +151,7 @@ main(int argc, char **argv)
 
     TEST_STEP("Check clang can build a libFuzzer + ASan target");
     if (!mde_fuzz_supported(&session))
-        TEST_SKIP("clang with -fsanitize=fuzzer,address is not available "
+        TEST_VERDICT("clang with -fsanitize=fuzzer,address is not available "
                   "on the agent");
     CHECK_RC(mde_fuzz_fresh_dir(&session, REPLAY_DIR));
 

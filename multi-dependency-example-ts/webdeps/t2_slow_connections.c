@@ -3,13 +3,14 @@
 /** @file
  * @brief Webdeps: T2, idle clients of service-go (settles H2)
  *
- * A plain TCP/HTTP client. Open 50 connections to service-go and send
- * nothing on them. Wait 30 s, then count the connections the service
- * still holds (a read that returns 0 or an error means the service closed
- * it). H2 FAIL if the service keeps all 50 open. Then send one valid
- * request: H2 FAIL if it gets no answer within 5 s. Otherwise H2 PASS.
- * The counts and the time go in the verdict and in the
- * tapi_cybersec_report. A service-go that does not start is NOT RUN.
+ * A plain TCP/HTTP client. Open 200 connections to service-go and send
+ * nothing on them. Wait 30 s, then count with tapi_netexpose the
+ * established sockets the service still holds on its port (the client's own
+ * view is recorded next to it). H2 FAIL if all 200 stay open. Then send one
+ * valid request with a 5 s limit: H2 FAIL if it times out. Otherwise H2
+ * PASS. The counts and the time go in the verdict and in the
+ * tapi_cybersec_report. A service-go that does not start, or a socket
+ * table that cannot be read, is INCONCLUSIVE with the reason.
  *
  * @author midair <midair@localhost>
  */
@@ -18,9 +19,11 @@
 
 #include "te_config.h"
 
+#include <sys/resource.h>
+
 #include "webdeps_lib.h"
 
-#define T2_CONNS    50
+#define T2_CONNS    200
 #define T2_IDLE_S   30      /**< s, idle wait. */
 #define T2_GOOD_S   5       /**< s, longest valid request. */
 
@@ -52,10 +55,42 @@ count_open(const int *fds, bool *open_)
     return n;
 }
 
+/** Established sockets of the service's port, from tapi_netexpose. */
+static int
+server_held(res_t *r, tsapi_mde_session *session, unsigned port)
+{
+    tapi_netexpose_opt   opt = tapi_netexpose_default_opt;
+    te_vec               socks = TE_VEC_INIT(tapi_netexpose_socket);
+    const tapi_netexpose_socket *s;
+    int                  n = 0;
+
+    opt.udp = false;
+    opt.tcp = true;
+    if (tapi_netexpose_sockets(session->factory, &opt, &socks) != 0)
+    {
+        setup_svc = "agent";
+        res_set(r, R_INCONCLUSIVE, "tapi_netexpose cannot read the socket "
+                "tables, so the held connections cannot be counted");
+        te_vec_free(&socks);
+        return -1;
+    }
+    TE_VEC_FOREACH(&socks, s)
+    {
+        if (s->state == TAPI_NETEXPOSE_TCP_ESTABLISHED &&
+            sock_port(&s->local) == port)
+            n++;
+    }
+    te_vec_free(&socks);
+    return n;
+}
+
 int
 main(int argc, char **argv)
 {
     res_t    res = { .kind = R_PASS };
+    tsapi_mde_session session = { .ta = NULL };
+    struct rlimit rl = { 4096, 4096 };
+    int      client_held;
     proc_t  *go;
     hg_res   good;
     int      fds[T2_CONNS];
@@ -75,6 +110,15 @@ main(int argc, char **argv)
     go = svc_start_t(&res, "H2", GO);
     if (go == NULL)
         goto verdict;
+    if (setrlimit(RLIMIT_NOFILE, &rl) != 0)
+        WARN("cannot raise the descriptor limit: %s", strerror(errno));
+    if (tsapi_mde_session_init(&session, "t2_idle") != 0)
+    {
+        setup_svc = "agent";
+        res_set(&res, R_INCONCLUSIVE, "no session on the agent to read the "
+                "socket table");
+        goto verdict;
+    }
 
     TEST_STEP("Open %d connections and send nothing", T2_CONNS);
     for (i = 0; i < T2_CONNS; i++)
@@ -97,10 +141,14 @@ main(int argc, char **argv)
 
     TEST_STEP("Wait %d s", T2_IDLE_S);
     sleep(T2_IDLE_S);
-    held = count_open(fds, open_);
+    client_held = count_open(fds, open_);
+    held = server_held(&res, &session, go->port);
+    if (held < 0)
+        goto verdict;
     T_FINDING(TAPI_CYBERSEC_SEV_INFO, "go.idle-conns", "service-go",
-              "connections opened %d, still open after %d s: %d", opened,
-              T2_IDLE_S, held);
+              "connections opened %d, held by the server after %d s: %d "
+              "(tapi_netexpose), %d (client view)", opened, T2_IDLE_S, held,
+              client_held);
     if (held >= T2_CONNS)
     {
         T_FINDING(TAPI_CYBERSEC_SEV_HIGH, "go.no-timeout", "service-go",
@@ -133,6 +181,7 @@ main(int argc, char **argv)
                 good.status, good.elapsed);
 
 verdict:
+    tsapi_mde_session_fini(&session);
     for (i = 0; i < T2_CONNS; i++)
     {
         if (fds[i] >= 0)

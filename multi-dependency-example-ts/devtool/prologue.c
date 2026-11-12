@@ -43,6 +43,9 @@ main(int argc, char **argv)
     TEST_STEP("Open a session on the agent");
     rc = tsapi_mde_session_init(&session, "dev_prologue");
     session_up = true;
+
+    TEST_STEP("Install what the group needs on the agent and check it");
+    TSAPI_MDE_ENSURE(session, "base build");
     if (rc != 0)
         TEST_FAIL("Cannot open a session on the agent: %r", rc);
 

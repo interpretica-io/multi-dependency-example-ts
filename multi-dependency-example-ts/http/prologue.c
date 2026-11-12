@@ -55,6 +55,9 @@ main(int argc, char **argv)
     CHECK_RC(tsapi_mde_session_init(&session, "http_prologue"));
     session_up = true;
 
+    TEST_STEP("Install what the group needs on the agent and check it");
+    TSAPI_MDE_ENSURE(session, "base build");
+
     TEST_STEP("Report the tools of the group");
     for (i = 0; i < TE_ARRAY_LEN(tools); i++)
     {

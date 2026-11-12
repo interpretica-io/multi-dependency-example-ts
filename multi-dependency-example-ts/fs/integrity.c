@@ -118,9 +118,9 @@ main(int argc, char **argv)
     if (workload == FS_WORKLOAD_WEB)
     {
         if (!tsapi_mde_web_built(&session, &dut))
-            TEST_SKIP("The web tier is not built");
+            TEST_VERDICT("The web tier is not built");
         if (!tsapi_mde_have(&session, "curl"))
-            TEST_SKIP("curl is not available on the agent");
+            TEST_VERDICT("curl is not available on the agent");
     }
     te_string_append(&dist, "%s/dist", dut.root);
 

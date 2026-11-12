@@ -102,7 +102,7 @@ main(int argc, char **argv)
     TEST_STEP("Open a session and locate the example");
     TSAPI_MDE_OPEN_OR_SKIP(session, "mmproc", dut, session_up);
     if (!tsapi_mde_web_built(&session, &dut))
-        TEST_SKIP("The web tier is not built");
+        TEST_VERDICT("The web tier is not built");
     if (!tsapi_mde_exists(&session, "/proc/self/maps"))
         TEST_SKIP("The agent has no /proc to read mappings from");
 

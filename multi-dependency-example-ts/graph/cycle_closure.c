@@ -284,16 +284,16 @@ main(int argc, char **argv)
     why = graph_tools_unavailable(&session,
                                   strcmp(dut.dylib_ext, "dylib") == 0);
     if (why != NULL)
-        TEST_SKIP("%s", why);
+        TEST_VERDICT("%s", why);
     if (view == CC_VIEW_FULL && !tsapi_mde_have(&session, "strings"))
-        TEST_SKIP("strings is not available on the agent");
+        TEST_VERDICT("strings is not available on the agent");
 
     TEST_STEP("Read the linkage of every ring library");
     CHECK_RC(graph_libs_load(&session, &dut, &libs));
     for (v = 0; v < TSAPI_MDE_STAGE_N; v++)
     {
         if (!libs.lib[v].present)
-            TEST_SKIP("%s is missing - build the example first",
+            TEST_VERDICT("%s is missing - build the example first",
                       libs.lib[v].name);
     }
     graph_chart_counts(&libs);

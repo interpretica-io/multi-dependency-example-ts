@@ -92,7 +92,7 @@ main(int argc, char **argv)
 
     binary_artifact_path(&dut, artifact, &path);
     if (!tsapi_mde_exists(&session, path.ptr))
-        TEST_SKIP("%s is not built in this configuration", artifact);
+        TEST_VERDICT("%s is not built in this configuration", artifact);
 
     have_readelf = tsapi_mde_have(&session, "readelf");
     if (!have_readelf)

@@ -38,6 +38,9 @@ main(int argc, char **argv)
     CHECK_RC(tsapi_mde_session_init(&session, "mmprologue"));
     session_up = true;
 
+    TEST_STEP("Install what the group needs on the agent and check it");
+    TSAPI_MDE_ENSURE(session, "base build");
+
     TEST_STEP("Remove what an earlier run may have left");
     CHECK_RC(tsapi_mde_sh(&session, 20000, &sh, "rm -rf /tmp/mde-memmap-*"));
 

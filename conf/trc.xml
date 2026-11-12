@@ -1135,15 +1135,15 @@
             <objective/>
             <notes/>
           </test>
-          <test name="t4_csharp_backend_fail" type="script">
+          <test name="t4_language_builds" type="script">
             <objective/>
             <notes/>
           </test>
-          <test name="t5_go_contract" type="script">
+          <test name="t5_binscan" type="script">
             <objective/>
             <notes/>
           </test>
-          <test name="t6_binscan_netexpose" type="script">
+          <test name="t6_skip_causes" type="script">
             <objective/>
             <notes/>
           </test>

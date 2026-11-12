@@ -39,6 +39,9 @@ main(int argc, char **argv)
     CHECK_RC(tsapi_mde_session_init(&session, "fuzz_prologue"));
     session_up = true;
 
+    TEST_STEP("Install what the group needs on the agent and check it");
+    TSAPI_MDE_ENSURE(session, "fuzz");
+
     TEST_STEP("Record the clang the group would build with");
     clang = tsapi_mde_have(&session, "clang");
     if (clang)

@@ -89,7 +89,7 @@ main(int argc, char **argv)
     TEST_STEP("Skip unless the demo can be run");
     why = ring_demo_unavailable(&session, &dut, entry);
     if (why != NULL)
-        TEST_SKIP("%s", why);
+        TEST_VERDICT("%s", why);
 
     TEST_STEP("Known-bad controls: a one-byte change of a trace and a "
               "planted crash must both be detected");

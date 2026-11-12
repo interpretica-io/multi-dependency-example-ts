@@ -6,10 +6,13 @@
  * Start gateway-rs, service-go and service-cs (each port read with
  * tapi_netexpose), send normal traffic to each in several rounds, and
  * with tapi_egress compare every outgoing connection of the three
- * processes with an allowed list of loopback only. Every destination
- * outside it goes into the tapi_cybersec_report and fails the test; the
- * verdict names each one. A service that does not start is NOT RUN; a
- * scanner that sees no connection at all is INCONCLUSIVE.
+ * processes with an allowed list that holds localhost and the ports named
+ * in the project config (web/contract/services.tab) only. Every
+ * connection is added to the tapi_cybersec_report; every destination
+ * outside the list fails the test and the verdict names each one. The
+ * addresses seen are printed on a pass as well. A service that does not
+ * start, or a scanner that cannot read the connections or sees none, is
+ * INCONCLUSIVE with the reason.
  *
  * @author midair <midair@localhost>
  */
@@ -69,17 +72,14 @@ first_finding(char *first, const char *fmt, ...)
 /** Outbound connections of the three processes against loopback only. */
 static bool
 scan_egress(res_t *r, tsapi_mde_session *session, proc_t **svc,
-            tapi_cybersec_report *report, char *first)
+            tapi_cybersec_report *report, char *first, char *seen)
 {
     unsigned long        ino[NAMES][MAX_INO];
     size_t               n_ino[NAMES];
     tapi_netexpose_opt   opt = tapi_netexpose_default_opt;
-    /* The allowed list: loopback only, any port. */
-    tapi_egress_rule     rules[] = {
-        { IPPROTO_TCP, "127.0.0.0/8", 0, 0 },
-        { IPPROTO_TCP, "::1/128", 0, 0 },
-    };
-    tapi_egress_policy   policy = { .n_rules = TE_ARRAY_LEN(rules),
+    /* The allowed list: localhost, on the ports of the contract only. */
+    tapi_egress_rule     rules[2 * NAMES];
+    tapi_egress_policy   policy = { .n_rules = 2 * NAMES,
                                     .rules = rules,
                                     .allow_loopback = false,
                                     .allow_private = false };
@@ -87,6 +87,13 @@ scan_egress(res_t *r, tsapi_mde_session *session, proc_t **svc,
     int                  i;
     unsigned             total_conns = 0;
 
+    for (i = 0; i < NAMES; i++)
+    {
+        rules[2 * i] = (tapi_egress_rule){ IPPROTO_TCP, "127.0.0.0/8",
+                                           tab_port[i], tab_port[i] };
+        rules[2 * i + 1] = (tapi_egress_rule){ IPPROTO_TCP, "::1/128",
+                                               tab_port[i], tab_port[i] };
+    }
     opt.udp = false;
     opt.tcp = true;
     for (round = 0; round < 6; round++)
@@ -101,7 +108,9 @@ scan_egress(res_t *r, tsapi_mde_session *session, proc_t **svc,
             n_ino[i] = pid_inodes(svc[i]->pid, ino[i], MAX_INO);
         if (tapi_egress_snapshot(session->factory, &opt, &conns) != 0)
         {
-            res_set(r, R_SETUP, "tapi_egress cannot read the connections");
+            setup_svc = "tapi_egress";
+            res_set(r, R_INCONCLUSIVE, "tapi_egress is unavailable: it "
+                    "cannot read the connections of the agent");
             te_vec_free(&conns);
             return false;
         }
@@ -117,6 +126,14 @@ scan_egress(res_t *r, tsapi_mde_session *session, proc_t **svc,
             if (port_in_contract(sock_port(&c->local)))
                 continue;
             sock_addr(&c->remote, addr, sizeof(addr));
+            first_finding(seen, "%s->%s:%u", names[o], addr,
+                          sock_port(&c->remote));
+            if (tapi_egress_policy_allows(&policy, IPPROTO_TCP,
+                                          CONST_SA(&c->remote)))
+                tapi_cybersec_report_add(report, TAPI_CYBERSEC_SEV_INFO,
+                                         "net.egress", names[o],
+                                         "outbound to %s:%u, allowed", addr,
+                                         sock_port(&c->remote));
             if (!tapi_egress_policy_allows(&policy, IPPROTO_TCP,
                                            CONST_SA(&c->remote)))
             {
@@ -147,6 +164,7 @@ main(int argc, char **argv)
     proc_t              *svc[NAMES] = { NULL };
     tsapi_mde_session    session = { .ta = NULL };
     char                 first[FIRST_LEN] = "";
+    char                 seen[FIRST_LEN] = "";
     const int            which[] = { GO, CS, GW };
     int                  i;
 
@@ -171,17 +189,19 @@ main(int argc, char **argv)
     }
 
     TEST_STEP("Normal traffic and tapi_egress against the allow list");
-    if (!scan_egress(&res, &session, svc, &t_report, first))
+    if (!scan_egress(&res, &session, svc, &t_report, first, seen))
         goto verdict;
 
     if (first[0] != '\0')
-        res_set(&res, R_FAIL, "H3 FAIL: connections outside loopback: %s; "
-                "the report has %u finding(s) at or above HIGH", first,
+        res_set(&res, R_FAIL, "H3 FAIL: connections outside the allowed list "
+                "(localhost, contract ports): %s; all addresses seen: %s; "
+                "the report has %u finding(s) at or above HIGH", first, seen,
                 tapi_cybersec_report_count(&t_report, TAPI_CYBERSEC_SEV_HIGH));
     else
         res_set(&res, R_PASS, "H3 PASS: gateway-rs, service-go and "
-                "service-cs made no connection outside loopback while "
-                "serving normal traffic");
+                "service-cs made no connection outside the allowed list "
+                "while serving normal traffic; addresses seen: %s",
+                seen[0] != '\0' ? seen : "(none)");
 
 verdict:
     tsapi_mde_session_fini(&session);

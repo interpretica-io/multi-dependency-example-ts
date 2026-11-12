@@ -167,13 +167,13 @@ main(int argc, char **argv)
     why = graph_tools_unavailable(&session,
                                   strcmp(dut.dylib_ext, "dylib") == 0);
     if (why != NULL)
-        TEST_SKIP("%s", why);
+        TEST_VERDICT("%s", why);
 
     TEST_STEP("Read the exports of every ring library");
     CHECK_RC(graph_libs_load(&session, &dut, &libs));
     self = &libs.lib[lib];
     if (!self->present)
-        TEST_SKIP("%s is missing - build the example first", self->name);
+        TEST_VERDICT("%s is missing - build the example first", self->name);
 
     TEST_STEP("Known-bad control: a cppcore exporting rust_step and not "
               "cpp_weight must be caught");

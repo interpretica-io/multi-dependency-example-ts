@@ -384,7 +384,7 @@ main(int argc, char **argv)
     }
 
     if (n == 0)
-        TEST_SKIP("None of the artifacts is built");
+        TEST_VERDICT("None of the artifacts is built");
 
     TEST_STEP("Chart the libraries per artifact");
     for (i = 1; i < 3; i++)

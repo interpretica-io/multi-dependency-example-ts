@@ -38,6 +38,9 @@ main(int argc, char **argv)
     CHECK_RC(tsapi_mde_session_init(&session, "graph_prologue"));
     session_up = true;
 
+    TEST_STEP("Install what the group needs on the agent and check it");
+    TSAPI_MDE_ENSURE(session, "base build");
+
     TEST_STEP("Record the tools the group reads binaries with");
     for (i = 0; i < TE_ARRAY_LEN(tools); i++)
     {

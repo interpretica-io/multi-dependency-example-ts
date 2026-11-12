@@ -92,11 +92,11 @@ main(int argc, char **argv)
     TSAPI_MDE_OPEN_OR_SKIP(session, "http_headers", dut, session_up);
 
     if (!tapi_http_available(session.factory, 10000))
-        TEST_SKIP("There is no curl on the agent");
+        TEST_VERDICT("There is no curl on the agent");
     if (!tsapi_mde_have(&session, "python3"))
-        TEST_SKIP("There is no python3 on the agent for the control endpoint");
+        TEST_VERDICT("There is no python3 on the agent for the control endpoint");
     if (!tsapi_mde_web_built(&session, &dut))
-        TEST_SKIP("The web tier is not built");
+        TEST_VERDICT("The web tier is not built");
 
     TEST_STEP("Known-bad control: an endpoint that sends no security "
               "headers must be reported");

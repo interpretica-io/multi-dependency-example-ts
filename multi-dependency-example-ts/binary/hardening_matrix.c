@@ -154,7 +154,7 @@ main(int argc, char **argv)
     }
 
     if (n == 0)
-        TEST_SKIP("None of the artifacts is built");
+        TEST_VERDICT("None of the artifacts is built");
 
     TEST_STEP("Chart the matrix");
     /* The rows were laid out for BINARY_N_ARTIFACTS columns; pack them. */

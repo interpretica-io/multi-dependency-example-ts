@@ -38,6 +38,9 @@ main(int argc, char **argv)
     CHECK_RC(tsapi_mde_session_init(&session, "browser_prologue"));
     session_up = true;
 
+    TEST_STEP("Install what the group needs on the agent and check it");
+    TSAPI_MDE_ENSURE(session, "browser");
+
     TEST_STEP("Inventory the browser stack");
     found[0] = tsapi_mde_have(&session, "node");
     found[1] = tsapi_mde_exists(&session,

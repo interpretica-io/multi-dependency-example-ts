@@ -297,7 +297,7 @@ main(int argc, char **argv)
     TEST_STEP("Open a session and locate the example");
     TSAPI_MDE_OPEN_OR_SKIP(session, "binary_disasm", dut, session_up);
     if (!tsapi_mde_have(&session, "objdump"))
-        TEST_SKIP("There is no objdump on the agent");
+        TEST_VERDICT("There is no objdump on the agent");
     have_readelf = tsapi_mde_have(&session, "readelf");
 
     tsapi_mde_report_init(&report);
@@ -454,7 +454,7 @@ next:
     }
 
     if (n == 0)
-        TEST_SKIP("None of the stage functions could be disassembled");
+        TEST_VERDICT("None of the stage functions could be disassembled");
 
     TEST_STEP("Chart instructions, calls and onward reaches per function");
     for (i = 1; i < 3; i++)

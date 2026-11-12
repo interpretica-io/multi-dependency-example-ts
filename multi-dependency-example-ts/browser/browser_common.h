@@ -84,23 +84,23 @@ browser_skip_unless_ready(tsapi_mde_session *session)
     bool        have_runner;
 
     if (!tsapi_mde_have(session, "node"))
-        TEST_SKIP("Node.js is not installed on the agent");
+        TEST_VERDICT("Node.js is not installed on the agent");
     if (!tsapi_mde_exists(session, BROWSER_PW_DIR "/node_modules/playwright"))
     {
-        TEST_SKIP("The playwright npm package is not installed in "
+        TEST_VERDICT("The playwright npm package is not installed in "
                   BROWSER_PW_DIR);
     }
     if (!tsapi_mde_exists(session, BROWSER_PW_BROWSERS))
-        TEST_SKIP("No Playwright browsers are installed in "
+        TEST_VERDICT("No Playwright browsers are installed in "
                   BROWSER_PW_BROWSERS);
     if (install == NULL)
-        TEST_SKIP("TE_INSTALL is not set, the Playwright runner is unknown");
+        TEST_VERDICT("TE_INSTALL is not set, the Playwright runner is unknown");
 
     te_string_append(&runner, "%s/" BROWSER_RUNNER_REL, install);
     have_runner = access(runner.ptr, R_OK) == 0;
     te_string_free(&runner);
     if (!have_runner)
-        TEST_SKIP("The tsf-playwright runner script is not installed");
+        TEST_VERDICT("The tsf-playwright runner script is not installed");
 }
 
 /**

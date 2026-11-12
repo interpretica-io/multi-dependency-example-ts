@@ -43,7 +43,7 @@
 #include "tapi_egress.h"
 #include "tapi_binscan.h"
 
-#define MAX_PROCS   8
+#define MAX_PROCS   24
 #define MAX_PORTS   8
 #define NAMES       3
 #define REQUEST     "/ring?value=1&hops=3"
@@ -471,6 +471,23 @@ run_once(res_t *r, const char *label, const char *path, char *const *argv,
     }
     res_set(r, R_SETUP, "%s did not finish within %d s", label, timeout_s);
     return NULL;
+}
+
+/**
+ * Run a shell command line in the example root and wait up to
+ * @p timeout_s for it. Output and errors are kept in the process record.
+ * Returns NULL (R_SETUP set) when the shell cannot be started or the
+ * command does not end in time.
+ */
+static proc_t *
+run_sh(res_t *r, const char *label, const char *cmd, int timeout_s)
+{
+    char *sh_argv[] = { (char *)"/bin/sh", (char *)"-c", NULL, NULL };
+    char  line[2048];
+
+    snprintf(line, sizeof(line), "cd '%s' && %s", src_root, cmd);
+    sh_argv[2] = line;
+    return run_once(r, label, "/bin/sh", sh_argv, timeout_s);
 }
 
 /** Outcomes of an HTTP request. */
@@ -996,8 +1013,8 @@ t_report_begin(void)
 /**
  * Turn the outcome of a T<n> test into the verdict and the last report
  * entry. Every verdict starts with the hypothesis id @p _id. A service or
- * binary that is not there reads "<id> NOT RUN: ..." and skips the test, it
- * is never a pass; a scanner with no data reads "<id> INCONCLUSIVE: ...".
+ * binary that is not there reads "<id> INCONCLUSIVE ..." and fails the test
+ * with the reason, it is never a pass or a skip; a scanner with no data reads "<id> INCONCLUSIVE: ...".
  */
 #define T_VERDICT(_r, _id) \
     do {                                                                    \
@@ -1009,8 +1026,8 @@ t_report_begin(void)
                      "%s INCONCLUSIVE: %.1400s", _id, tmp_);                \
         else if ((_r)->kind == R_SETUP &&                                   \
                  strncmp(tmp_, _id, strlen(_id)) != 0)                      \
-            snprintf((_r)->msg, sizeof((_r)->msg), "%s NOT RUN %s: %.1400s",\
-                     _id, setup_svc, tmp_);                                 \
+            snprintf((_r)->msg, sizeof((_r)->msg),                          \
+                     "%s INCONCLUSIVE %s: %.1400s", _id, setup_svc, tmp_);  \
         T_FINDING((_r)->kind == R_PASS ? TAPI_CYBERSEC_SEV_INFO :           \
                   (_r)->kind == R_FAIL ? TAPI_CYBERSEC_SEV_HIGH :           \
                   TAPI_CYBERSEC_SEV_LOW, "webdeps.verdict", _id, "%s",      \
@@ -1027,15 +1044,14 @@ t_report_begin(void)
             RING_VERDICT("%s", (_r)->msg);                                  \
             TEST_SUCCESS;                                                   \
         }                                                                   \
-        if ((_r)->kind == R_SETUP)                                          \
-            TEST_SKIP("%s", (_r)->msg);                                     \
+        RING("webdeps verdict: %s", (_r)->msg);                             \
         TEST_VERDICT("%s", (_r)->msg);                                      \
     } while (0)
 
 /**
  * Open the report, make the work directory and start a service. A service
  * that does not start (or whose binary is missing) leaves an R_SETUP
- * outcome "<id> NOT RUN: service did not start: <name> (<detail>)".
+ * outcome "<id> INCONCLUSIVE: service did not start: <name> (<detail>)".
  */
 static proc_t *
 svc_start_t(res_t *r, const char *id, int idx)
@@ -1049,7 +1065,7 @@ svc_start_t(res_t *r, const char *id, int idx)
     if (p != NULL)
         return p;
     snprintf(detail, sizeof(detail), "%.890s", r->msg);
-    res_set(r, R_SETUP, "%s NOT RUN: service did not start: %s (%s)", id,
+    res_set(r, R_SETUP, "%s INCONCLUSIVE: service did not start: %s (%s)", id,
             names[idx], detail);
     return NULL;
 }

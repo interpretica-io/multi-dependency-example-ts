@@ -172,13 +172,13 @@ main(int argc, char **argv)
     TSAPI_MDE_OPEN_OR_SKIP(session, "dev_make", dut, session_up);
 
     if (!tsapi_mde_have(&session, "make"))
-        TEST_SKIP("make is not installed on the agent");
+        TEST_VERDICT("make is not installed on the agent");
     if (!tsapi_mde_have(&session, cc_name))
-        TEST_SKIP("%s is not installed on the agent", cc_name);
+        TEST_VERDICT("%s is not installed on the agent", cc_name);
 
     te_string_append(&src, "%s/csharp/stub/cscore_stub.c", dut.root);
     if (!tsapi_mde_exists(&session, src.ptr))
-        TEST_SKIP("The C stub of the C# stage is missing");
+        TEST_VERDICT("The C stub of the C# stage is missing");
 
     TEST_STEP("Put a copy of the stub and a Makefile on the agent");
     te_string_append(&dir, "/tmp/mde-devtool-make_stub-%s", cc_name);

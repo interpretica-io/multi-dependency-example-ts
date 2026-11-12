@@ -184,7 +184,7 @@ main(int argc, char **argv)
         TEST_SKIP("The example is built as Mach-O, not ELF");
     memmap_artifact_path(&dut, artifact, &path);
     if (!tsapi_mde_exists(&session, path.ptr))
-        TEST_SKIP("This artifact is not built");
+        TEST_VERDICT("This artifact is not built");
     have_readelf = tsapi_mde_have(&session, "readelf");
 
     TEST_STEP("Read the ELF image");

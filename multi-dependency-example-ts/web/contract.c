@@ -256,13 +256,13 @@ main(int argc, char **argv)
     TEST_STEP("Skip unless the services and curl can be run");
     why = web_unavailable(&session, &dut);
     if (why != NULL)
-        TEST_SKIP("%s", why);
+        TEST_VERDICT("%s", why);
 
     TEST_STEP("Read web/contract/services.tab on the agent");
     CHECK_RC(tsapi_mde_sh(&session, 10000, &res,
                           "cat '%s/web/contract/services.tab'", dut.root));
     if (!tsapi_mde_sh_ok(&res))
-        TEST_SKIP("web/contract/services.tab is missing");
+        TEST_VERDICT("web/contract/services.tab is missing");
     n_rows = contract_parse(web_str(&res.out), rows, CONTRACT_MAX);
     RING("services.tab:\n%s", web_str(&res.out));
     TEST_ARTIFACT("Contract: %u service row(s), %zu byte(s)", n_rows,

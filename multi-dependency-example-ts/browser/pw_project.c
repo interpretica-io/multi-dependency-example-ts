@@ -107,16 +107,16 @@ main(int argc, char **argv)
     TEST_STEP("Open a session and locate the example");
     TSAPI_MDE_OPEN_OR_SKIP(session, "browser_pwproj", dut, session_up);
     if (!tsapi_mde_web_built(&session, &dut))
-        TEST_SKIP("The web tier is not built - build the example first");
+        TEST_VERDICT("The web tier is not built - build the example first");
     browser_skip_unless_ready(&session);
     if (!tsapi_mde_exists(&session,
                           BROWSER_PW_DIR "/node_modules/@playwright/test"))
     {
-        TEST_SKIP("@playwright/test is not installed in " BROWSER_PW_DIR
+        TEST_VERDICT("@playwright/test is not installed in " BROWSER_PW_DIR
                   ", 'playwright test' cannot run");
     }
     if (!tsapi_mde_have(&session, "npx"))
-        TEST_SKIP("npx is not installed on the agent");
+        TEST_VERDICT("npx is not installed on the agent");
 
     TEST_STEP("Write the project to " PROJECT_DIR);
     CHECK_RC(tsapi_mde_sh(&session, 30000, &sh,

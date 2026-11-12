@@ -74,6 +74,9 @@ main(int argc, char **argv)
     CHECK_RC(tsapi_mde_session_init(&session, "prologue"));
     session_up = true;
 
+    TEST_STEP("Install what the group needs on the agent and check it");
+    TSAPI_MDE_ENSURE(session, "all");
+
     TEST_STEP("Report the example under test");
     rc = tsapi_mde_dut_open(&session, &dut);
     if (rc == 0)

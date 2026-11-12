@@ -192,7 +192,7 @@ main(int argc, char **argv)
     TEST_STEP("Open a session and locate the example");
     TSAPI_MDE_OPEN_OR_SKIP(session, "browser_shape", dut, session_up);
     if (!tsapi_mde_web_built(&session, &dut))
-        TEST_SKIP("The web tier is not built - build the example first");
+        TEST_VERDICT("The web tier is not built - build the example first");
     browser_skip_unless_ready(&session);
 
     TEST_STEP("Start the web tier and a browser that captures its traffic");

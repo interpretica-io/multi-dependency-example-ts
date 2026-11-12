@@ -15,6 +15,7 @@
 #define __TSAPI_MDE_H__
 
 #include "te_config.h"
+#include <stdlib.h>
 #include "te_compiler.h"
 #include "te_defs.h"
 #include "te_errno.h"
@@ -235,10 +236,46 @@ extern void tsapi_mde_dut_free(tsapi_mde_dut *dut);
         (_up) = true;                                                     \
         rc_ = tsapi_mde_dut_open(&(_session), &(_dut));                   \
         if (TE_RC_GET_ERROR(rc_) == TE_ENOENT)                            \
-            TEST_SKIP("The example is not built - run ./build.sh in "     \
-                      "TE_TS_MDE_SRC");                                   \
+            TEST_VERDICT("The example is not built in TE_TS_MDE_SRC "     \
+                         "although the suite prologue builds it");        \
         if (rc_ != 0)                                                     \
             TEST_FAIL("Cannot locate the example: %r", rc_);              \
+    } while (0)
+
+/**
+ * Install what a group needs on the agent through
+ * scripts/ensure-web-deps.sh and fail the prologue, with the script's own
+ * message, when something is still missing afterwards.
+ *
+ * @param _session      Open session.
+ * @param _components   Space separated components of the script: base,
+ *                      build, exposure, fuzz, browser or all.
+ */
+#define TSAPI_MDE_ENSURE(_session, _components) \
+    do {                                                                  \
+        tsapi_mde_sh_result ens_ = TSAPI_MDE_SH_RESULT_INIT;              \
+        const char *top_ = getenv("TS_TOPDIR");                           \
+        const char *src_ = tsapi_mde_src();                               \
+        te_errno    erc_;                                                 \
+                                                                          \
+        if (top_ == NULL || top_[0] == '\0' || src_ == NULL)              \
+            TEST_FAIL("TS_TOPDIR or TE_TS_MDE_SRC is not set: cannot "    \
+                      "run scripts/ensure-web-deps.sh");                  \
+        erc_ = tsapi_mde_sh(&(_session), 3000000, &ens_,                  \
+                            "'%s/scripts/ensure-web-deps.sh' '%s' %s",    \
+                            top_, src_, (_components));                   \
+        if (erc_ != 0 || !tsapi_mde_sh_ok(&ens_))                         \
+        {                                                                 \
+            ERROR("install of '%s' failed: %s", (_components),            \
+                  ens_.err.ptr != NULL ? ens_.err.ptr : "(no output)");   \
+            TEST_VERDICT("Cannot install what %s needs on the agent: %s", \
+                         (_components), ens_.err.ptr != NULL &&           \
+                         ens_.err.ptr[0] != '\0' ? ens_.err.ptr :         \
+                         "the install script did not run");               \
+        }                                                                 \
+        RING("ensure-web-deps %s: %s", (_components),                     \
+             ens_.out.ptr != NULL ? ens_.out.ptr : "ready");              \
+        tsapi_mde_sh_result_free(&ens_);                                  \
     } while (0)
 
 #ifdef __cplusplus

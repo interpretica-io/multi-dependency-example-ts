@@ -318,7 +318,7 @@ main(int argc, char **argv)
 
     if (!tsapi_mde_have(&session, "readelf") ||
         !tsapi_mde_have(&session, "ldd"))
-        TEST_SKIP("readelf or ldd is missing on the agent");
+        TEST_VERDICT("readelf or ldd is missing on the agent");
 
     rc = tapi_package_ctx_init(session.factory, &ctx);
     if (rc != 0)
@@ -361,7 +361,7 @@ main(int argc, char **argv)
         n++;
     }
     if (n == 0)
-        TEST_SKIP("None of the example's artifacts is built");
+        TEST_VERDICT("None of the example's artifacts is built");
 
     TEST_STEP("Confirm every owning package with the package manager");
     for (i = 0; i < pkgs.n; i++)
