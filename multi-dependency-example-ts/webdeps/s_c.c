@@ -59,7 +59,7 @@ typedef double (*py_weight_fn)(void);
 static bool
 preload_ring_for_py(const char *dist_lib)
 {
-    char path[512];
+    char path[1024];
 
     /*
      * libcppcore.so first: it exports cpp_weight, which libgocore.so
