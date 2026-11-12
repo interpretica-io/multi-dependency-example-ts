@@ -137,7 +137,7 @@ scan_ports(res_t *r, tsapi_mde_session *session, proc_t **svc, char *bad,
     TE_VEC_FOREACH(&socks, s)
     {
         char     addr[64];
-        char     subject[64];
+        char     subject[80];
         int      o;
         unsigned port;
         bool     wild;
