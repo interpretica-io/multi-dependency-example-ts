@@ -970,4 +970,137 @@ pid_alive(proc_t *p)
     return !proc_gone(p) && kill(p->pid, 0) == 0;
 }
 
+/* ---- per-test report and not-run handling ---- */
+
+static tapi_cybersec_report t_report;
+static bool                 t_report_ready;
+
+/** Start the tapi_cybersec_report of the test. */
+static void
+t_report_begin(void)
+{
+    if (t_report_ready)
+        return;
+    tapi_cybersec_report_init(&t_report);
+    t_report_ready = true;
+}
+
+/** Add one finding to the report of the test; ignored before its start. */
+#define T_FINDING(_sev, _check, _subject, ...) \
+    do {                                                                    \
+        if (t_report_ready)                                                 \
+            tapi_cybersec_report_add(&t_report, _sev, _check, _subject,     \
+                                     __VA_ARGS__);                          \
+    } while (0)
+
+/**
+ * Turn the outcome of a T<n> test into the verdict and the last report
+ * entry. Every verdict starts with the hypothesis id @p _id. A service or
+ * binary that is not there reads "<id> NOT RUN: ..." and skips the test, it
+ * is never a pass; a scanner with no data reads "<id> INCONCLUSIVE: ...".
+ */
+#define T_VERDICT(_r, _id) \
+    do {                                                                    \
+        char tmp_[sizeof((_r)->msg)];                                       \
+                                                                            \
+        snprintf(tmp_, sizeof(tmp_), "%s", (_r)->msg);                      \
+        if ((_r)->kind == R_INCONCLUSIVE)                                   \
+            snprintf((_r)->msg, sizeof((_r)->msg),                          \
+                     "%s INCONCLUSIVE: %.1400s", _id, tmp_);                \
+        else if ((_r)->kind == R_SETUP &&                                   \
+                 strncmp(tmp_, _id, strlen(_id)) != 0)                      \
+            snprintf((_r)->msg, sizeof((_r)->msg), "%s NOT RUN %s: %.1400s",\
+                     _id, setup_svc, tmp_);                                 \
+        T_FINDING((_r)->kind == R_PASS ? TAPI_CYBERSEC_SEV_INFO :           \
+                  (_r)->kind == R_FAIL ? TAPI_CYBERSEC_SEV_HIGH :           \
+                  TAPI_CYBERSEC_SEV_LOW, "webdeps.verdict", _id, "%s",      \
+                  (_r)->msg);                                               \
+        if (t_report_ready)                                                 \
+        {                                                                   \
+            tapi_cybersec_report_log(&t_report);                            \
+            tapi_cybersec_report_free(&t_report);                           \
+            t_report_ready = false;                                         \
+        }                                                                   \
+        cleanup_all();                                                      \
+        if ((_r)->kind == R_PASS)                                           \
+        {                                                                   \
+            RING_VERDICT("%s", (_r)->msg);                                  \
+            TEST_SUCCESS;                                                   \
+        }                                                                   \
+        if ((_r)->kind == R_SETUP)                                          \
+            TEST_SKIP("%s", (_r)->msg);                                     \
+        TEST_VERDICT("%s", (_r)->msg);                                      \
+    } while (0)
+
+/**
+ * Open the report, make the work directory and start a service. A service
+ * that does not start (or whose binary is missing) leaves an R_SETUP
+ * outcome "<id> NOT RUN: service did not start: <name> (<detail>)".
+ */
+static proc_t *
+svc_start_t(res_t *r, const char *id, int idx)
+{
+    proc_t *p;
+    char    detail[900];
+
+    t_report_begin();
+    wd_init(r);
+    p = (r->kind == R_SETUP) ? NULL : svc_start(r, idx);
+    if (p != NULL)
+        return p;
+    snprintf(detail, sizeof(detail), "%.890s", r->msg);
+    res_set(r, R_SETUP, "%s NOT RUN: service did not start: %s (%s)", id,
+            names[idx], detail);
+    return NULL;
+}
+
+/** Start time of a process in clock ticks since boot; 0 if unreadable. */
+static unsigned long long
+pid_starttime(pid_t pid)
+{
+    char               path[64];
+    char               line[1024];
+    FILE              *f;
+    char              *p;
+    unsigned long long t = 0;
+
+    snprintf(path, sizeof(path), "/proc/%d/stat", (int)pid);
+    f = fopen(path, "r");
+    if (f == NULL)
+        return 0;
+    if (fgets(line, sizeof(line), f) != NULL &&
+        (p = strrchr(line, ')')) != NULL)
+    {
+        /* Field 22 is the 20th after the command name. */
+        int i;
+
+        p += 2;
+        for (i = 3; i < 22 && p != NULL; i++)
+        {
+            p = strchr(p, ' ');
+            if (p != NULL)
+                p++;
+        }
+        if (p != NULL)
+            t = strtoull(p, NULL, 10);
+    }
+    fclose(f);
+    return t;
+}
+
+/** Body of a reply as one short line. */
+static void
+body_flat(const hg_res *h, char *out, size_t size)
+{
+    const char *p = strstr(h->body, "\r\n\r\n");
+    size_t      i;
+
+    snprintf(out, size, "%s", p != NULL ? p + 4 : h->body);
+    for (i = 0; out[i] != '\0'; i++)
+    {
+        if (out[i] == '\n' || out[i] == '\r')
+            out[i] = '|';
+    }
+}
+
 #endif /* MDE_WEBDEPS_LIB_H */

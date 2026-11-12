@@ -1,14 +1,16 @@
 # Copyright (C) 2026 Maxim Menshikov
 
 # Every test here is a standalone executable sharing webdeps_lib.h. See
-# package.xml. No group prologue/epilogue: a setup problem must never fail
-# the session.
+# package.xml. The group prologue installs the toolchains and builds the
+# example.
 tests = [
-    'h1_gateway_bad_request',
-    'h2_stalled_peer',
-    'h3_csharp_bad_input',
-    'h4_go_contract',
-    'sec_binscan_netexpose_egress',
+    'prologue',
+    't1_gateway_bad_request',
+    't2_slow_connections',
+    't3_egress',
+    't4_csharp_backend_fail',
+    't5_go_contract',
+    't6_binscan_netexpose',
     's_rust',
     's_go',
     's_cs',

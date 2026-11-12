@@ -3,59 +3,72 @@
     <description>Web dependency tests</description>
 
     <!-- @page mde-webdeps Web Dependency Tests
-          @objective Settle hypotheses H1 to H4 about gateway-rs, service-go
-                     and service-cs, and show one working example per
-                     language.
+          @objective Settle hypotheses H1 to H6 about gateway-rs, service-go,
+                     service-cs and the built binaries, and show one working
+                     example per language.
 
           @par Notes:
-          - h1_gateway_bad_request, h2_stalled_peer, h3_csharp_bad_input and
-            h4_go_contract are standalone plain TCP/HTTP clients, one per
-            hypothesis. Each starts its service, waits for the listen port
-            and ends with an explicit verdict that starts with its
-            hypothesis id and carries the status code or time it measured:
-            H<n> PASS or H<n> FAIL. A service that does not start fails
-            with "service did not start: <service>".
+          - t1_gateway_bad_request .. t6_binscan_netexpose are standalone
+            plain TCP/HTTP clients, one per hypothesis. Each starts its
+            service, waits for the listen port, fills one
+            tapi_cybersec_report and ends with a verdict that starts with
+            its hypothesis id: H<n> PASS or H<n> FAIL with the status code,
+            time or address it measured. A service that does not start or a
+            binary that is not built is not a pass: the verdict reads
+            "H<n> NOT RUN: ..." and the test is skipped.
           - s_rust, s_go, s_cs, s_cpp and s_c are smoke tests, one per
             language of the web tier and the ring; they settle no
             hypothesis and just run the built artifact once with a
             valid input.
-          - sec_binscan_netexpose_egress is the security check of the tier
-            (tapi_netexpose, tapi_egress, tapi_binscan); it settles no
-            hypothesis and its verdict starts with SEC.
-          - There is no group prologue or epilogue.
+
+          @par Scenario:
+          -# Install the toolchains on the agent, check they are there and
+             build the example if it is not built.
     -->
 
     <author mailto="midair@localhost" />
 
+    <prologue>
+        <script name="prologue">
+            <objective>Install the toolchains the example needs, check them and build the example when it is not built.</objective>
+        </script>
+    </prologue>
+
     <session track_conf="silent">
 
-        <run name="h1_gateway_bad_request">
-            <script name="h1_gateway_bad_request">
-                <objective>[H1] Start gateway-rs, wait for its port, send an empty and a malformed request and start a second instance on the busy port (main.rs:34; main.rs:30 is not reachable at run time). After each, check by pid that the process is alive and that a good request still gets a reply. FAIL if the process exits or the good request gets no reply (exit code recorded), PASS otherwise.</objective>
+        <run name="t1_gateway_bad_request">
+            <script name="t1_gateway_bad_request">
+                <objective>[H1] Start gateway-rs, send a valid request, then an empty body, an oversized header and bad path values; after each, send the valid request again. FAIL if the process exits or restarts (pid and start time from /proc) or the valid request gets no answer, PASS if it answers every time.</objective>
             </script>
         </run>
 
-        <run name="h2_stalled_peer">
-            <script name="h2_stalled_peer">
-                <objective>[H2] Start service-go, open 20 stalled sockets (silent or half a request), send a good request and time the reply, and measure how long each stalled socket is held, up to 30 s. FAIL if a socket is held for the full 30 s or the good request fails or takes more than 5 s. The hold time is printed.</objective>
+        <run name="t2_slow_connections">
+            <script name="t2_slow_connections">
+                <objective>[H2] Start service-go, open 50 connections and send one byte every 2 s on each; while they are open send a normal request. FAIL if it takes longer than 3 s or is refused, PASS otherwise. The connection count is recorded.</objective>
             </script>
         </run>
 
-        <run name="h3_csharp_bad_input">
-            <script name="h3_csharp_bad_input">
-                <objective>[H3] Start service-cs alone and send a valid request (hops=0) and the input that makes the GET inside the try block of Program.cs:85 throw (hops=3 with gateway-rs not listening). FAIL if the bad input returns 2xx, PASS on 4xx or 5xx. Both status codes and bodies are printed.</objective>
+        <run name="t3_egress">
+            <script name="t3_egress">
+                <objective>[H3] Run tapi_egress while normal traffic goes to gateway-rs, service-go and service-cs; the allowed list is loopback only. FAIL on any connection to a non-loopback address, each destination is reported.</objective>
             </script>
         </run>
 
-        <run name="h4_go_contract">
-            <script name="h4_go_contract">
-                <objective>[H4] Start service-go and send one message that follows the contract (value=1, hops=1) and one that breaks it (value=abc, hops=x). FAIL if the broken message gets a success reply, PASS if it is rejected. Both replies are printed.</objective>
+        <run name="t4_csharp_backend_fail">
+            <script name="t4_csharp_backend_fail">
+                <objective>[H4] Start service-cs alone and make its backend call fail (hops=3 with gateway-rs down). FAIL if it returns 200 with an empty or default body, PASS if it returns 4xx or 5xx.</objective>
             </script>
         </run>
 
-        <run name="sec_binscan_netexpose_egress">
-            <script name="sec_binscan_netexpose_egress">
-                <objective>[SEC] Run the three services (ports read with tapi_netexpose), send one normal request to each and compare all their outgoing connections (tapi_egress) with an allowed list of loopback only; each unexpected destination goes into the tapi_cybersec_report. Also fail if tapi_netexpose shows a service listening on a non-loopback address. tapi_binscan on gateway-rs, service-go and service-cs adds its result to the report as context only and never fails the test. A scanner that returns no data at all gives INCONCLUSIVE, naming the scanner.</objective>
+        <run name="t5_go_contract">
+            <script name="t5_go_contract">
+                <objective>[H5] Send service-go requests that break its contract: a missing field, a wrong type, a value out of range. FAIL if any answer is 2xx (or not 4xx), PASS if all are 4xx.</objective>
+            </script>
+        </run>
+
+        <run name="t6_binscan_netexpose">
+            <script name="t6_binscan_netexpose">
+                <objective>[H6] tapi_binscan on gateway-rs, service-go, service-cs and the C/C++ binaries (NX, PIE, RELRO, canary, fortify per binary) and tapi_netexpose on the agent (each listening port with its bind address). FAIL on a project port bound to 0.0.0.0 that services.tab does not document; missing hardening flags are findings only.</objective>
             </script>
         </run>
 

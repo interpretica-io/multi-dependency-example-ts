@@ -1119,23 +1119,31 @@
         <notes/>
         <iter result="FAILED">
           <notes/>
-          <test name="h1_gateway_bad_request" type="script">
+          <test name="prologue" type="script">
             <objective/>
             <notes/>
           </test>
-          <test name="h2_stalled_peer" type="script">
+          <test name="t1_gateway_bad_request" type="script">
             <objective/>
             <notes/>
           </test>
-          <test name="h3_csharp_bad_input" type="script">
+          <test name="t2_slow_connections" type="script">
             <objective/>
             <notes/>
           </test>
-          <test name="h4_go_contract" type="script">
+          <test name="t3_egress" type="script">
             <objective/>
             <notes/>
           </test>
-          <test name="sec_binscan_netexpose_egress" type="script">
+          <test name="t4_csharp_backend_fail" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="t5_go_contract" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="t6_binscan_netexpose" type="script">
             <objective/>
             <notes/>
           </test>
