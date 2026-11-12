@@ -3,19 +3,20 @@
     <description>Web dependency tests</description>
 
     <!-- @page mde-webdeps Web Dependency Tests
-          @objective Settle hypotheses H1 to H5 about gateway-rs, service-go,
+          @objective Settle hypotheses H1 to H4 about gateway-rs, service-go,
                      service-cs and the built binaries, and show one working
                      example per language.
 
           @par Notes:
-          - t1_gateway_bad_request .. t5_binscan settle H1 to H5 and t6_skip_causes makes the skip causes readable; they are standalone
-            plain TCP/HTTP clients, one per hypothesis. Each starts its
-            service, waits for the listen port, fills one
-            tapi_cybersec_report and ends with a verdict that starts with
-            its hypothesis id: H<n> PASS or H<n> FAIL with the status code,
-            time or address it measured. A service that does not start or a
-            binary that is not built is not a pass and is not skipped: the
-            verdict reads "H<n> INCONCLUSIVE: ..." with the reason.
+          - t1_gateway_bad_request .. t4_binscan settle H1 to H4 (t3_language_builds
+            must run before t4_binscan, which scans what it built); t5_egress
+            is the egress check kept from round 2, EG1. They are standalone
+            plain TCP/HTTP clients. Each fills one tapi_cybersec_report and
+            ends with a verdict that starts with its hypothesis id: H<n> PASS
+            or H<n> FAIL with the status code, time or address it measured.
+            A service that does not start or a binary that is not built is
+            not a pass and is not skipped: the verdict reads "H<n>
+            INCONCLUSIVE: ..." with the reason.
           - s_rust, s_go, s_cs, s_cpp and s_c are smoke tests, one per
             language of the web tier and the ring; they settle no
             hypothesis and just run the built artifact once with a
@@ -37,37 +38,31 @@
 
         <run name="t1_gateway_bad_request">
             <script name="t1_gateway_bad_request">
-                <objective>[H1] Start gateway-rs, send an empty request, an oversized request and one for the main.rs:30/34 branch; after each wait up to 2 s and read the exit status. FAIL naming the input if it exits by panic (101 or SIGABRT); PASS if it stays up and answers a valid request; INCONCLUSIVE with its stderr if it does not start.</objective>
+                <objective>[H1] Start gateway-rs, send a malformed request for the main.rs:30 branch and one for the main.rs:34 branch; after each record the exit code and whether a second valid request is answered. FAIL if the process exits or aborts; INCONCLUSIVE with its stderr if it does not start.</objective>
             </script>
         </run>
 
         <run name="t2_slow_connections">
             <script name="t2_slow_connections">
-                <objective>[H2] Start service-go, open 200 connections and send nothing, wait 30 s and count with tapi_netexpose what the server still holds. FAIL if all 200 stay open or if a valid request does not answer within 5 s; PASS if it closes the idle sockets; INCONCLUSIVE if it does not start.</objective>
+                <objective>[H2] Start service-go, open 50 TCP connections, send nothing, wait 60 s and record how many are still open. FAIL if none was closed or if a valid request on a new connection times out; INCONCLUSIVE if it does not start.</objective>
             </script>
         </run>
 
-        <run name="t3_egress">
-            <script name="t3_egress">
-                <objective>[H3] Start gateway-rs, service-go and service-cs, send each a valid request, run tapi_egress with an allowed list of localhost and the contract ports. Every result goes in the tapi_cybersec_report; FAIL names each address outside the list; the addresses seen are printed on a pass too; INCONCLUSIVE with the reason when tapi_egress is unavailable.</objective>
+        <run name="t3_language_builds">
+            <script name="t3_language_builds">
+                <objective>[H3] Build each example with its own tool: cargo build for rust/core, rust/demo and gateway-rs, go build for go and service-go, dotnet build for csharp and service-cs, the C++ and C compilers for cppcore.cpp and pycore.c. One pass or fail line each, with the compiler error text on a fail; FAIL on any build error.</objective>
             </script>
         </run>
 
-        <run name="t4_language_builds">
-            <script name="t4_language_builds">
-                <objective>[H4] For Rust, Go, C#, C++ and C run the build command then the demo binary; exit code 0 and non-empty stdout. One verdict per language; a failed build fails it (compiler text printed for cppcore.cpp and pycore.c); a language with no demo entry point fails and says so.</objective>
+        <run name="t4_binscan">
+            <script name="t4_binscan">
+                <objective>[H4] After T3, run tapi_binscan on each built binary, add each missing flag (NX, PIE, RELRO, canary, fortify) to the tapi_cybersec_report and log every binary by name. FAIL on any missing flag.</objective>
             </script>
         </run>
 
-        <run name="t5_binscan">
-            <script name="t5_binscan">
-                <objective>[H5] tapi_binscan on every binary built by T4 and on gateway-rs, service-go and service-cs. Each result is added to the report; a binary lacking NX, PIE, full RELRO, canary or fortify fails and its missing flags are printed.</objective>
-            </script>
-        </run>
-
-        <run name="t6_skip_causes">
-            <script name="t6_skip_causes">
-                <objective>[H3/H4 partly] Print each skip reason of the suite, which tool, file or container it is about and whether that is on the agent now. Always passes.</objective>
+        <run name="t5_egress">
+            <script name="t5_egress">
+                <objective>[EG1] Start gateway-rs, service-go and service-cs, send each a valid request, run tapi_egress with an allowed list of localhost and the contract ports. Every result goes in the tapi_cybersec_report; FAIL names each address outside the list; INCONCLUSIVE with the reason when tapi_egress is unavailable. Kept from round 2; settles no H hypothesis.</objective>
             </script>
         </run>
 

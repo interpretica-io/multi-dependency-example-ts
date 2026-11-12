@@ -53,7 +53,7 @@ main(int argc, char **argv)
     /*
      * service-cs's own valid-request handler reaches into its backend
      * (gateway-rs); start that first so the smoke request is a clean one,
-     * not the H3 failure case.
+     * not a failure case of the gateway.
      */
     TEST_STEP("Start gateway-rs, its backend");
     if (svc_start(&res, GW) == NULL)

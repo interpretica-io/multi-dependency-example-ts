@@ -1131,19 +1131,15 @@
             <objective/>
             <notes/>
           </test>
-          <test name="t3_egress" type="script">
+          <test name="t5_egress" type="script">
             <objective/>
             <notes/>
           </test>
-          <test name="t4_language_builds" type="script">
+          <test name="t3_language_builds" type="script">
             <objective/>
             <notes/>
           </test>
-          <test name="t5_binscan" type="script">
-            <objective/>
-            <notes/>
-          </test>
-          <test name="t6_skip_causes" type="script">
+          <test name="t4_binscan" type="script">
             <objective/>
             <notes/>
           </test>

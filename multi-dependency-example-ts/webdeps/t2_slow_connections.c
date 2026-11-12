@@ -3,11 +3,11 @@
 /** @file
  * @brief Webdeps: T2, idle clients of service-go (settles H2)
  *
- * A plain TCP/HTTP client. Open 200 connections to service-go and send
- * nothing on them. Wait 30 s, then count with tapi_netexpose the
+ * A plain TCP/HTTP client. Open 50 connections to service-go and send
+ * nothing on them. Wait 60 s, then count with tapi_netexpose the
  * established sockets the service still holds on its port (the client's own
- * view is recorded next to it). H2 FAIL if all 200 stay open. Then send one
- * valid request with a 5 s limit: H2 FAIL if it times out. Otherwise H2
+ * view is recorded next to it). H2 FAIL if none of the 50 is closed. Then send one
+ * valid request on a new connection with a 5 s limit: H2 FAIL if it times out. Otherwise H2
  * PASS. The counts and the time go in the verdict and in the
  * tapi_cybersec_report. A service-go that does not start, or a socket
  * table that cannot be read, is INCONCLUSIVE with the reason.
@@ -23,8 +23,8 @@
 
 #include "webdeps_lib.h"
 
-#define T2_CONNS    200
-#define T2_IDLE_S   30      /**< s, idle wait. */
+#define T2_CONNS    50
+#define T2_IDLE_S   60      /**< s, idle wait. */
 #define T2_GOOD_S   5       /**< s, longest valid request. */
 
 /** Connections the peer has not closed (a read would not return 0). */
@@ -154,8 +154,8 @@ main(int argc, char **argv)
         T_FINDING(TAPI_CYBERSEC_SEV_HIGH, "go.no-timeout", "service-go",
                   "all %d idle connections still open after %d s", held,
                   T2_IDLE_S);
-        res_set(&res, R_FAIL, "H2 FAIL: service-go kept all %d idle "
-                "connections open for %d s", held, T2_IDLE_S);
+        res_set(&res, R_FAIL, "H2 FAIL: service-go closed none of the %d idle "
+                "connections in %d s, %d still open", T2_CONNS, T2_IDLE_S, held);
         goto verdict;
     }
 
@@ -175,9 +175,9 @@ main(int argc, char **argv)
                 good.elapsed, T2_GOOD_S, held, opened);
     }
     else
-        res_set(&res, R_PASS, "H2 PASS: service-go closed %d of %d idle "
+        res_set(&res, R_PASS, "H2 PASS: service-go closed %d of %d idle (%d still open) "
                 "connections within %d s and answered the valid request "
-                "with HTTP %d in %.2f s", opened - held, opened, T2_IDLE_S,
+                "with HTTP %d in %.2f s", opened - held, opened, held, T2_IDLE_S,
                 good.status, good.elapsed);
 
 verdict:

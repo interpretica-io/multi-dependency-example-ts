@@ -75,7 +75,7 @@ main(int argc, char **argv)
     session_up = true;
 
     TEST_STEP("Install what the group needs on the agent and check it");
-    TSAPI_MDE_ENSURE(session, "all");
+    TSAPI_MDE_ENSURE(session, "base build");
 
     TEST_STEP("Report the example under test");
     rc = tsapi_mde_dut_open(&session, &dut);

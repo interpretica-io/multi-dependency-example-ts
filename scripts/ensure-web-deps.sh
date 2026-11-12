@@ -60,18 +60,49 @@ for c in "${!PKG[@]}" ; do
     command -v "$c" >/dev/null 2>&1 || die "$c is still missing after the install"
 done
 
-if ! command -v dotnet >/dev/null 2>&1 ; then
-    echo "ensure-web-deps: installing the .NET SDK"
+# The Cargo.lock files are lock file version 4: cargo older than 1.78 (the
+# one apt ships on older Ubuntu) cannot read them, so install a current one.
+cargo_ok() {
+    local v
+    v="$(cargo --version 2>/dev/null | sed -n 's/^cargo \([0-9]*\)\.\([0-9]*\).*/\1 \2/p')"
+    [ -n "${v}" ] || return 1
+    set -- ${v}
+    [ "$1" -gt 1 ] || [ "$2" -ge 78 ]
+}
+if ! cargo_ok ; then
+    echo "ensure-web-deps: installing a current Rust toolchain with rustup (cargo $(cargo --version 2>&1) is too old for Cargo.lock version 4)"
+    curl -fsSL https://sh.rustup.rs -o /tmp/rustup-init.sh &&
+        ${SUDO} env RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo \
+            sh /tmp/rustup-init.sh -y --profile minimal --no-modify-path >&2 ||
+        die "cannot install Rust with rustup (needed for Cargo.lock version 4)"
+    # Link the real toolchain binaries, not the rustup proxies, which need
+    # RUSTUP_HOME in the environment of every caller.
+    TC="$(ls -d /usr/local/rustup/toolchains/*/bin 2>/dev/null | head -n 1)"
+    [ -n "${TC}" ] || die "rustup installed no toolchain under /usr/local/rustup"
+    for t in cargo rustc rustdoc ; do
+        ${SUDO} ln -sf "${TC}/$t" /usr/local/bin/$t
+    done
+    hash -r
+    cargo_ok || die "cargo is still too old after rustup ($(cargo --version 2>&1)); need 1.78 or newer"
+fi
+
+# The projects target net9.0: an older SDK cannot build them.
+have_dotnet9() {
+    command -v dotnet >/dev/null 2>&1 &&
+        dotnet --list-sdks 2>/dev/null | grep -q '^9\.'
+}
+if ! have_dotnet9 ; then
+    echo "ensure-web-deps: installing the .NET 9 SDK"
     export DEBIAN_FRONTEND=noninteractive
     apt_update
-    if ! ${SUDO} apt-get install -y dotnet-sdk-8.0 >&2 2>&1 ; then
+    if ! ${SUDO} apt-get install -y dotnet-sdk-9.0 >&2 ; then
         curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh &&
-            ${SUDO} bash /tmp/dotnet-install.sh --channel 8.0 \
+            ${SUDO} bash /tmp/dotnet-install.sh --channel 9.0 \
                 --install-dir /usr/share/dotnet >&2 &&
             ${SUDO} ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet ||
-            die "cannot install the .NET SDK (apt and dotnet-install.sh failed)"
+            die "cannot install the .NET 9 SDK (apt-get install dotnet-sdk-9.0 and dotnet-install.sh both failed)"
     fi
-    command -v dotnet >/dev/null 2>&1 || die "dotnet is still missing after the install"
+    have_dotnet9 || die "no .NET 9 SDK after the install (dotnet --list-sdks: $(dotnet --list-sdks 2>&1 | tr '\n' ' '))"
 fi
 
 export DEBIAN_FRONTEND=noninteractive

@@ -16,6 +16,7 @@
 
 #include "te_config.h"
 #include <stdlib.h>
+#include <string.h>
 #include "te_compiler.h"
 #include "te_defs.h"
 #include "te_errno.h"
@@ -266,12 +267,17 @@ extern void tsapi_mde_dut_free(tsapi_mde_dut *dut);
                             top_, src_, (_components));                   \
         if (erc_ != 0 || !tsapi_mde_sh_ok(&ens_))                         \
         {                                                                 \
-            ERROR("install of '%s' failed: %s", (_components),            \
-                  ens_.err.ptr != NULL ? ens_.err.ptr : "(no output)");   \
-            TEST_VERDICT("Cannot install what %s needs on the agent: %s", \
-                         (_components), ens_.err.ptr != NULL &&           \
-                         ens_.err.ptr[0] != '\0' ? ens_.err.ptr :         \
-                         "the install script did not run");               \
+            const char *e_ = ens_.err.ptr != NULL ? ens_.err.ptr : "";    \
+            size_t      el_ = strlen(e_);                                 \
+                                                                          \
+            ERROR("install of '%s' failed (rc %r): stdout: %s; "          \
+                  "stderr: %s", (_components), erc_,                      \
+                  ens_.out.ptr != NULL ? ens_.out.ptr : "(none)",         \
+                  el_ > 0 ? e_ : "(no output)");                          \
+            TEST_VERDICT("Cannot install what %s needs on the agent "     \
+                         "(rc %r): %s", (_components), erc_,              \
+                         el_ == 0 ? "the install script did not run" :    \
+                         e_ + (el_ > 700 ? el_ - 700 : 0));               \
         }                                                                 \
         RING("ensure-web-deps %s: %s", (_components),                     \
              ens_.out.ptr != NULL ? ens_.out.ptr : "ready");              \

@@ -49,7 +49,9 @@
 #define REQUEST     "/ring?value=1&hops=3"
 #define START_WAIT  10      /**< s to wait for a port to accept TCP. */
 #define PROBE_TO    3       /**< s, client timeout of every probe. */
-#define STALL_LIMIT 10      /**< s, H2 stall verdict limit. */
+/** Where T3 puts what it builds and T4 scans it. */
+#define H3_OUT      "/tmp/mde-h3-out"
+#define STALL_LIMIT 10      /**< s, stall verdict limit. */
 
 /** Service indexes, in contract order. */
 enum { GW = 0, GO, CS };

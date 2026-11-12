@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief Webdeps: T3, egress of the web tier (settles H3)
+ * @brief Webdeps: T5, egress of the web tier (settles EG1, a check kept from round 2)
  *
  * Start gateway-rs, service-go and service-cs (each port read with
  * tapi_netexpose), send normal traffic to each in several rounds, and
@@ -17,7 +17,7 @@
  * @author midair <midair@localhost>
  */
 
-#define TE_TEST_NAME    "webdeps/t3_egress"
+#define TE_TEST_NAME    "webdeps/t5_egress"
 
 #include "te_config.h"
 
@@ -175,7 +175,7 @@ main(int argc, char **argv)
         goto verdict;
 
     TEST_STEP("Start the three services and wait for their ports");
-    if (tsapi_mde_session_init(&session, "t3_egress") != 0)
+    if (tsapi_mde_session_init(&session, "t5_egress") != 0)
     {
         setup_svc = "agent";
         res_set(&res, R_SETUP, "no session on the agent for the scanners");
@@ -193,19 +193,19 @@ main(int argc, char **argv)
         goto verdict;
 
     if (first[0] != '\0')
-        res_set(&res, R_FAIL, "H3 FAIL: connections outside the allowed list "
+        res_set(&res, R_FAIL, "EG1 FAIL: connections outside the allowed list "
                 "(localhost, contract ports): %s; all addresses seen: %s; "
                 "the report has %u finding(s) at or above HIGH", first, seen,
                 tapi_cybersec_report_count(&t_report, TAPI_CYBERSEC_SEV_HIGH));
     else
-        res_set(&res, R_PASS, "H3 PASS: gateway-rs, service-go and "
+        res_set(&res, R_PASS, "EG1 PASS: gateway-rs, service-go and "
                 "service-cs made no connection outside the allowed list "
                 "while serving normal traffic; addresses seen: %s",
                 seen[0] != '\0' ? seen : "(none)");
 
 verdict:
     tsapi_mde_session_fini(&session);
-    T_VERDICT(&res, "H3");
+    T_VERDICT(&res, "EG1");
 
 cleanup:
     cleanup_all();
