@@ -1094,8 +1094,15 @@ body_flat(const hg_res *h, char *out, size_t size)
 {
     const char *p = strstr(h->body, "\r\n\r\n");
     size_t      i;
+    const char *src = p != NULL ? p + 4 : h->body;
+    size_t      n = strlen(src);
 
-    snprintf(out, size, "%s", p != NULL ? p + 4 : h->body);
+    if (size == 0)
+        return;
+    if (n > size - 1)
+        n = size - 1;
+    memcpy(out, src, n);
+    out[n] = '\0';
     for (i = 0; out[i] != '\0'; i++)
     {
         if (out[i] == '\n' || out[i] == '\r')
