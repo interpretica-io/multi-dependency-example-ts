@@ -119,6 +119,7 @@ main(int argc, char **argv)
     double                  t0;
 
     TEST_START;
+    TSAPI_MDE_PROLOGUE_GATE("fuzz");
     tsapi_mde_report_init(&report);
 
     TEST_STEP("Parse test parameters");

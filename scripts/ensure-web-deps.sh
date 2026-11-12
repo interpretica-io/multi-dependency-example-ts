@@ -216,7 +216,7 @@ for a in "\$@" ; do
         *)  set -- "\$@" "\$a" ;;
     esac
 done
-exec $(command -v cc) -D_GNU_SOURCE "\$@"
+exec $(command -v gcc || command -v cc) -D_GNU_SOURCE "\$@"
 SHIM_EOF
 chmod +x "${SHIM}/cc"
 case "$(uname -m)" in

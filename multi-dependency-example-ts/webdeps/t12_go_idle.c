@@ -1,24 +1,24 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief Webdeps: t6_go_idle, idle clients of service-go (settles H2)
+ * @brief Webdeps: t12_go_idle, idle clients of service-go (settles H2)
  *
- * A plain TCP/HTTP client. Open 50 connections to service-go and send
- * nothing on them. Wait 30 s, then count the sockets the service still
- * holds on its port with tapi_netexpose (the client's own view is recorded
- * next to it). Send one normal request on a new connection with a 5 s
- * limit.
+ * A plain TCP/HTTP client. Start service-go, open 50 connections to it and
+ * send nothing on them. Wait 10 s, then count the sockets the service
+ * still holds on its port with tapi_netexpose (the client's own view is
+ * recorded next to it). Send one valid request on a new connection with a
+ * 2 s timeout. The sockets are closed at the end.
  *
- * H2 FAIL if all 50 stay open and the normal request is then refused or
- * takes over 5 s. H2 PASS if the service closed idle sockets, or if it
- * kept them and still serves in time (the verdict says which). A
- * service-go that does not start, or a socket table that cannot be read,
- * is H2 INCONCLUSIVE with the reason.
+ * H2 CONFIRMED if the idle connections are still open after 10 s (the
+ * verdict adds whether the valid request was answered in 2 s). H2
+ * DISPROVED if the service closed them, which is what a read timeout
+ * does. A service-go that does not start fails the test with the reason
+ * "not started" and settles nothing.
  *
  * @author midair <midair@localhost>
  */
 
-#define TE_TEST_NAME    "webdeps/t6_go_idle"
+#define TE_TEST_NAME    "webdeps/t12_go_idle"
 
 #include "te_config.h"
 
@@ -27,8 +27,8 @@
 #include "webdeps_lib.h"
 
 #define T6_CONNS    50
-#define T6_IDLE_S   30      /**< s, idle wait. */
-#define T6_GOOD_S   5       /**< s, longest valid request. */
+#define T6_IDLE_S   10      /**< s, idle wait. */
+#define T6_GOOD_S   2       /**< s, longest valid request. */
 
 /** Connections the peer has not closed (a read would not return 0). */
 static int
@@ -96,6 +96,7 @@ main(int argc, char **argv)
     int      client_held;
     proc_t  *go;
     hg_res   good;
+    bool     answered;
     int      fds[T6_CONNS];
     bool     open_[T6_CONNS];
     int      opened = 0;
@@ -136,7 +137,7 @@ main(int argc, char **argv)
     {
         T_FINDING(TAPI_CYBERSEC_SEV_HIGH, "go.idle-conns", "service-go",
                   "only %d of %d connections accepted", opened, T6_CONNS);
-        res_set(&res, R_FAIL, "H2 FAIL: service-go refused connection %d of "
+        res_set(&res, R_FAIL, "H2 not settled: service-go refused connection %d of "
                 "%d, errno %d (%s)", opened + 1, T6_CONNS, errno,
                 strerror(errno));
         goto verdict;
@@ -153,44 +154,39 @@ main(int argc, char **argv)
               "(tapi_netexpose), %d (client view)", opened, T6_IDLE_S, held,
               client_held);
 
-    TEST_STEP("A normal request after the idle wait");
+    TEST_STEP("A valid request after the idle wait, timeout %d s",
+              T6_GOOD_S);
     http_get(go->port, REQUEST, T6_GOOD_S, &good);
-    RING("webdeps H2: normal request %s, HTTP %d, %.2f s, %d of %d idle "
-         "connections held", hg_str(good.how), good.status, good.elapsed,
-         held, opened);
-    if (good.how != HG_OK || good.status < 200 || good.status >= 300 ||
-        good.elapsed > T6_GOOD_S)
-    {
-        T_FINDING(TAPI_CYBERSEC_SEV_HIGH, "go.no-answer", "service-go",
-                  "normal request %s, HTTP %d, %.2f s (limit %d s), %d idle "
-                  "connections held", hg_str(good.how), good.status,
-                  good.elapsed, T6_GOOD_S, held);
-        if (held >= T6_CONNS)
-            res_set(&res, R_FAIL, "H2 FAIL: all %d idle connections are "
-                    "still open after %d s and the normal request %s, HTTP "
-                    "%d, %.2f s (limit %d s)", T6_CONNS, T6_IDLE_S,
-                    hg_str(good.how), good.status, good.elapsed, T6_GOOD_S);
-        else
-            res_set(&res, R_FAIL, "H2 FAIL: the normal request %s, HTTP %d, "
-                    "%.2f s (limit %d s) after the idle wait, with %d of %d "
-                    "idle connections still open", hg_str(good.how),
-                    good.status, good.elapsed, T6_GOOD_S, held, opened);
-    }
-    else if (held >= T6_CONNS)
+    RING("webdeps H2: valid request %s, HTTP %d, %.2f s, %d of %d idle "
+         "connections held (client view %d)", hg_str(good.how), good.status,
+         good.elapsed, held, opened, client_held);
+    answered = good.how == HG_OK && good.status >= 200 && good.status < 300 &&
+               good.elapsed <= T6_GOOD_S;
+    if (held >= opened && client_held >= opened)
     {
         T_FINDING(TAPI_CYBERSEC_SEV_MEDIUM, "go.no-timeout", "service-go",
-                  "all %d idle connections still open after %d s", held,
-                  T6_IDLE_S);
-        res_set(&res, R_PASS, "H2 PASS: all %d idle connections are still "
-                "open after %d s (no idle close seen) but the normal "
-                "request got HTTP %d in %.2f s, so the service is not "
-                "exhausted", T6_CONNS, T6_IDLE_S, good.status, good.elapsed);
+                  "all %d idle connections still open after %d s; valid "
+                  "request %s", held, T6_IDLE_S,
+                  answered ? "answered in time" : "not answered in time");
+        res_set(&res, R_FAIL, "H2 CONFIRMED: all %d idle connections are "
+                "still open after %d s (no read timeout closed them); the "
+                "valid request %s (%s, HTTP %d, %.2f s, limit %d s)",
+                held, T6_IDLE_S, answered ? "was still answered" :
+                "was not answered", hg_str(good.how), good.status,
+                good.elapsed, T6_GOOD_S);
     }
     else
-        res_set(&res, R_PASS, "H2 PASS: service-go closed %d of %d idle "
-                "connections within %d s (%d still open) and answered the "
-                "normal request with HTTP %d in %.2f s", opened - held,
-                opened, T6_IDLE_S, held, good.status, good.elapsed);
+    {
+        T_FINDING(TAPI_CYBERSEC_SEV_INFO, "go.timeout", "service-go",
+                  "%d of %d idle connections closed within %d s",
+                  opened - held, opened, T6_IDLE_S);
+        res_set(&res, R_PASS, "H2 DISPROVED: service-go closed %d of %d idle "
+                "connections within %d s (%d held by the server, %d open in "
+                "the client view); the valid request %s (%s, HTTP %d, %.2f "
+                "s)", opened - held, opened, T6_IDLE_S, held, client_held,
+                answered ? "was answered in time" : "was not answered in "
+                "time", hg_str(good.how), good.status, good.elapsed);
+    }
 
 verdict:
     tsapi_mde_session_fini(&session);

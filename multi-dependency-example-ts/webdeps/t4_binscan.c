@@ -1,9 +1,11 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief Webdeps: T4, hardening flags of the built binaries (kept from the earlier round; no hypothesis)
+ * @brief Webdeps: t4_binscan, hardening flags of the binaries built by the
+ *        t10_build_* tests (the earlier suspicion V1; no new id)
  *
- * After t7_build_all, run tapi_binscan on every binary t7_build_all built in H3_OUT: the Rust
+ * After the t10_build_* tests, run tapi_binscan on every binary they built
+ * in H3_OUT and print its output, on success too: the Rust
  * core library, the Rust demo, gateway-rs, the Go library, service-go,
  * service-cs and the C++ and C libraries. Each missing flag (NX, PIE,
  * RELRO, canary, fortify) is added to the tapi_cybersec_report as its own
@@ -33,6 +35,8 @@ static const struct {
     { H3_OUT "/service-cs/service-cs", false },
     { H3_OUT "/libcppcore.so", false },
     { H3_OUT "/libpycore.so", false },
+    { H3_OUT "/cpp-demo", false },
+    { H3_OUT "/c-demo", false },
 };
 
 /**
@@ -52,7 +56,7 @@ scan_one(tsapi_mde_session *session, const char *rel, char *missing,
     snprintf(path, sizeof(path), "%s", rel);
     if (access(path, R_OK) != 0)
     {
-        snprintf(why, why_size, "%s was not built by t7_build_all", rel);
+        snprintf(why, why_size, "%s was not built by the t10_build_* tests", rel);
         return false;
     }
     rc = tapi_binscan_inspect(session->ta, path, &info);
@@ -69,6 +73,10 @@ scan_one(tsapi_mde_session *session, const char *rel, char *missing,
         return false;
     }
     tapi_binscan_info_log(&info, path);
+    RING("webdeps tapi_binscan %s: kind %s, nx %d, relro %s, canary %d, "
+         "fortify %d, stripped %d", path, tapi_binscan_kind2str(info.kind),
+         info.nx, tapi_binscan_relro2str(info.relro), info.canary,
+         info.fortify, info.stripped);
     pie = info.kind == TAPI_BINSCAN_KIND_PIE ||
           info.kind == TAPI_BINSCAN_KIND_SHARED;
 #define MISSING(_flag, ...) \
@@ -158,20 +166,20 @@ main(int argc, char **argv)
     }
 
     if (n_bad > 0)
-        res_set(&res, R_FAIL, "BIN FAIL: %u of %zu binaries lack hardening "
+        res_set(&res, R_FAIL, "V1 FAIL: %u of %zu binaries lack hardening "
                 "flags: %s%s%s", n_bad, TE_ARRAY_LEN(scan_paths), bad,
                 n_absent > 0 ? "not scanned: " : "", absent);
     else if (n_absent > 0)
-        res_set(&res, R_FAIL, "BIN FAIL: no scanned binary lacks a flag but "
+        res_set(&res, R_FAIL, "V1 FAIL: no scanned binary lacks a flag but "
                 "%u of %zu could not be scanned: %s", n_absent,
                 TE_ARRAY_LEN(scan_paths), absent);
     else
-        res_set(&res, R_PASS, "BIN PASS: all %zu binaries have NX, PIE, full "
+        res_set(&res, R_PASS, "V1 PASS: all %zu binaries have NX, PIE, full "
                 "RELRO, a stack canary and fortify", TE_ARRAY_LEN(scan_paths));
 
 verdict:
     tsapi_mde_session_fini(&session);
-    T_VERDICT(&res, "BIN");
+    T_VERDICT(&res, "V1");
 
 cleanup:
     cleanup_all();

@@ -112,6 +112,7 @@ main(int argc, char **argv)
     char                 hops_str[16];
 
     TEST_START;
+    TSAPI_MDE_PROLOGUE_GATE("container");
     tsapi_mde_report_init(&report);
     memset(&dut, 0, sizeof(dut));
 

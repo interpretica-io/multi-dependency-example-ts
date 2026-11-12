@@ -53,6 +53,7 @@
 /** Where T3 puts what it builds and T4 scans it. */
 #define H3_OUT      "/tmp/mde-h3-out"
 #define STALL_LIMIT 10      /**< s, stall verdict limit. */
+#define LOG_LINES   40      /**< Lines of command output kept in the log. */
 
 /** Service indexes, in contract order. */
 enum { GW = 0, GO, CS };
@@ -66,6 +67,7 @@ typedef struct res_t {
     enum {
         R_PASS, R_FAIL, R_SETUP,
         R_INCONCLUSIVE, /**< A scanner returned no data; names which one. */
+        R_SKIP,         /**< A tool the container cannot have is absent. */
     } kind;   /**< R_SETUP: setup_<component>. */
     char msg[1536];
 } res_t;
@@ -1042,6 +1044,8 @@ t_report_begin(void)
             t_report_ready = false;                                         \
         }                                                                   \
         cleanup_all();                                                      \
+        if ((_r)->kind == R_SKIP)                                           \
+            TEST_SKIP("%s", (_r)->msg);                                     \
         if ((_r)->kind == R_PASS)                                           \
         {                                                                   \
             RING_VERDICT("%s", (_r)->msg);                                  \
@@ -1068,8 +1072,8 @@ svc_start_t(res_t *r, const char *id, int idx)
     if (p != NULL)
         return p;
     snprintf(detail, sizeof(detail), "%.890s", r->msg);
-    res_set(r, R_SETUP, "%s INCONCLUSIVE: service did not start: %s (%s)", id,
-            names[idx], detail);
+    res_set(r, R_SETUP, "%s not started: %s did not start, settles nothing "
+            "(%s)", id, names[idx], detail);
     return NULL;
 }
 
@@ -1173,6 +1177,205 @@ first_error_lines(const char *err_path, const char *out_path, int max,
         }
     }
     return n;
+}
+
+/**
+ * Put the command, its exit code and the first LOG_LINES lines of its
+ * output (stdout, then stderr) in the test log.
+ */
+static void
+log_command(const char *label, const char *cmd, proc_t *p)
+{
+    char        code[48];
+    const char *paths[2] = { p->out, p->err };
+    char        text[LOG_LINES * 200 + 64] = "";
+    int         n = 0;
+    int         f;
+
+    exit_code_str(p, code, sizeof(code));
+    for (f = 0; f < 2; f++)
+    {
+        FILE *fp = fopen(paths[f], "r");
+        char  line[400];
+
+        if (fp == NULL)
+            continue;
+        while (n < LOG_LINES && fgets(line, sizeof(line), fp) != NULL)
+        {
+            size_t len = strlen(line);
+
+            while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
+                line[--len] = '\0';
+            append(text, sizeof(text), "\n%.190s", line);
+            n++;
+        }
+        fclose(fp);
+    }
+    RING("webdeps %s: command: %s\nexit code: %s\nfirst %d line(s) of "
+         "output:%s", label, cmd, code, n, text);
+}
+
+/** Number of lines of the two output files that contain @p word. */
+static unsigned
+count_lines_with(proc_t *p, const char *word)
+{
+    const char *paths[2] = { p->out, p->err };
+    unsigned    n = 0;
+    int         f;
+
+    for (f = 0; f < 2; f++)
+    {
+        FILE *fp = fopen(paths[f], "r");
+        char  line[1024];
+
+        if (fp == NULL)
+            continue;
+        while (fgets(line, sizeof(line), fp) != NULL)
+        {
+            if (strcasestr(line, word) != NULL)
+                n++;
+        }
+        fclose(fp);
+    }
+    return n;
+}
+
+/**
+ * Read the lines @p lines of the source file @p rel (under the example root)
+ * and check every address in them with tapi_egress against the allowed
+ * list: loopback on the ports of the contract, which is what the tests
+ * start. One finding per line; an address outside the list, or a host name
+ * that is not localhost, is a finding of HIGH severity naming the
+ * destination. Settles nothing by itself. Returns how many lines had a
+ * destination outside the list.
+ */
+static unsigned
+endpoint_scan(const char *rel, const unsigned *lines, size_t n_lines)
+{
+    tapi_egress_rule    rules[2 * NAMES];
+    tapi_egress_policy  policy = { .n_rules = 2 * NAMES, .rules = rules,
+                                   .allow_loopback = false,
+                                   .allow_private = false };
+    char                path[600];
+    char                text[512];
+    unsigned            outside = 0;
+    size_t              k;
+    int                 i;
+
+    for (i = 0; i < NAMES; i++)
+    {
+        rules[2 * i] = (tapi_egress_rule){ IPPROTO_TCP, "127.0.0.0/8",
+                                           tab_port[i], tab_port[i] };
+        rules[2 * i + 1] = (tapi_egress_rule){ IPPROTO_TCP, "::1/128",
+                                               tab_port[i], tab_port[i] };
+    }
+    snprintf(path, sizeof(path), "%s/%s", src_root, rel);
+    for (k = 0; k < n_lines; k++)
+    {
+        FILE       *f = fopen(path, "r");
+        unsigned    ln = 0;
+        bool        got = false;
+        char        where[700];
+        char       *p;
+
+        snprintf(where, sizeof(where), "%s:%u", rel, lines[k]);
+        text[0] = '\0';
+        while (f != NULL && fgets(text, sizeof(text), f) != NULL)
+        {
+            if (++ln == lines[k])
+            {
+                got = true;
+                break;
+            }
+        }
+        if (f != NULL)
+            fclose(f);
+        if (!got)
+        {
+            T_FINDING(TAPI_CYBERSEC_SEV_LOW, "endpoint.hardcoded", where,
+                      "line cannot be read from %s", path);
+            continue;
+        }
+        text[strcspn(text, "\r\n")] = '\0';
+        for (p = text; *p == ' ' || *p == '\t'; p++)
+            ;
+        RING("webdeps endpoint %s: %s", where, p);
+
+        {
+            char       *q;
+            bool        any = false;
+            bool        bad = false;
+            char        seen[300] = "";
+
+            /* Dotted quads, and the host of a URL that is a name. */
+            for (q = text; *q != '\0'; q++)
+            {
+                unsigned a, b, c, d;
+                int      used = 0;
+                char     host[128];
+                struct sockaddr_in sa = { .sin_family = AF_INET };
+                unsigned port = 0;
+                bool     ok = false;
+                int      j;
+
+                if (strncmp(q, "://", 3) == 0 &&
+                    sscanf(q + 3, "%127[A-Za-z0-9.-]", host) == 1 &&
+                    sscanf(host, "%u.%u.%u.%u", &a, &b, &c, &d) != 4)
+                {
+                    any = true;
+                    if (strcmp(host, "localhost") != 0)
+                    {
+                        bad = true;
+                        append(seen, sizeof(seen), "%s ", host);
+                    }
+                    continue;
+                }
+                if (!(q == text || !(q[-1] >= '0' && q[-1] <= '9')) ||
+                    sscanf(q, "%u.%u.%u.%u%n", &a, &b, &c, &d, &used) != 4)
+                    continue;
+                snprintf(host, sizeof(host), "%u.%u.%u.%u", a, b, c, d);
+                inet_pton(AF_INET, host, &sa.sin_addr);
+                if (q[used] == ':' && q[used + 1] >= '0' && q[used + 1] <= '9')
+                    port = (unsigned)strtoul(q + used + 1, NULL, 10);
+                any = true;
+                if (port != 0)
+                {
+                    sa.sin_port = htons(port);
+                    ok = tapi_egress_policy_allows(&policy, IPPROTO_TCP,
+                                                   CONST_SA(&sa));
+                }
+                else
+                {
+                    /* The port is a variable: the contract ports are what
+                     * the tests start. */
+                    for (j = 0; j < NAMES && !ok; j++)
+                    {
+                        sa.sin_port = htons(tab_port[j]);
+                        ok = tapi_egress_policy_allows(&policy, IPPROTO_TCP,
+                                                       CONST_SA(&sa));
+                    }
+                }
+                if (!ok)
+                    bad = true;
+                append(seen, sizeof(seen), "%s%s%.0u%s ", host,
+                       port != 0 ? ":" : "", port,
+                       ok ? "(allowed)" : "(OUTSIDE)");
+                q += used - 1;
+            }
+            if (bad)
+                outside++;
+            if (!any)
+                T_FINDING(TAPI_CYBERSEC_SEV_INFO, "endpoint.hardcoded", where,
+                          "no literal address on the line: %s", p);
+            else
+                T_FINDING(bad ? TAPI_CYBERSEC_SEV_HIGH :
+                          TAPI_CYBERSEC_SEV_INFO, "endpoint.hardcoded", where,
+                          "%s destination(s) %s; allowed list is loopback on "
+                          "the contract ports; line: %s",
+                          bad ? "UNEXPECTED" : "expected", seen, p);
+        }
+    }
+    return outside;
 }
 
 #endif /* MDE_WEBDEPS_LIB_H */

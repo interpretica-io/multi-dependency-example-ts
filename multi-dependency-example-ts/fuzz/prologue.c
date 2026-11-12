@@ -3,7 +3,9 @@
  *
  * Fuzz group prologue: can the agent's clang build a libFuzzer + ASan
  * target, which clang it is, and how many regression seeds earlier runs
- * left. Never skips - the tests re-check and skip on their own.
+ * left. Installs clang and its fuzzer runtime when they are missing. When
+ * that fails, the reason is logged and recorded, and ring_abi and replay
+ * SKIP naming this prologue instead of failing.
  *
  * Copyright (C) 2026 Maxim Menshikov
  *
@@ -39,8 +41,10 @@ main(int argc, char **argv)
     CHECK_RC(tsapi_mde_session_init(&session, "fuzz_prologue"));
     session_up = true;
 
+    tsapi_mde_prologue_clear("fuzz");
+
     TEST_STEP("Install what the group needs on the agent and check it");
-    TSAPI_MDE_ENSURE(session, "fuzz");
+    TSAPI_MDE_ENSURE_GATED(session, "fuzz", "fuzz");
 
     TEST_STEP("Record the clang the group would build with");
     clang = tsapi_mde_have(&session, "clang");
@@ -67,7 +71,12 @@ main(int argc, char **argv)
         t_probe = tsapi_mde_now() - t0;
     }
     TEST_ARTIFACT("libFuzzer + ASan: %s", supported ? "supported" :
-                  "not supported, ring_abi and replay will skip");
+                  "not supported");
+    if (!supported)
+        TSAPI_MDE_PROLOGUE_FAIL("fuzz", "clang cannot build with "
+                                "-fsanitize=fuzzer,address after the "
+                                "install (clang %s)", clang ? "present" :
+                                "absent");
     tsapi_mde_mi_point("fuzz/prologue", "libFuzzer + ASan supported (1/0)",
                        TE_MI_MEAS_UNITLESS_VALUE, "supported",
                        supported ? 1 : 0, TE_MI_MEAS_MULTIPLIER_PLAIN);

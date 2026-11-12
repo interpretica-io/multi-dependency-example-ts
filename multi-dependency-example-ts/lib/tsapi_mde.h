@@ -15,8 +15,10 @@
 #define __TSAPI_MDE_H__
 
 #include "te_config.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include "te_compiler.h"
 #include "te_defs.h"
 #include "te_errno.h"
@@ -283,6 +285,143 @@ extern void tsapi_mde_dut_free(tsapi_mde_dut *dut);
              ens_.out.ptr != NULL ? ens_.out.ptr : "ready");              \
         tsapi_mde_sh_result_free(&ens_);                                  \
     } while (0)
+
+/**
+ * @name Prologue gate
+ *
+ * A group whose prologue cannot install what it needs records the reason in
+ * a marker file shared by the processes the Tester starts (it is named
+ * after the Tester's pid and the group), and the prologue ends. Every test
+ * of the group starts with TSAPI_MDE_PROLOGUE_GATE(), which turns the
+ * marker into a SKIP that names the prologue and the reason, instead of a
+ * failure of tests that never had a chance to run.
+ * @{
+ */
+
+/** Marker file of a group's prologue failure. */
+static inline void
+tsapi_mde_prologue_marker(const char *group, char *path, size_t size)
+{
+    snprintf(path, size, "/tmp/mde-prologue-%ld-%s.failed",
+             (long)getppid(), group);
+}
+
+/** Remove the marker of an earlier run of the prologue. */
+static inline void
+tsapi_mde_prologue_clear(const char *group)
+{
+    char path[128];
+
+    tsapi_mde_prologue_marker(group, path, sizeof(path));
+    unlink(path);
+}
+
+/** Record why the prologue of @p group failed. */
+static inline void
+tsapi_mde_prologue_mark(const char *group, const char *reason)
+{
+    char  path[128];
+    FILE *f;
+
+    tsapi_mde_prologue_marker(group, path, sizeof(path));
+    f = fopen(path, "w");
+    if (f == NULL)
+        return;
+    fprintf(f, "%s\n", reason);
+    fclose(f);
+}
+
+/** The reason the prologue of @p group failed; false if it did not. */
+static inline bool
+tsapi_mde_prologue_failure(const char *group, char *reason, size_t size)
+{
+    char   path[128];
+    FILE  *f;
+    size_t n;
+
+    tsapi_mde_prologue_marker(group, path, sizeof(path));
+    f = fopen(path, "r");
+    if (f == NULL)
+        return false;
+    n = fread(reason, 1, size - 1, f);
+    fclose(f);
+    reason[n] = '\0';
+    reason[strcspn(reason, "\n")] = '\0';
+    return true;
+}
+
+/** Start of every test of a group with a gated prologue. */
+#define TSAPI_MDE_PROLOGUE_GATE(_group) \
+    do {                                                                  \
+        char why_[900];                                                   \
+                                                                          \
+        if (tsapi_mde_prologue_failure((_group), why_, sizeof(why_)))     \
+            TEST_SKIP("SKIP: %s/prologue failed, the test cannot run: %s", \
+                      (_group), why_);                                    \
+    } while (0)
+
+/**
+ * Prologue step of a gated group: log the reason and record it for the
+ * tests of the group when something fails, then end the prologue. The
+ * reason is an ERROR in the log; the tests skip, they do not fail.
+ */
+#define TSAPI_MDE_PROLOGUE_FAIL(_group, ...) \
+    do {                                                                  \
+        char msg_[900];                                                   \
+                                                                          \
+        snprintf(msg_, sizeof(msg_), __VA_ARGS__);                        \
+        ERROR("%s/prologue failed: %s", (_group), msg_);                  \
+        tsapi_mde_prologue_mark((_group), msg_);                          \
+        TEST_SUCCESS;                                                     \
+    } while (0)
+
+/**
+ * Like TSAPI_MDE_ENSURE() for a gated group: when the install or its
+ * check fails, the reason goes to the log and to the marker, and the
+ * prologue ends (the tests of the group then skip).
+ *
+ * @param _session      Open session.
+ * @param _components   Components of scripts/ensure-web-deps.sh.
+ * @param _group        Group name.
+ */
+#define TSAPI_MDE_ENSURE_GATED(_session, _components, _group) \
+    do {                                                                  \
+        tsapi_mde_sh_result ens_ = TSAPI_MDE_SH_RESULT_INIT;              \
+        const char *top_ = getenv("TS_TOPDIR");                           \
+        const char *src_ = tsapi_mde_src();                               \
+        te_errno    erc_ = 0;                                             \
+        bool        ok_ = false;                                          \
+                                                                          \
+        if (top_ != NULL && top_[0] != '\0' && src_ != NULL)              \
+        {                                                                 \
+            erc_ = tsapi_mde_sh(&(_session), 3000000, &ens_,              \
+                                "'%s/scripts/ensure-web-deps.sh' '%s' %s", \
+                                top_, src_, (_components));               \
+            ok_ = erc_ == 0 && tsapi_mde_sh_ok(&ens_);                    \
+        }                                                                 \
+        if (!ok_)                                                         \
+        {                                                                 \
+            const char *e_ = ens_.err.ptr != NULL ? ens_.err.ptr : "";    \
+            size_t      el_ = strlen(e_);                                 \
+                                                                          \
+            ERROR("install of '%s' failed (rc %r): stdout: %s; "          \
+                  "stderr: %s", (_components), erc_,                      \
+                  ens_.out.ptr != NULL ? ens_.out.ptr : "(none)",         \
+                  el_ > 0 ? e_ : "(no output)");                          \
+            TSAPI_MDE_PROLOGUE_FAIL((_group), "cannot install what %s "   \
+                  "needs on the agent (rc %d): %s", (_components),        \
+                  (int)erc_,                                              \
+                  top_ == NULL || src_ == NULL ?                          \
+                  "TS_TOPDIR or TE_TS_MDE_SRC is not set" :               \
+                  el_ == 0 ? "the install script did not run" :           \
+                  e_ + (el_ > 600 ? el_ - 600 : 0));                      \
+        }                                                                 \
+        RING("ensure-web-deps %s: %s", (_components),                     \
+             ens_.out.ptr != NULL ? ens_.out.ptr : "ready");              \
+        tsapi_mde_sh_result_free(&ens_);                                  \
+    } while (0)
+
+/** @} */
 
 #ifdef __cplusplus
 } /* extern "C" */

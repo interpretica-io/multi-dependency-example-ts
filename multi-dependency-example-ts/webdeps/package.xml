@@ -3,22 +3,22 @@
     <description>Web dependency tests</description>
 
     <!-- @page mde-webdeps Web Dependency Tests
-          @objective Settle hypotheses H1 to H5 about gateway-rs, service-go,
-                     service-cs and the built binaries, and show one working
-                     example per language.
+          @objective Settle hypotheses H1 to H4 about gateway-rs, service-go,
+                     service-cs and the six language builds, and show one
+                     working example per language.
 
           @par Notes:
-          - t5_rust_panic, t6_go_idle, t7_build_all, t8_cs_swallow and
-            t9_go_contract settle H1, H2, H3, H4 and H5 (t7_build_all must run
-            before t4_binscan, the binary scan kept from the earlier round,
-            which scans what it built); t5_egress is the egress check kept
-            from round 2, EG1. They are standalone
-            plain TCP/HTTP clients. Each fills one tapi_cybersec_report and
-            ends with a verdict that starts with its hypothesis id: H<n> PASS
-            or H<n> FAIL with the status code, time or address it measured.
-            A service that does not start or a binary that is not built is
-            not a pass and is not skipped: the verdict reads "H<n>
-            INCONCLUSIVE: ..." with the reason.
+          - t11_rust_panic, t12_go_idle, t13_cs_swallow and the six
+            t10_build_* tests settle H1, H2, H3 and H4; each verdict names
+            its id (H<n> CONFIRMED, H<n> DISPROVED, H<n> PASS or H<n> FAIL
+            with what was measured). t4_binscan scans what the t10 tests
+            built and answers the earlier V1 only. t9_go_contract (H5) and
+            t5_egress (EG1) are kept from earlier rounds. A service that
+            does not start fails with "H<n> not started" and settles
+            nothing; a tool the agent lacks after the prologue is a SKIP
+            naming the tool.
+          - Every command, its exit code and the first 40 lines of its
+            output are in the test log.
           - s_rust, s_go, s_cs, s_cpp and s_c are smoke tests, one per
             language of the web tier and the ring; they settle no
             hypothesis and just run the built artifact once with a
@@ -38,33 +38,63 @@
             </script>
         </prologue>
 
-        <run name="t7_build_all">
-            <script name="t7_build_all">
-                <objective>[H3] One subtest per language (Rust, Go, C#, C++, C, Python): build with its own tool (cargo, go, dotnet, g++, gcc, python3), log the exit code and the first 20 error lines of each build, then run the built demo and check exit code 0 and non-empty output. One verdict line per language under H3, including the cppcore.cpp and pycore.c parse errors; FAIL when any language fails.</objective>
+        <run name="t10_build_rust">
+            <script name="t10_build_rust">
+                <objective>[H4] Build rustcore, rust-demo and gateway-rs with cargo; print the compiler path and version first; run rust-demo once and check exit code 0 and the "rust-demo: result =" line. FAIL with the compiler text on a build failure; SKIP naming the tool when cargo or rustc is absent. Adds the warning count and the hardcoded endpoints of main.rs:33, :34 and :36 (tapi_egress, allowed list = the addresses the tests start) to the report; those settle nothing.</objective>
+            </script>
+        </run>
+
+        <run name="t10_build_go">
+            <script name="t10_build_go">
+                <objective>[H4] Build libgocore and service-go with go build; print the compiler path and version first; start service-go, ask it once, check exit code 0 and "value=". FAIL with the compiler text on a build failure; SKIP naming the tool when go is absent. Adds the warning count and the hardcoded endpoints of main.go:46, :51 and :87 to the report.</objective>
+            </script>
+        </run>
+
+        <run name="t10_build_cs">
+            <script name="t10_build_cs">
+                <objective>[H4] Build cscore and service-cs with dotnet; print the compiler path and version first; start service-cs, ask it once, check exit code 0 and "value=". FAIL with the compiler text on a build failure; SKIP naming the tool when dotnet is absent. Adds the warning count and the hardcoded endpoints of Program.cs:24, :34 and :78 to the report.</objective>
+            </script>
+        </run>
+
+        <run name="t10_build_cpp">
+            <script name="t10_build_cpp">
+                <objective>[H4] Build cppcore.cpp and demo.cpp with g++ (not tcc); print the compiler path and version first; run cpp-demo once and check exit code 0 and "result =". Build cppcore.cpp alone with -fsyntax-only and report whether the 'Parsing failed' report is a real syntax error or a tool gap. FAIL with the compiler text on a build failure; SKIP naming the tool when g++ is absent. Adds the warning count to the report.</objective>
+            </script>
+        </run>
+
+        <run name="t10_build_c">
+            <script name="t10_build_c">
+                <objective>[H4] Build pycore.c with gcc (not tcc) and a C driver; print the compiler path and version first; run the driver once and check exit code 0 and "py_weight() =". Build pycore.c alone with -fsyntax-only and report whether the 'Parsing failed' report is a real syntax error or a tool gap. FAIL with the compiler text on a build failure; SKIP naming the tool when gcc or python3-config is absent. Adds the warning count to the report.</objective>
+            </script>
+        </run>
+
+        <run name="t10_build_python">
+            <script name="t10_build_python">
+                <objective>[H4] Byte-compile the Python files with python3; print the interpreter path and version first; run demo.py once and check exit code 0 and "py-demo: result =". FAIL with the error text on a build failure; SKIP naming the tool when python3 is absent. Adds the warning count to the report.</objective>
             </script>
         </run>
 
         <run name="t4_binscan">
             <script name="t4_binscan">
-                <objective>[BIN] After t7_build_all, run tapi_binscan on each built binary, print its path, add each missing flag (NX, PIE, RELRO, canary, fortify) to the tapi_cybersec_report. FAIL on any missing flag or binary that cannot be scanned. Kept from the earlier round; settles no H hypothesis.</objective>
+                <objective>[V1] After the t10_build_* tests, run tapi_binscan on each built binary and print its output, on success too; add each missing flag (NX, PIE, RELRO, canary, fortify) to the tapi_cybersec_report. FAIL naming the binary on any missing flag or binary that cannot be scanned. Verdict for the earlier suspicion V1 only; settles no H hypothesis.</objective>
             </script>
         </run>
 
-        <run name="t5_rust_panic">
-            <script name="t5_rust_panic">
-                <objective>[H1] Start gateway-rs and send an empty body, an oversized header, an oversized request line and a truncated request line (main.rs:30 and main.rs:34); after each check the process is alive and a new request is answered. FAIL with the exit code and the stderr tail if it exits or panics; PASS if it survives; INCONCLUSIVE if it does not start.</objective>
+        <run name="t11_rust_panic">
+            <script name="t11_rust_panic">
+                <objective>[H1] Start gateway-rs, check that a valid request gets 200, send input aimed at main.rs:30 and at main.rs:34 (including a second instance on the same port); after each read the exit status and send a valid request again. H1 CONFIRMED (FAIL) if the process exits or the second request fails; H1 DISPROVED (PASS) if it stays up and answers; "not started" and nothing settled if the gateway does not start.</objective>
             </script>
         </run>
 
-        <run name="t6_go_idle">
-            <script name="t6_go_idle">
-                <objective>[H2] Start service-go, open 50 idle TCP connections, wait 30 s. FAIL if all 50 stay open and a normal request is then refused or takes over 5 s; PASS if the service closes idle sockets (or still serves in time); INCONCLUSIVE if it does not start.</objective>
+        <run name="t12_go_idle">
+            <script name="t12_go_idle">
+                <objective>[H2] Start service-go, open 50 idle TCP connections, wait 10 s, send a valid request with a 2 s timeout and check whether the idle connections are still open; close the sockets at the end. H2 CONFIRMED (FAIL) if they stay open; H2 DISPROVED (PASS) if the service closed them; "not started" and nothing settled if service-go does not start.</objective>
             </script>
         </run>
 
-        <run name="t8_cs_swallow">
-            <script name="t8_cs_swallow">
-                <objective>[H4] Send service-cs a bad payload and a request with an unreachable backend (Program.cs:85). FAIL if the status is 2xx while the body shows an error or the work did not happen; PASS if every one gets 4xx or 5xx.</objective>
+        <run name="t13_cs_swallow">
+            <script name="t13_cs_swallow">
+                <objective>[H3] Start service-cs, check that a valid request gets 200, send input that makes the handler throw near Program.cs:85 and compare the status and body with the contract (an error is a 4xx/5xx with an error body). H3 CONFIRMED (FAIL) on a 2xx with an empty or success body; H3 DISPROVED (PASS) on a 4xx/5xx with an error body; "not started" and nothing settled if service-cs does not start.</objective>
             </script>
         </run>
 
