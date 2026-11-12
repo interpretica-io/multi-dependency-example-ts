@@ -9,14 +9,14 @@
 # Usage: ensure-web-deps.sh <example root> [component...]
 # Components: base (toolchains and inspection tools, the default), build (the
 # example itself), exposure (tcpdump, sudo, frida), fuzz (clang with the
-# fuzzer runtime), browser (node, playwright, chromium), all.
+# fuzzer runtime), docker (the docker CLI and a daemon that answers), browser (node, playwright, chromium), all.
 # Exit status 0 when everything is in place; otherwise 1 and a line starting
 # with "ensure-web-deps:" says what went wrong.
 
 ROOT="$1"
 shift
 COMPONENTS="${*:-base build}"
-case " ${COMPONENTS} " in *" all "*) COMPONENTS="base build exposure fuzz browser" ;; esac
+case " ${COMPONENTS} " in *" all "*) COMPONENTS="base build exposure fuzz browser docker" ;; esac
 want() { case " ${COMPONENTS} " in *" $1 "*) return 0 ;; esac; return 1; }
 
 die() { echo "ensure-web-deps: $*" >&2; exit 1; }
@@ -166,6 +166,28 @@ if want browser ; then
     fi
     ls "${PW}/browsers"/chromium* >/dev/null 2>&1 ||
         die "no chromium under ${PW}/browsers after the install"
+fi
+
+if want docker ; then
+    if ! command -v docker >/dev/null 2>&1 ; then
+        echo "ensure-web-deps: installing docker.io"
+        apt_update
+        ${SUDO} apt-get install -y docker.io >&2 || die "apt-get install docker.io failed"
+    fi
+    command -v docker >/dev/null 2>&1 || die "docker is still missing after the install"
+    if ! docker info >/dev/null 2>&1 ; then
+        echo "ensure-web-deps: docker does not answer, starting dockerd"
+        ${SUDO} service docker start >&2 2>&1 || true
+        if ! docker info >/dev/null 2>&1 ; then
+            ( ${SUDO} nohup dockerd >/tmp/mde-dockerd.log 2>&1 & )
+            for _ in $(seq 1 30) ; do
+                docker info >/dev/null 2>&1 && break
+                sleep 1
+            done
+        fi
+    fi
+    docker info >/dev/null 2>&1 ||
+        die "docker is installed but its daemon does not answer: $(docker info 2>&1 | tail -n 3 | tr '\n' ' ') dockerd log: $(tail -n 5 /tmp/mde-dockerd.log 2>/dev/null | tr '\n' ' ')"
 fi
 
 want build || { echo "ensure-web-deps: ${COMPONENTS} ready"; exit 0; }

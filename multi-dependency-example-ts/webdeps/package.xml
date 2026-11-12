@@ -3,14 +3,16 @@
     <description>Web dependency tests</description>
 
     <!-- @page mde-webdeps Web Dependency Tests
-          @objective Settle hypotheses H1 to H4 about gateway-rs, service-go,
+          @objective Settle hypotheses H1 to H5 about gateway-rs, service-go,
                      service-cs and the built binaries, and show one working
                      example per language.
 
           @par Notes:
-          - t1_gateway_bad_request .. t4_binscan settle H1 to H4 (t3_language_builds
-            must run before t4_binscan, which scans what it built); t5_egress
-            is the egress check kept from round 2, EG1. They are standalone
+          - t5_rust_panic, t6_go_idle, t7_build_all, t8_cs_swallow and
+            t9_go_contract settle H1, H2, H3, H4 and H5 (t7_build_all must run
+            before t4_binscan, the binary scan kept from the earlier round,
+            which scans what it built); t5_egress is the egress check kept
+            from round 2, EG1. They are standalone
             plain TCP/HTTP clients. Each fills one tapi_cybersec_report and
             ends with a verdict that starts with its hypothesis id: H<n> PASS
             or H<n> FAIL with the status code, time or address it measured.
@@ -36,27 +38,39 @@
             </script>
         </prologue>
 
-        <run name="t1_gateway_bad_request">
-            <script name="t1_gateway_bad_request">
-                <objective>[H1] Start gateway-rs, send a malformed request for the main.rs:30 branch and one for the main.rs:34 branch; after each record the exit code and whether a second valid request is answered. FAIL if the process exits or aborts; INCONCLUSIVE with its stderr if it does not start.</objective>
-            </script>
-        </run>
-
-        <run name="t2_slow_connections">
-            <script name="t2_slow_connections">
-                <objective>[H2] Start service-go, open 50 TCP connections, send nothing, wait 60 s and record how many are still open. FAIL if none was closed or if a valid request on a new connection times out; INCONCLUSIVE if it does not start.</objective>
-            </script>
-        </run>
-
-        <run name="t3_language_builds">
-            <script name="t3_language_builds">
-                <objective>[H3] Build each example with its own tool: cargo build for rust/core, rust/demo and gateway-rs, go build for go and service-go, dotnet build for csharp and service-cs, the C++ and C compilers for cppcore.cpp and pycore.c. One pass or fail line each, with the compiler error text on a fail; FAIL on any build error.</objective>
+        <run name="t7_build_all">
+            <script name="t7_build_all">
+                <objective>[H3] One subtest per language (Rust, Go, C#, C++, C, Python): build with its own tool (cargo, go, dotnet, g++, gcc, python3), log the exit code and the first 20 error lines of each build, then run the built demo and check exit code 0 and non-empty output. One verdict line per language under H3, including the cppcore.cpp and pycore.c parse errors; FAIL when any language fails.</objective>
             </script>
         </run>
 
         <run name="t4_binscan">
             <script name="t4_binscan">
-                <objective>[H4] After T3, run tapi_binscan on each built binary, add each missing flag (NX, PIE, RELRO, canary, fortify) to the tapi_cybersec_report and log every binary by name. FAIL on any missing flag.</objective>
+                <objective>[BIN] After t7_build_all, run tapi_binscan on each built binary, print its path, add each missing flag (NX, PIE, RELRO, canary, fortify) to the tapi_cybersec_report. FAIL on any missing flag or binary that cannot be scanned. Kept from the earlier round; settles no H hypothesis.</objective>
+            </script>
+        </run>
+
+        <run name="t5_rust_panic">
+            <script name="t5_rust_panic">
+                <objective>[H1] Start gateway-rs and send an empty body, an oversized header, an oversized request line and a truncated request line (main.rs:30 and main.rs:34); after each check the process is alive and a new request is answered. FAIL with the exit code and the stderr tail if it exits or panics; PASS if it survives; INCONCLUSIVE if it does not start.</objective>
+            </script>
+        </run>
+
+        <run name="t6_go_idle">
+            <script name="t6_go_idle">
+                <objective>[H2] Start service-go, open 50 idle TCP connections, wait 30 s. FAIL if all 50 stay open and a normal request is then refused or takes over 5 s; PASS if the service closes idle sockets (or still serves in time); INCONCLUSIVE if it does not start.</objective>
+            </script>
+        </run>
+
+        <run name="t8_cs_swallow">
+            <script name="t8_cs_swallow">
+                <objective>[H4] Send service-cs a bad payload and a request with an unreachable backend (Program.cs:85). FAIL if the status is 2xx while the body shows an error or the work did not happen; PASS if every one gets 4xx or 5xx.</objective>
+            </script>
+        </run>
+
+        <run name="t9_go_contract">
+            <script name="t9_go_contract">
+                <objective>[H5] Send service-go requests that break the rule at contract.go:33: a missing field, a negative value and a wrong type. FAIL if any gets a 2xx; PASS if each gets a 4xx.</objective>
             </script>
         </run>
 

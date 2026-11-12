@@ -1123,11 +1123,15 @@
             <objective/>
             <notes/>
           </test>
-          <test name="t1_gateway_bad_request" type="script">
+          <test name="t5_rust_panic" type="script">
             <objective/>
             <notes/>
           </test>
-          <test name="t2_slow_connections" type="script">
+          <test name="t6_go_idle" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="t7_build_all" type="script">
             <objective/>
             <notes/>
           </test>
@@ -1135,11 +1139,15 @@
             <objective/>
             <notes/>
           </test>
-          <test name="t3_language_builds" type="script">
+          <test name="t4_binscan" type="script">
             <objective/>
             <notes/>
           </test>
-          <test name="t4_binscan" type="script">
+          <test name="t8_cs_swallow" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="t9_go_contract" type="script">
             <objective/>
             <notes/>
           </test>

@@ -9,7 +9,7 @@
           @par Test Groups:
           - @ref mde-ring - the native FFI ring (C++/Rust/Go/C#/Python), checked step by step against a model
           - @ref mde-web - the HTTP web tier (gateway-rs/service-go/service-cs)
-          - @ref mde-webdeps - hypotheses H1-H4 about gateway-rs, service-go, the language builds and the built binaries, plus a smoke test per language
+          - @ref mde-webdeps - hypotheses H1-H5 about gateway-rs, service-go, service-cs and the language builds, the built binaries, plus a smoke test per language
           - @ref mde-graph - the build-time linkage that makes the cycle possible
           - @ref mde-package - runtime dependencies of the example mapped to packages (tsf-package)
           - @ref mde-devtool - rebuilding parts of the example on the agent (tsf-devtool)
@@ -84,7 +84,7 @@
         </run>
 
         <!-- @page mde-webdeps Web Dependency Tests
-              @objective Hypotheses H1-H4 about the web services, plus a
+              @objective Hypotheses H1-H5 about the web services, plus a
                          security check and one smoke test per language.
         -->
         <run>

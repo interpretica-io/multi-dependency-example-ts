@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief Webdeps: T4, hardening flags of the built binaries (settles H4)
+ * @brief Webdeps: T4, hardening flags of the built binaries (kept from the earlier round; no hypothesis)
  *
- * After T3, run tapi_binscan on every binary T3 built in H3_OUT: the Rust
+ * After t7_build_all, run tapi_binscan on every binary t7_build_all built in H3_OUT: the Rust
  * core library, the Rust demo, gateway-rs, the Go library, service-go,
  * service-cs and the C++ and C libraries. Each missing flag (NX, PIE,
  * RELRO, canary, fortify) is added to the tapi_cybersec_report as its own
@@ -52,7 +52,7 @@ scan_one(tsapi_mde_session *session, const char *rel, char *missing,
     snprintf(path, sizeof(path), "%s", rel);
     if (access(path, R_OK) != 0)
     {
-        snprintf(why, why_size, "%s was not built by T3", rel);
+        snprintf(why, why_size, "%s was not built by t7_build_all", rel);
         return false;
     }
     rc = tapi_binscan_inspect(session->ta, path, &info);
@@ -158,20 +158,20 @@ main(int argc, char **argv)
     }
 
     if (n_bad > 0)
-        res_set(&res, R_FAIL, "H4 FAIL: %u of %zu binaries lack hardening "
+        res_set(&res, R_FAIL, "BIN FAIL: %u of %zu binaries lack hardening "
                 "flags: %s%s%s", n_bad, TE_ARRAY_LEN(scan_paths), bad,
                 n_absent > 0 ? "not scanned: " : "", absent);
     else if (n_absent > 0)
-        res_set(&res, R_FAIL, "H4 FAIL: no scanned binary lacks a flag but "
+        res_set(&res, R_FAIL, "BIN FAIL: no scanned binary lacks a flag but "
                 "%u of %zu could not be scanned: %s", n_absent,
                 TE_ARRAY_LEN(scan_paths), absent);
     else
-        res_set(&res, R_PASS, "H4 PASS: all %zu binaries have NX, PIE, full "
+        res_set(&res, R_PASS, "BIN PASS: all %zu binaries have NX, PIE, full "
                 "RELRO, a stack canary and fortify", TE_ARRAY_LEN(scan_paths));
 
 verdict:
     tsapi_mde_session_fini(&session);
-    T_VERDICT(&res, "H4");
+    T_VERDICT(&res, "BIN");
 
 cleanup:
     cleanup_all();

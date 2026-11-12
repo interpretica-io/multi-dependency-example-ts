@@ -24,10 +24,10 @@
 
     <session track_conf="silent">
         <!-- @page mde-container-prologue Container Group Prologue
-              @objective Check that Docker answers and record its version.
+              @objective Install Docker if missing, check that it answers and record its version.
 
               @par Scenario:
-              -# Skip the group when no container runtime answers.
+              -# Install Docker when missing; fail when its daemon does not answer.
               -# Record client/server versions and security options.
         -->
         <prologue>

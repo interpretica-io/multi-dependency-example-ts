@@ -5,11 +5,13 @@
 # example.
 tests = [
     'prologue',
-    't1_gateway_bad_request',
-    't2_slow_connections',
-    't3_language_builds',
+    't5_rust_panic',
+    't6_go_idle',
+    't7_build_all',
     't4_binscan',
     't5_egress',
+    't8_cs_swallow',
+    't9_go_contract',
     's_rust',
     's_go',
     's_cs',

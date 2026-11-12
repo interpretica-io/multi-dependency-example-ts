@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -1126,6 +1127,52 @@ body_flat(const hg_res *h, char *out, size_t size)
         if (out[i] == '\n' || out[i] == '\r')
             out[i] = '|';
     }
+}
+
+/**
+ * First @p max error lines of the command output kept in two files (the
+ * process's stderr, then stdout): the lines that mention "error", else the
+ * first lines of whatever was printed. Lines are joined with '|'.
+ *
+ * @return number of lines collected.
+ */
+static int
+first_error_lines(const char *err_path, const char *out_path, int max,
+                  char *buf, size_t size)
+{
+    const char *paths[2] = { err_path, out_path };
+    int         n = 0;
+    int         pass;
+    int         f;
+
+    buf[0] = '\0';
+    for (pass = 0; pass < 2 && n == 0; pass++)
+    {
+        for (f = 0; f < 2 && n < max; f++)
+        {
+            FILE *fp = fopen(paths[f], "r");
+            char  line[400];
+
+            if (fp == NULL)
+                continue;
+            while (n < max && fgets(line, sizeof(line), fp) != NULL)
+            {
+                size_t len = strlen(line);
+
+                while (len > 0 && (line[len - 1] == '\n' ||
+                                   line[len - 1] == '\r'))
+                    line[--len] = '\0';
+                if (len == 0)
+                    continue;
+                if (pass == 0 && strcasestr(line, "error") == NULL)
+                    continue;
+                append(buf, size, "%s%s", n > 0 ? "|" : "", line);
+                n++;
+            }
+            fclose(fp);
+        }
+    }
+    return n;
 }
 
 #endif /* MDE_WEBDEPS_LIB_H */
