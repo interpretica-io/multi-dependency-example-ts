@@ -28,13 +28,12 @@
 
     <author mailto="midair@localhost" />
 
-    <prologue>
-        <script name="prologue">
-            <objective>Install the toolchains the example needs, check them and build the example when it is not built.</objective>
-        </script>
-    </prologue>
-
     <session track_conf="silent">
+        <prologue>
+            <script name="prologue">
+                <objective>Install the toolchains the example needs, check them and build the example when it is not built.</objective>
+            </script>
+        </prologue>
 
         <run name="t1_gateway_bad_request">
             <script name="t1_gateway_bad_request">
