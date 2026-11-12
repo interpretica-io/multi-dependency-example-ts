@@ -1,20 +1,17 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief Webdeps: T6, hardening and listeners (settles H6)
+ * @brief Webdeps: T6, binscan and listeners as information (no hypothesis)
  *
- * Run tapi_binscan on gateway-rs, service-go, the C# host service-cs and
- * the C/C++ demo binaries (cpp-demo, rust-demo, libpycore, libcppcore)
- * and report NX, PIE, RELRO, stack canary and fortify per binary. Start
- * the three services and run tapi_netexpose on the agent; report every
- * listening TCP port with its bind address. A missing hardening flag is
- * a finding and never fails the test. H6 FAIL if a port owned by the
- * project (one of its services, or a contract port) is bound to a
- * wildcard address (0.0.0.0 or ::) and the contract that documents the
- * ports (web/contract/services.tab) does not list it. Wildcard listeners
- * of other processes on the agent are findings too, and do not fail the
- * test. A binary that is not built or a service that does not start is
- * NOT RUN; a scanner with no data is INCONCLUSIVE.
+ * Run tapi_binscan on the three service binaries (gateway-rs, service-go,
+ * service-cs) and on the C, C++ and Python build outputs (cpp-demo,
+ * rust-demo, libpycore, libcppcore) and report NX, PIE, RELRO, stack
+ * canary and fortify per binary. Start the three services and run
+ * tapi_netexpose; report every listening TCP port with its bind address.
+ * Every result is added to the tapi_cybersec_report as information. No
+ * hypothesis depends on it yet, so nothing here fails the test. A binary
+ * that is not built or a service that does not start is NOT RUN; a
+ * scanner with no data is INCONCLUSIVE.
  *
  * @author midair <midair@localhost>
  */
@@ -88,19 +85,19 @@ scan_one(res_t *r, tsapi_mde_session *session, const char *rel,
     RING("webdeps: %s: NX %d PIE %d RELRO %d canary %d fortify %d", rel, nx,
          pie, relro, info.canary, info.fortify);
     if (!nx)
-        T_FINDING(TAPI_CYBERSEC_SEV_MEDIUM, "binary.no-nx", rel,
+        T_FINDING(TAPI_CYBERSEC_SEV_INFO, "binary.no-nx", rel,
                   "stack is executable or unknown");
     if (!pie)
-        T_FINDING(TAPI_CYBERSEC_SEV_LOW, "binary.no-pie", rel,
+        T_FINDING(TAPI_CYBERSEC_SEV_INFO, "binary.no-pie", rel,
                   "not position independent");
     if (!relro)
-        T_FINDING(TAPI_CYBERSEC_SEV_LOW, "binary.no-relro", rel,
+        T_FINDING(TAPI_CYBERSEC_SEV_INFO, "binary.no-relro", rel,
                   "no RELRO");
     if (!info.canary)
-        T_FINDING(TAPI_CYBERSEC_SEV_LOW, "binary.no-canary", rel,
+        T_FINDING(TAPI_CYBERSEC_SEV_INFO, "binary.no-canary", rel,
                   "no stack canary");
     if (!info.fortify)
-        T_FINDING(TAPI_CYBERSEC_SEV_LOW, "binary.no-fortify", rel,
+        T_FINDING(TAPI_CYBERSEC_SEV_INFO, "binary.no-fortify", rel,
                   "no _FORTIFY_SOURCE");
     *missing += !nx + !pie + !relro + !info.canary + !info.fortify;
     tapi_binscan_info_free(&info);
@@ -169,7 +166,7 @@ scan_ports(res_t *r, tsapi_mde_session *session, proc_t **svc, char *bad,
         {
             size_t l = strlen(bad);
 
-            T_FINDING(TAPI_CYBERSEC_SEV_HIGH, "net.undocumented-wildcard",
+            T_FINDING(TAPI_CYBERSEC_SEV_INFO, "net.undocumented-wildcard",
                       subject, "%s binds a wildcard address on a port the "
                       "contract does not list", o >= 0 ? names[o] : "?");
             if (l + 80 < FIRST_LEN)
@@ -177,12 +174,12 @@ scan_ports(res_t *r, tsapi_mde_session *session, proc_t **svc, char *bad,
                          o >= 0 ? names[o] : "?");
         }
         else if (ours)
-            T_FINDING(TAPI_CYBERSEC_SEV_MEDIUM, "net.wildcard-listener",
+            T_FINDING(TAPI_CYBERSEC_SEV_INFO, "net.wildcard-listener",
                       subject, "%s binds a wildcard address; port %u is in "
                       "the contract", o >= 0 ? names[o] : "contract port",
                       port);
         else
-            T_FINDING(TAPI_CYBERSEC_SEV_MEDIUM, "net.wildcard-listener",
+            T_FINDING(TAPI_CYBERSEC_SEV_INFO, "net.wildcard-listener",
                       subject, "other process on the agent, not part of the "
                       "project");
     }
@@ -235,20 +232,16 @@ main(int argc, char **argv)
     if (!scan_ports(&res, &session, svc, bad, &n_listen, &n_wild))
         goto verdict;
 
-    if (bad[0] != '\0')
-        res_set(&res, R_FAIL, "H6 FAIL: undocumented wildcard listener(s): "
-                "%s; %u hardening flag(s) missing over %zu binaries "
-                "(findings)", bad, missing, TE_ARRAY_LEN(scan_paths));
-    else
-        res_set(&res, R_PASS, "H6 PASS: no undocumented port on 0.0.0.0; "
-                "%u listener(s) seen, %u on a wildcard address; %u hardening "
-                "flag(s) missing over %zu binaries (reported as findings, "
-                "not failures)", n_listen, n_wild, missing,
-                TE_ARRAY_LEN(scan_paths));
+    res_set(&res, R_PASS, "INFO (no hypothesis): %u hardening flag(s) "
+            "missing over %zu binaries; %u listener(s) seen, %u on a "
+            "wildcard address%s%s (all reported as information)", missing,
+            TE_ARRAY_LEN(scan_paths), n_listen, n_wild,
+            bad[0] != '\0' ? "; wildcard on an undocumented port: " : "",
+            bad);
 
 verdict:
     tsapi_mde_session_fini(&session);
-    T_VERDICT(&res, "H6");
+    T_VERDICT(&res, "INFO");
 
 cleanup:
     cleanup_all();

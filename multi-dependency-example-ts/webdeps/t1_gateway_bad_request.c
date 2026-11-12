@@ -10,6 +10,13 @@
  * from /proc, so a restart is seen even when a supervisor brings it back
  * under the same pid.
  *
+ * main.rs:30 (upstream missing from the contract) and main.rs:34 (bind
+ * failure) panic only while main() starts, before any request is read, and
+ * the request path has no panic! of its own. So the test records whether
+ * a "panicked" line reached stderr and which of the two lines it named;
+ * a request that did not reach them is recorded, never counted as a pass
+ * for that code path.
+ *
  * H1 FAIL if the process exits or restarts, or a valid request gets no
  * answer; H1 PASS if it answers every time. Every step is a finding in
  * the tapi_cybersec_report. A gateway-rs that does not start is NOT RUN.
@@ -97,6 +104,7 @@ main(int argc, char **argv)
     char               seen[900] = "";
     char              *big = NULL;
     size_t             i;
+    bool               reached;
 
     TEST_START;
 
@@ -137,9 +145,22 @@ main(int argc, char **argv)
             goto verdict;
     }
 
+    reached = file_has(gw->err, "main.rs:30") ||
+              file_has(gw->err, "main.rs:34");
+    if (reached)
+        T_FINDING(TAPI_CYBERSEC_SEV_HIGH, "gateway.panic-site", "gateway-rs",
+                  "stderr names main.rs:30 or main.rs:34");
+    else
+        T_FINDING(TAPI_CYBERSEC_SEV_INFO, "gateway.panic-site", "gateway-rs",
+                  "no request reached main.rs:30 or main.rs:34; those "
+                  "panics are start-up only, the code path is not tested "
+                  "by this pass");
     res_set(&res, R_PASS, "H1 PASS: gateway-rs (pid %d) stayed the same "
             "process and answered the valid request after each of %zu bad "
-            "inputs; %s", (int)gw->pid, TE_ARRAY_LEN(inputs), seen);
+            "inputs; %s; %s", (int)gw->pid, TE_ARRAY_LEN(inputs), seen,
+            reached ? "stderr names main.rs:30/34" :
+            "no request reached main.rs:30 or main.rs:34 (not a pass for "
+            "that code path)");
 
 verdict:
     T_VERDICT(&res, "H1");

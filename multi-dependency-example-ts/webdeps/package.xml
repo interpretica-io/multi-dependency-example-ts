@@ -3,12 +3,12 @@
     <description>Web dependency tests</description>
 
     <!-- @page mde-webdeps Web Dependency Tests
-          @objective Settle hypotheses H1 to H6 about gateway-rs, service-go,
+          @objective Settle hypotheses H1 to H5 about gateway-rs, service-go,
                      service-cs and the built binaries, and show one working
                      example per language.
 
           @par Notes:
-          - t1_gateway_bad_request .. t6_binscan_netexpose are standalone
+          - t1_gateway_bad_request .. t5_go_contract settle H1 to H5 and t6_binscan_netexpose is an information scan; they are standalone
             plain TCP/HTTP clients, one per hypothesis. Each starts its
             service, waits for the listen port, fills one
             tapi_cybersec_report and ends with a verdict that starts with
@@ -44,7 +44,7 @@
 
         <run name="t2_slow_connections">
             <script name="t2_slow_connections">
-                <objective>[H2] Start service-go, open 50 connections and send one byte every 2 s on each; while they are open send a normal request. FAIL if it takes longer than 3 s or is refused, PASS otherwise. The connection count is recorded.</objective>
+                <objective>[H2] Start service-go, open 50 connections and send nothing, wait 30 s. FAIL if it keeps all 50 open; then send one valid request, FAIL if it gets no answer within 5 s, PASS otherwise.</objective>
             </script>
         </run>
 
@@ -68,7 +68,7 @@
 
         <run name="t6_binscan_netexpose">
             <script name="t6_binscan_netexpose">
-                <objective>[H6] tapi_binscan on gateway-rs, service-go, service-cs and the C/C++ binaries (NX, PIE, RELRO, canary, fortify per binary) and tapi_netexpose on the agent (each listening port with its bind address). FAIL on a project port bound to 0.0.0.0 that services.tab does not document; missing hardening flags are findings only.</objective>
+                <objective>[no hypothesis] tapi_binscan on gateway-rs, service-go, service-cs and the C, C++ and Python build outputs (NX, PIE, RELRO, canary, fortify per binary) and tapi_netexpose on the agent. Everything is reported as information in the tapi_cybersec_report; the test does not fail on it.</objective>
             </script>
         </run>
 

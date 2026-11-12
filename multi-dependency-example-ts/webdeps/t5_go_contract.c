@@ -3,6 +3,15 @@
 /** @file
  * @brief Webdeps: T5, the contract of service-go (settles H5)
  *
+ * Code read first: contract.go:33 opens services.tab and findService()
+ * at contract.go:73 returns the first row whose name matches, so the
+ * table is only about service names and ports; the contract of a request
+ * is the one /ring states, and main.go floatParam()/intParam() fall back
+ * to the default (value=1.0, hops=6) on text that does not parse and
+ * apply no range, so a bad value is answered as if it were the default.
+ * The inputs below are therefore a missing field, a non-number, a
+ * negative and a huge hop count and an overflowing value.
+ *
  * A plain TCP/HTTP client. The contract of /ring is: value is a number
  * and hops is an integer in 0..64, both present. Start service-go, send
  * one message that follows it as a control, then messages that break it:
