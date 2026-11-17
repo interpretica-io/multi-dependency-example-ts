@@ -19,17 +19,42 @@ are fixed.
 
 @section mde_groups Groups
 
-- @ref mde-ring  - run cpp-demo / rust-demo / the Python demo and count the
-                   stages a value actually travels through.
-- @ref mde-web   - start the three HTTP services and walk the web cycle with a
-                   single request.
-- @ref mde-graph - check that the libraries are linked into the cycle the way
-                   the build intends (no running code involved).
+- @ref mde-ring     - run cpp-demo / rust-demo / the Python demo and check every
+                      stage line against a model of the five formulas.
+- @ref mde-web      - start the three HTTP services and walk the web cycle:
+                      cycle, latency, contract, robustness.
+- @ref mde-webdeps  - hypotheses H1-H5 about gateway-rs, service-go and
+                      service-cs, the per-language builds, the built binaries
+                      and one smoke test per language.
+- @ref mde-graph    - check that the libraries are linked into the cycle the
+                      way the build intends (no running code involved).
+- @ref mde-package  - runtime dependencies mapped to packages (tsf-package).
+- @ref mde-devtool  - rebuild parts of the example on the agent (tsf-devtool).
+- @ref mde-fs       - permissions, secrets and integrity of the tree (tsf-fs).
+- @ref mde-memmap   - ELF images and live mappings (tsf-memorymap).
+- @ref mde-binary   - hardening of every binary (tsf-cybersec).
+- @ref mde-exposure - listeners, reachability, egress, traffic (tsf-cybersec).
+- @ref mde-http     - each service as an HTTP server (tsf-http).
+- @ref mde-container - the ring inside other images (tsf-container).
+- @ref mde-fuzz     - the ring's C ABI under a fuzzer (tsf-fuzz).
+- @ref mde-browser  - the web tier in a real browser (tsf-playwright).
+
+@section mde_verdicts Reading the results
+
+Each test fills one finding report. Where the test settles a hypothesis, the
+verdict starts with its id and says CONFIRMED, DISPROVED, PASS or FAIL with
+what was measured. A service that does not start fails with "not started" and
+settles nothing. A SKIP names the tool, hardware or kernel feature that is
+missing. Known failures are listed in @c conf/known-issues.json and recorded in
+@c conf/trc.xml.
 
 @section mde_running Running
 
-The suite drives an already-built example. Point @c TE_TS_MDE_SRC at its
-checkout (a sibling by default) and build it first with its own @c ./build.sh.
-When the example is missing or unbuilt, every test skips rather than fails.
+Run @c scripts/run.sh. It builds a native private copy of the example for the
+agent's host (see @c scripts/build-dut.sh), unless @c TE_TS_MDE_BUILD=0.
+@c TE_TS_MDE_SRC points the suite at another example tree. Group prologues
+install the tools their tests need on the agent and fail with the cause when
+an install does not work. Reports are written to @c reports/ (start with
+@c index.html); @c TE_TS_MDE_REPORTS=0 skips them.
 
 */

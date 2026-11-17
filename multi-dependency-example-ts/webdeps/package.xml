@@ -7,6 +7,25 @@
                      service-cs and the six language builds, and show one
                      working example per language.
 
+          @par Test Groups:
+          - @ref mde-webdeps-t10_build_rust - Build with cargo (H4)
+          - @ref mde-webdeps-t10_build_go - Build with go (H4)
+          - @ref mde-webdeps-t10_build_cs - Build with dotnet (H4)
+          - @ref mde-webdeps-t10_build_cpp - Build with g++ (H4)
+          - @ref mde-webdeps-t10_build_c - Build with gcc (H4)
+          - @ref mde-webdeps-t10_build_python - Byte-compile with python3 (H4)
+          - @ref mde-webdeps-t4_binscan - Binary Scan of the Built Binaries (V1)
+          - @ref mde-webdeps-t11_rust_panic - Bad Input to gateway-rs (H1)
+          - @ref mde-webdeps-t12_go_idle - Idle Connections to service-go (H2)
+          - @ref mde-webdeps-t13_cs_swallow - Swallowed Errors in service-cs (H3)
+          - @ref mde-webdeps-t9_go_contract - Contract Violations to service-go (H5)
+          - @ref mde-webdeps-t5_egress - Egress of the Web Tier (EG1)
+          - @ref mde-webdeps-s_rust - Smoke: gateway-rs
+          - @ref mde-webdeps-s_go - Smoke: service-go
+          - @ref mde-webdeps-s_cs - Smoke: service-cs
+          - @ref mde-webdeps-s_cpp - Smoke: cpp-demo
+          - @ref mde-webdeps-s_c - Smoke: libpycore
+
           @par Notes:
           - t11_rust_panic, t12_go_idle, t13_cs_swallow and the six
             t10_build_* tests settle H1, H2, H3 and H4; each verdict names
@@ -26,114 +45,261 @@
 
           @par Scenario:
           -# Install the toolchains on the agent, check they are there and
-             build the example if it is not built.
+             build the example if it is not built (group prologue).
+          -# Run the tests; each fills one tapi_cybersec_report.
     -->
 
     <author mailto="midair@localhost" />
 
     <session track_conf="silent">
+        <!-- @page mde-webdeps-prologue Web Dependency Group Prologue
+              @objective Make the toolchains and the built example available.
+
+              @par Scenario:
+              -# Open a session on the agent.
+              -# Install the Go, Rust, .NET, C/C++ and Python toolchains and
+                 the socket and binary tools that are missing.
+              -# Build the example if it is not built; fail with the cause
+                 when an install or the build fails.
+        -->
         <prologue>
             <script name="prologue">
                 <objective>Install the toolchains the example needs, check them and build the example when it is not built.</objective>
             </script>
         </prologue>
 
+        <!-- @page mde-webdeps-t10_build_rust Build with cargo (H4)
+              @objective Build the Rust projects with cargo and run the result.
+
+              @par Scenario:
+              -# Print the path and version of cargo and rustc.
+              -# Build rustcore, rust-demo and gateway-rs.
+              -# Run rust-demo once; check exit code 0 and the "rust-demo: result =" line.
+              -# Add the warning count and the hardcoded endpoints to the report.
+        -->
         <run name="t10_build_rust">
             <script name="t10_build_rust">
                 <objective>[H4] Build rustcore, rust-demo and gateway-rs with cargo; print the compiler path and version first; run rust-demo once and check exit code 0 and the "rust-demo: result =" line. FAIL with the compiler text on a build failure; SKIP naming the tool when cargo or rustc is absent. Adds the warning count and the hardcoded endpoints of main.rs:33, :34 and :36 (tapi_egress, allowed list = the addresses the tests start) to the report; those settle nothing.</objective>
             </script>
         </run>
 
+        <!-- @page mde-webdeps-t10_build_go Build with go (H4)
+              @objective Build the Go projects with go build and run the result.
+
+              @par Scenario:
+              -# Print the path and version of go.
+              -# Build libgocore and service-go.
+              -# Start service-go, ask it once; check exit code 0 and "value=".
+              -# Add the warning count and the hardcoded endpoints to the report.
+        -->
         <run name="t10_build_go">
             <script name="t10_build_go">
                 <objective>[H4] Build libgocore and service-go with go build; print the compiler path and version first; start service-go, ask it once, check exit code 0 and "value=". FAIL with the compiler text on a build failure; SKIP naming the tool when go is absent. Adds the warning count and the hardcoded endpoints of main.go:46, :51 and :87 to the report.</objective>
             </script>
         </run>
 
+        <!-- @page mde-webdeps-t10_build_cs Build with dotnet (H4)
+              @objective Build the C# projects with dotnet and run the result.
+
+              @par Scenario:
+              -# Print the path and version of dotnet.
+              -# Build cscore and service-cs.
+              -# Start service-cs, ask it once; check exit code 0 and "value=".
+              -# Add the warning count and the hardcoded endpoints to the report.
+        -->
         <run name="t10_build_cs">
             <script name="t10_build_cs">
                 <objective>[H4] Build cscore and service-cs with dotnet; print the compiler path and version first; start service-cs, ask it once, check exit code 0 and "value=". FAIL with the compiler text on a build failure; SKIP naming the tool when dotnet is absent. Adds the warning count and the hardcoded endpoints of Program.cs:24, :34 and :78 to the report.</objective>
             </script>
         </run>
 
+        <!-- @page mde-webdeps-t10_build_cpp Build with g++ (H4)
+              @objective Build the C++ project with g++ and run the result.
+
+              @par Scenario:
+              -# Print the path and version of g++.
+              -# Build cppcore.cpp and demo.cpp; run cpp-demo once.
+              -# Build cppcore.cpp alone with -fsyntax-only and report whether the "Parsing failed" message is a real syntax error or a tool gap.
+              -# Add the warning count to the report.
+        -->
         <run name="t10_build_cpp">
             <script name="t10_build_cpp">
                 <objective>[H4] Build cppcore.cpp and demo.cpp with g++ (not tcc); print the compiler path and version first; run cpp-demo once and check exit code 0 and "result =". Build cppcore.cpp alone with -fsyntax-only and report whether the 'Parsing failed' report is a real syntax error or a tool gap. FAIL with the compiler text on a build failure; SKIP naming the tool when g++ is absent. Adds the warning count to the report.</objective>
             </script>
         </run>
 
+        <!-- @page mde-webdeps-t10_build_c Build with gcc (H4)
+              @objective Build the C extension with gcc and run a C driver.
+
+              @par Scenario:
+              -# Print the path and version of gcc.
+              -# Build pycore.c and a driver; run it once and check "py_weight() =".
+              -# Build pycore.c alone with -fsyntax-only and report whether the "Parsing failed" message is a real syntax error or a tool gap.
+              -# Add the warning count to the report.
+        -->
         <run name="t10_build_c">
             <script name="t10_build_c">
                 <objective>[H4] Build pycore.c with gcc (not tcc) and a C driver; print the compiler path and version first; run the driver once and check exit code 0 and "py_weight() =". Build pycore.c alone with -fsyntax-only and report whether the 'Parsing failed' report is a real syntax error or a tool gap. FAIL with the compiler text on a build failure; SKIP naming the tool when gcc or python3-config is absent. Adds the warning count to the report.</objective>
             </script>
         </run>
 
+        <!-- @page mde-webdeps-t10_build_python Byte-compile with python3 (H4)
+              @objective Byte-compile the Python files and run the demo.
+
+              @par Scenario:
+              -# Print the path and version of python3.
+              -# Byte-compile the Python files.
+              -# Run demo.py once; check exit code 0 and "py-demo: result =".
+              -# Add the warning count to the report.
+        -->
         <run name="t10_build_python">
             <script name="t10_build_python">
                 <objective>[H4] Byte-compile the Python files with python3; print the interpreter path and version first; run demo.py once and check exit code 0 and "py-demo: result =". FAIL with the error text on a build failure; SKIP naming the tool when python3 is absent. Adds the warning count to the report.</objective>
             </script>
         </run>
 
+        <!-- @page mde-webdeps-t4_binscan Binary Scan of the Built Binaries (V1)
+              @objective Scan what the t10_build_* tests built.
+
+              @par Scenario:
+              -# Run tapi_binscan on every built binary and print its output, on success too.
+              -# Add each missing flag (NX, PIE, RELRO, canary, fortify) to the report.
+              -# Fail naming the binary on a missing flag or a binary that cannot be scanned.
+        -->
         <run name="t4_binscan">
             <script name="t4_binscan">
                 <objective>[V1] After the t10_build_* tests, run tapi_binscan on each built binary and print its output, on success too; add each missing flag (NX, PIE, RELRO, canary, fortify) to the tapi_cybersec_report. FAIL naming the binary on any missing flag or binary that cannot be scanned. Verdict for the earlier suspicion V1 only; settles no H hypothesis.</objective>
             </script>
         </run>
 
+        <!-- @page mde-webdeps-t11_rust_panic Bad Input to gateway-rs (H1)
+              @objective Check whether client input can make gateway-rs panic.
+
+              @par Scenario:
+              -# Start gateway-rs; a valid request must get 200.
+              -# Send input aimed at the panic! of main.rs:30 (other service, not HTTP, no query) and of main.rs:34 (oversized line, oversized header, second instance on the same port).
+              -# After each input read the exit status and send a valid request again.
+        -->
         <run name="t11_rust_panic">
             <script name="t11_rust_panic">
                 <objective>[H1] Start gateway-rs, check that a valid request gets 200, send input aimed at main.rs:30 and at main.rs:34 (including a second instance on the same port); after each read the exit status and send a valid request again. H1 CONFIRMED (FAIL) if the process exits or the second request fails; H1 DISPROVED (PASS) if it stays up and answers; "not started" and nothing settled if the gateway does not start.</objective>
             </script>
         </run>
 
+        <!-- @page mde-webdeps-t12_go_idle Idle Connections to service-go (H2)
+              @objective Check whether service-go closes idle connections.
+
+              @par Scenario:
+              -# Start service-go and open 50 idle TCP connections.
+              -# Wait 10 s, send a valid request with a 2 s timeout.
+              -# Check whether the idle connections are still open, then close them.
+        -->
         <run name="t12_go_idle">
             <script name="t12_go_idle">
                 <objective>[H2] Start service-go, open 50 idle TCP connections, wait 10 s, send a valid request with a 2 s timeout and check whether the idle connections are still open; close the sockets at the end. H2 CONFIRMED (FAIL) if they stay open; H2 DISPROVED (PASS) if the service closed them; "not started" and nothing settled if service-go does not start.</objective>
             </script>
         </run>
 
+        <!-- @page mde-webdeps-t13_cs_swallow Swallowed Errors in service-cs (H3)
+              @objective Check whether service-cs reports a handler failure to the client.
+
+              @par Scenario:
+              -# Start service-cs; a valid request must get 200.
+              -# Send input that makes the handler throw near Program.cs:85.
+              -# Compare the status and body with the contract: an error is a 4xx/5xx with an error body.
+        -->
         <run name="t13_cs_swallow">
             <script name="t13_cs_swallow">
                 <objective>[H3] Start service-cs, check that a valid request gets 200, send input that makes the handler throw near Program.cs:85 and compare the status and body with the contract (an error is a 4xx/5xx with an error body). H3 CONFIRMED (FAIL) on a 2xx with an empty or success body; H3 DISPROVED (PASS) on a 4xx/5xx with an error body; "not started" and nothing settled if service-cs does not start.</objective>
             </script>
         </run>
 
+        <!-- @page mde-webdeps-t9_go_contract Contract Violations to service-go (H5)
+              @objective Check that service-go enforces the rule at contract.go:33.
+
+              @par Scenario:
+              -# Send a missing field, a negative value and a wrong type.
+              -# Each must get a 4xx; any 2xx fails the test.
+        -->
         <run name="t9_go_contract">
             <script name="t9_go_contract">
                 <objective>[H5] Send service-go requests that break the rule at contract.go:33: a missing field, a negative value and a wrong type. FAIL if any gets a 2xx; PASS if each gets a 4xx.</objective>
             </script>
         </run>
 
+        <!-- @page mde-webdeps-t5_egress Egress of the Web Tier (EG1)
+              @objective Check which addresses the web tier talks to.
+
+              @par Scenario:
+              -# Start gateway-rs, service-go and service-cs and send each a valid request.
+              -# Run tapi_egress with an allowed list of localhost and the contract ports.
+              -# Fail naming each address outside the list.
+        -->
         <run name="t5_egress">
             <script name="t5_egress">
                 <objective>[EG1] Start gateway-rs, service-go and service-cs, send each a valid request, run tapi_egress with an allowed list of localhost and the contract ports. Every result goes in the tapi_cybersec_report; FAIL names each address outside the list; INCONCLUSIVE with the reason when tapi_egress is unavailable. Kept from round 2; settles no H hypothesis.</objective>
             </script>
         </run>
 
+        <!-- @page mde-webdeps-s_rust Smoke: gateway-rs
+              @objective Start gateway-rs and send one valid request.
+
+              @par Scenario:
+              -# Start gateway-rs.
+              -# Send one valid request; expect 2xx with "value=" and a live process.
+        -->
         <run name="s_rust">
             <script name="s_rust">
                 <objective>[smoke] Start gateway-rs and send one valid request. Checks that the process is still running (no exit code) and that the response is 2xx with a body carrying "value=". Settles no hypothesis.</objective>
             </script>
         </run>
 
+        <!-- @page mde-webdeps-s_go Smoke: service-go
+              @objective Start service-go and send one valid request.
+
+              @par Scenario:
+              -# Start service-go.
+              -# Send one valid request; expect 2xx with "value=" and a live process.
+        -->
         <run name="s_go">
             <script name="s_go">
                 <objective>[smoke] Start service-go and send one valid request. Checks that the process is still running (no exit code) and that the response is 2xx with a body carrying "value=". Settles no hypothesis.</objective>
             </script>
         </run>
 
+        <!-- @page mde-webdeps-s_cs Smoke: service-cs
+              @objective Start service-cs and send one valid request.
+
+              @par Scenario:
+              -# Start service-cs.
+              -# Send one valid request; expect 2xx with "value=" and a live process.
+        -->
         <run name="s_cs">
             <script name="s_cs">
                 <objective>[smoke] Start service-cs and send one valid request. Checks that the process is still running (no exit code) and that the response is 2xx with a body carrying "value=". Settles no hypothesis.</objective>
             </script>
         </run>
 
+        <!-- @page mde-webdeps-s_cpp Smoke: cpp-demo
+              @objective Run cpp-demo once.
+
+              @par Scenario:
+              -# Run dist/bin/cpp-demo with value=1 hops=1.
+              -# Expect exit code 0 and "result =" in the output.
+        -->
         <run name="s_cpp">
             <script name="s_cpp">
                 <objective>[smoke] Run dist/bin/cpp-demo once with value=1 hops=1. Checks the exit code is 0 and the output carries "result =". Settles no hypothesis.</objective>
             </script>
         </run>
 
+        <!-- @page mde-webdeps-s_c Smoke: libpycore
+              @objective Call the C extension once.
+
+              @par Scenario:
+              -# dlopen dist/lib/libpycore.so in a child process and call py_weight().
+              -# Expect exit code 0 and a finite value.
+        -->
         <run name="s_c">
             <script name="s_c">
                 <objective>[smoke] dlopen dist/lib/libpycore.so (the C extension) and call its leaf C-ABI function py_weight() once in a child process. Checks the child's exit code is 0 and the value it printed is a finite number. Settles no hypothesis.</objective>

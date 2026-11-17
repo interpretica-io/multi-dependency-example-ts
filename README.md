@@ -39,7 +39,7 @@ for **maximum evidence**:
 |---|---|---|
 | `ring` | suite model (`lib/tsapi_mde_ring`) | `propagation` (72 it.), `reference`, `sweep`, `determinism`, `entry_matrix`: every stage line checked against a reference model of the five formulas |
 | `web` | suite (`lib/tsapi_mde_web`) | `cycle`, `latency`, `contract`, `robustness` |
-| `webdeps` | tsf-cybersec (netexpose, egress, binscan) | `prologue` (installs the Go, Rust, .NET, C/C++ and Python toolchains on the agent, checks them and builds the example when it is not built), `t10_build_rust/go/cs/cpp/c/python` (H4: one language each, built with its own tool, demo run once, warning count and hardcoded endpoints in the report), `t11_rust_panic` (H1), `t12_go_idle` (H2), `t13_cs_swallow` (H3), `t4_binscan` (V1, scans what the t10 tests built, output printed on success too), `t9_go_contract` (H5) and `t5_egress` (EG1), kept from earlier rounds: standalone plain TCP/HTTP clients on `webdeps_lib.h`, each filling one `tapi_cybersec_report`; the verdict starts with the hypothesis id and says CONFIRMED, DISPROVED, PASS or FAIL with what was measured; a service that does not start fails with `not started` and settles nothing; a missing tool is a SKIP naming it; plus `s_rust`, `s_go`, `s_cs`, `s_cpp`, `s_c`: one smoke test per language, settling no hypothesis |
+| `webdeps` | tsf-cybersec (netexpose, egress, binscan) | `prologue` (installs the Go, Rust, .NET, C/C++ and Python toolchains on the agent, checks them and builds the example when it is not built), `t10_build_rust/go/cs/cpp/c/python` (H4: one language each, built with its own tool, demo run once, warning count and hardcoded endpoints in the report), `t11_rust_panic` (H1), `t12_go_idle` (H2), `t13_cs_swallow` (H3), `t4_binscan` (V1, scans what the t10 tests built, output printed on success too), `t9_go_contract` (H5) and `t5_egress` (EG1), described on the group page in `package.xml`, kept from earlier rounds: standalone plain TCP/HTTP clients on `webdeps_lib.h`, each filling one `tapi_cybersec_report`; the verdict starts with the hypothesis id and says CONFIRMED, DISPROVED, PASS or FAIL with what was measured; a service that does not start fails with `not started` and settles nothing; a missing tool is a SKIP naming it; plus `s_rust`, `s_go`, `s_cs`, `s_cpp`, `s_c`: one smoke test per language, settling no hypothesis |
 | `graph` | binutils | `links`, `symbols`, `cycle_closure` (DOT graph artifact) |
 | `binary` | tsf-cybersec (binscan, objdump) | `hardening`, `hardening_matrix`, `disasm_defect`, `linked_libs` |
 | `devtool` | tsf-devtool | `rebuild_pycore`, `make_stub`, `reproducible` |
@@ -52,9 +52,10 @@ for **maximum evidence**:
 | `container` | tsf-container | `ring_inside` (the ring walked inside images it was not built for) |
 | `browser` | tsf-playwright | `walk_page` (screenshot, HAR, trace), `canary`, `network_shape`, `pw_project` |
 
-The `exposure/sniff`, `exposure/frida`, `browser` and `container` tests need
-prerequisites that the current agent lacks; they stay skipped and no
-hypothesis is read from them.
+The `exposure/sniff`, `exposure/frida`, `browser` and `container` group
+prologues ask the shared installer for what their tests need (e.g. Docker, Playwright with
+Chromium) and fail with the cause if an install does not work.
+Only what a container cannot have stays a skip.
 
 What the container cannot do (capture on loopback, Frida) leads to a `SKIP`
 with a concrete reason, never a failure.
@@ -129,6 +130,14 @@ The entries fall into two kinds.
 
 **Environment.** The amd64 container runs under Rosetta on Apple silicon, and
 its code cache shows as W+X mappings in `memmap/proc`.
+
+## Documentation
+
+The Doxygen pages are written in the `package.xml` files: the suite page and
+group index in `multi-dependency-example-ts/package.xml`, and in each group a
+page for the group, its prologue and epilogue and every test (objective,
+parameters, scenario). `mainpage.dox` is the entry point. Per-test details,
+verdict wording included, live in the header comment of each test's C file.
 
 ## Layout
 
