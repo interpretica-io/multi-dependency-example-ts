@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief Webdeps: t10_build_c, the C example builds and runs with gcc (settles H4)
+ * @brief Webdeps: t10_build_c, the C example builds and runs with gcc (settles B1)
  *
  * Build pycore.c with gcc (not tcc) and a small C driver that loads it, run
  * the driver once and check exit code 0 and the "py_weight() =" line.
@@ -9,7 +9,7 @@
  * 'Parsing failed' report is a real syntax error or a gap of the tool
  * that made it.
  * The commands, their exit codes and the first 40 lines of their output are
- * in the test log; the verdict names H4.
+ * in the test log; the verdict names B1.
  *
  * @author midair <midair@localhost>
  */
@@ -51,7 +51,7 @@ main(int argc, char **argv)
                         "\"-DRING_PY_DIR=\\\"$PWD/python\\\"\" "
                         "python/src/pycore.c");
 
-    T_VERDICT(&res, "H4");
+    T_VERDICT(&res, "B1");
 
 cleanup:
     cleanup_all();

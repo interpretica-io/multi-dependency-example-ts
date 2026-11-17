@@ -17,6 +17,9 @@
  * that does not start, or that fails the first valid request, fails the
  * test with the reason "not started" and settles nothing.
  *
+ * The setting at main.rs:30-34 is also set to an unset and an invalid
+ * value, in builds of gateway-rs made from a copy of the table.
+ *
  * Both panic! calls sit in main() before the accept loop, so no client
  * input can reach them while the gateway is running; the verdict says so
  * when it disproves H1.
@@ -36,6 +39,7 @@
 
 enum {
     IN_OTHER_SVC, IN_NOT_HTTP, IN_EMPTY,        /* aimed at main.rs:30 */
+    IN_BAD_PATH,                                /* 404 path in the handler */
     IN_BIG_LINE, IN_BIG_HEADER, IN_BIND,        /* aimed at main.rs:34 */
     N_INPUTS
 };
@@ -47,6 +51,7 @@ static const struct {
     { "a request that names another service", 30 },
     { "bytes that are not HTTP", 30 },
     { "an empty body", 30 },
+    { "a bad path", 30 },
     { "an oversized request line", 34 },
     { "an oversized header", 34 },
     { "a second gateway-rs on the same port", 34 },
@@ -73,6 +78,8 @@ send_input(unsigned port, int which)
 {
     static const char other[] = "GET /service-go/ring?value=1&hops=1 "
                                 "HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+    static const char badpath[] = "GET /no/such/..%2f..%2fetc/passwd "
+                                  "HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
     static const char junk[] = "\x00\xff\xfe\x80\r\n\r\n\x01\x02";
     char    head[256];
     char   *big;
@@ -86,6 +93,10 @@ send_input(unsigned port, int which)
 
         case IN_NOT_HTTP:
             send_once(port, junk, sizeof(junk) - 1, true, 500);
+            break;
+
+        case IN_BAD_PATH:
+            send_once(port, badpath, sizeof(badpath) - 1, false, 500);
             break;
 
         case IN_EMPTY:
@@ -146,6 +157,76 @@ second_gateway(char *note, size_t size)
     snprintf(note, size, "second gateway-rs ended with exit code %s; "
              "stderr tail [%s]", code, tail);
     RING("webdeps H1: %s", note);
+}
+
+/**
+ * Variants of gateway-rs whose setting at main.rs:30 is unset (the upstream
+ * names no service of the contract) or invalid (a port that is not a
+ * number). The table is compiled in, so each variant is built from a copy of
+ * web/ with the table changed. Returns true when a variant stayed up.
+ */
+static bool
+bad_setting(res_t *r, char *note, size_t size)
+{
+    static const struct {
+        const char *name;
+        const char *sed;
+    } variants[] = {
+        { "unset upstream", "s/^\\(gateway-rs[ \\t]*[0-9]*[ \\t]*\\)[^ \\t]*/\\1nosuch/" },
+        { "invalid port", "s/^\\(gateway-rs[ \\t]*\\)[0-9]*/\\1notaport/" },
+    };
+    size_t  i;
+    bool    survived = false;
+
+    for (i = 0; i < TE_ARRAY_LEN(variants); i++)
+    {
+        char    cmd[1600];
+        char    code[48];
+        char    tail[300];
+        char    outtail[300];
+        proc_t *p;
+
+        TEST_STEP("Start gateway-rs with the setting at main.rs:30 as '%s'",
+                  variants[i].name);
+        snprintf(cmd, sizeof(cmd),
+                 "T=%s/bad-setting-%zu && rm -rf $T && mkdir -p $T/web && "
+                 "cp -r web/contract web/gateway-rs $T/web/ && "
+                 "ln -s '%s/dist' $T/dist && "
+                 "sed -i '%s' $T/web/contract/services.tab && "
+                 "CARGO_TARGET_DIR=$T/target cargo build --release --offline "
+                 "--manifest-path $T/web/gateway-rs/Cargo.toml >$T/build.log 2>&1 "
+                 "|| { tail -5 $T/build.log; echo build-failed; exit 0; }; "
+                 "LD_LIBRARY_PATH='%s/dist/lib' timeout 5 "
+                 "$T/target/release/gateway-rs; echo \"exit=$?\"",
+                 workdir, i, src_root, variants[i].sed, src_root);
+        p = run_sh(r, "gateway-rs-bad-setting", cmd, 240);
+        if (p == NULL)
+            return survived;
+        exit_code_str(p, code, sizeof(code));
+        file_tail(p->out, outtail, sizeof(outtail));
+        file_tail(p->err, tail, sizeof(tail));
+        RING("webdeps H1: gateway-rs with %s: shell exit %s; out [%s]; err "
+             "[%s]", variants[i].name, code, outtail, tail);
+        if (strstr(outtail, "build-failed") != NULL)
+        {
+            res_set(r, R_SETUP, "the '%s' variant of gateway-rs did not "
+                    "build: %s", variants[i].name, outtail);
+            return survived;
+        }
+        if (strstr(outtail, "exit=124") != NULL)
+        {
+            survived = true;
+            append(note, size, "%s: stayed up for 5 s; ", variants[i].name);
+        }
+        else
+        {
+            T_FINDING(TAPI_CYBERSEC_SEV_HIGH, "gateway.exited",
+                      variants[i].name, "out [%s] err [%s]", outtail, tail);
+            append(note, size, "%s: process ended, out [%s] err [%s]; ",
+                   variants[i].name, outtail, tail);
+        }
+    }
+    return survived;
 }
 
 int
@@ -227,6 +308,8 @@ main(int argc, char **argv)
                   note[0] != '\0' ? "; " : "", note);
         append(seen, sizeof(seen), "%s (main.rs:%u): alive, new request HTTP "
                "%d; ", in_info[i].name, in_info[i].line, h.status);
+        if (!port_accepts(gw->port))
+            h.how = HG_REFUSED;
         if (proc_gone(gw) || h.how != HG_OK || h.status != 200)
         {
             exit_code_str(gw, code, sizeof(code));
@@ -237,6 +320,22 @@ main(int argc, char **argv)
                     "main.rs:%u) the next valid request %s (HTTP %d); exit "
                     "status %s; stderr tail [%s]", in_info[i].name,
                     in_info[i].line, hg_str(h.how), h.status, code, tail);
+            goto verdict;
+        }
+    }
+
+    TEST_STEP("Start gateway-rs with its setting unset or invalid");
+    {
+        char bnote[1000] = "";
+
+        bad_setting(&res, bnote, sizeof(bnote));
+        if (res.kind == R_SETUP)
+            goto verdict;
+        if (strstr(bnote, "process ended") != NULL)
+        {
+            res_set(&res, R_FAIL, "H1 CONFIRMED: gateway-rs with the "
+                    "setting at main.rs:30 unset or invalid does not stay "
+                    "up (panic! at main.rs:30): %s", bnote);
             goto verdict;
         }
     }

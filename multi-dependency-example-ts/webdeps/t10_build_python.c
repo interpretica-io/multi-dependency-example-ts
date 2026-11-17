@@ -1,12 +1,12 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief Webdeps: t10_build_python, the Python example byte-compiles and runs (settles H4)
+ * @brief Webdeps: t10_build_python, the Python example byte-compiles and runs (settles B1)
  *
  * Byte-compile ring_stage.py and demo.py with python3, run demo.py once and
  * check exit code 0 and the "py-demo: result =" line.
  * The commands, their exit codes and the first 40 lines of their output are
- * in the test log; the verdict names H4.
+ * in the test log; the verdict names B1.
  *
  * @author midair <midair@localhost>
  */
@@ -36,7 +36,7 @@ main(int argc, char **argv)
 
     t10_run(&res, &lang);
 
-    T_VERDICT(&res, "H4");
+    T_VERDICT(&res, "B1");
 
 cleanup:
     cleanup_all();

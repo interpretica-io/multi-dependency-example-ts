@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief Webdeps t10_build_*: one language built with its own tool (H4)
+ * @brief Webdeps t10_build_*: one language built with its own tool (B1)
  *
  * Shared body of t10_build_rust, t10_build_go, t10_build_cs, t10_build_cpp,
  * t10_build_c and t10_build_python. A test builds one language with the
@@ -91,7 +91,7 @@ t10_tools(res_t *r, const t10_lang *l)
         log_command("tool", cmd, p);
         if (!WIFEXITED(p->status) || WEXITSTATUS(p->status) != 0)
         {
-            res_set(r, R_SKIP, "H4 SKIP: tool %s is not on the agent",
+            res_set(r, R_SKIP, "B1 SKIP: tool %s is not on the agent",
                     l->tools[i]);
             T_FINDING(TAPI_CYBERSEC_SEV_LOW, "build.tool-missing",
                       l->tools[i], "not found: build of %s skipped", l->id);
@@ -107,7 +107,7 @@ t10_tools(res_t *r, const t10_lang *l)
             p = run_sh(r, "tool-id", want, 60);
             if (p != NULL && count_lines_with(p, "tcc") > 0)
             {
-                res_set(r, R_FAIL, "H4 FAIL: %s on the agent is tcc, not "
+                res_set(r, R_FAIL, "B1 FAIL: %s on the agent is tcc, not "
                         "GNU %s", l->tools[i], l->tools[i]);
                 return false;
             }
@@ -131,7 +131,7 @@ t10_service_cmd(char *buf, size_t size, const char *bin, unsigned port)
 
 /**
  * Build one language, run its demo, report warnings and endpoints. Fills
- * @p r with the outcome; a message starts with "H4".
+ * @p r with the outcome; a message starts with "B1".
  */
 static void
 t10_run(res_t *r, const t10_lang *l)
@@ -161,7 +161,7 @@ t10_run(res_t *r, const t10_lang *l)
         p = run_sh(r, "build", s->cmd, BUILD_TO);
         if (p == NULL)
         {
-            res_set(r, R_FAIL, "H4 FAIL: %s: build of %s did not finish: %s",
+            res_set(r, R_FAIL, "B1 FAIL: %s: build of %s did not finish: %s",
                     l->id, s->name, r->msg);
             return;
         }
@@ -174,7 +174,7 @@ t10_run(res_t *r, const t10_lang *l)
                               sizeof(all_err));
             T_FINDING(TAPI_CYBERSEC_SEV_HIGH, "example.build", s->name,
                       "build failed, exit code %s: %s", code, all_err);
-            res_set(r, R_FAIL, "H4 FAIL: %s: build of %s (%s) failed, exit "
+            res_set(r, R_FAIL, "B1 FAIL: %s: build of %s (%s) failed, exit "
                     "code %s; compiler text: [%.900s]", l->id, s->name,
                     s->src, code, all_err);
             T_FINDING(TAPI_CYBERSEC_SEV_LOW, "build.warnings", l->id,
@@ -188,7 +188,7 @@ t10_run(res_t *r, const t10_lang *l)
     T_FINDING(warnings > 0 ? TAPI_CYBERSEC_SEV_LOW : TAPI_CYBERSEC_SEV_INFO,
               "build.warnings", l->id, "%u warning line(s) in the build "
               "logs of %s", warnings, l->id);
-    RING("webdeps H4 %s: %u warning line(s) in the build logs", l->id,
+    RING("webdeps B1 %s: %u warning line(s) in the build logs", l->id,
          warnings);
 
     if (l->ep != NULL)
@@ -198,7 +198,7 @@ t10_run(res_t *r, const t10_lang *l)
         TEST_STEP("Hardcoded endpoints of %s against the allowed list",
                   l->ep->file);
         out = endpoint_scan(l->ep->file, l->ep->lines, 3);
-        RING("webdeps H4 %s: %u source line(s) with a destination outside "
+        RING("webdeps B1 %s: %u source line(s) with a destination outside "
              "the allowed list", l->id, out);
     }
 
@@ -210,7 +210,7 @@ t10_run(res_t *r, const t10_lang *l)
     p = run_sh(r, "demo", cmd, RUN_TO);
     if (p == NULL)
     {
-        res_set(r, R_FAIL, "H4 FAIL: %s: the demo %s did not finish within "
+        res_set(r, R_FAIL, "B1 FAIL: %s: the demo %s did not finish within "
                 "%d s: %s", l->id, l->demo, RUN_TO, r->msg);
         return;
     }
@@ -219,19 +219,19 @@ t10_run(res_t *r, const t10_lang *l)
     first_error_lines(p->err, p->out, 5, all_err, sizeof(all_err));
     if (!WIFEXITED(p->status) || WEXITSTATUS(p->status) != 0)
     {
-        res_set(r, R_FAIL, "H4 FAIL: %s: built, but the demo %s ended with "
+        res_set(r, R_FAIL, "B1 FAIL: %s: built, but the demo %s ended with "
                 "exit code %s; output [%.700s]", l->id, l->demo, code,
                 all_err);
         return;
     }
     if (count_lines_with(p, l->expect) == 0)
     {
-        res_set(r, R_FAIL, "H4 FAIL: %s: the demo %s exited 0 but its "
+        res_set(r, R_FAIL, "B1 FAIL: %s: the demo %s exited 0 but its "
                 "output has no line with \"%s\"; output [%.700s]", l->id,
                 l->demo, l->expect, all_err);
         return;
     }
-    res_set(r, R_PASS, "H4 PASS: %s: built with its own tool, the demo %s "
+    res_set(r, R_PASS, "B1 PASS: %s: built with its own tool, the demo %s "
             "exited 0 and printed a line with \"%s\"; %u warning line(s) in "
             "the build logs", l->id, l->demo, l->expect, warnings);
 }
@@ -262,7 +262,7 @@ t10_parse_alone(const char *label, const char *cmd)
     first_error_lines(p->err, p->out, 5, lines, sizeof(lines));
     if (WIFEXITED(p->status) && WEXITSTATUS(p->status) == 0)
     {
-        RING("webdeps H4: %s parses without error with the real compiler: "
+        RING("webdeps B1: %s parses without error with the real compiler: "
              "the 'Parsing failed' report is a tool gap, not a syntax error",
              label);
         T_FINDING(TAPI_CYBERSEC_SEV_MEDIUM, "build.parse-alone", label,
@@ -272,7 +272,7 @@ t10_parse_alone(const char *label, const char *cmd)
     }
     else
     {
-        RING("webdeps H4: %s does not parse: exit code %s, [%s]", label,
+        RING("webdeps B1: %s does not parse: exit code %s, [%s]", label,
              code, lines);
         T_FINDING(TAPI_CYBERSEC_SEV_HIGH, "build.parse-alone", label,
                   "compiler rejects the file alone (exit code %s): a real "

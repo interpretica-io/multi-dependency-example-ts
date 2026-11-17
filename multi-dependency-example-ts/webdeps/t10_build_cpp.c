@@ -1,14 +1,14 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief Webdeps: t10_build_cpp, the C++ example builds and runs with g++ (settles H4)
+ * @brief Webdeps: t10_build_cpp, the C++ example builds and runs with g++ (settles B1)
  *
  * Build cppcore.cpp and demo.cpp with g++ (not tcc), run cpp-demo once and
  * check exit code 0 and the "result =" line. cppcore.cpp is also checked
  * alone with -fsyntax-only, to say whether the 'Parsing failed' report
  * is a real syntax error or a gap of the tool that made it.
  * The commands, their exit codes and the first 40 lines of their output are
- * in the test log; the verdict names H4.
+ * in the test log; the verdict names B1.
  *
  * @author midair <midair@localhost>
  */
@@ -48,7 +48,7 @@ main(int argc, char **argv)
         t10_parse_alone("cpp/src/cppcore.cpp", "g++ -std=c++17 "
                         "-fsyntax-only -Icpp/include cpp/src/cppcore.cpp");
 
-    T_VERDICT(&res, "H4");
+    T_VERDICT(&res, "B1");
 
 cleanup:
     cleanup_all();

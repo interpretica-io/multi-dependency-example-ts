@@ -2,7 +2,7 @@
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
  * @brief Webdeps: t13_cs_swallow, service-cs answers success on errors
- *        (settles H3)
+ *        (settles CS1)
  *
  * Start service-cs alone and check that a valid request gets 200. Then
  * send it inputs that reach the exception handling near Program.cs:85:
@@ -13,8 +13,8 @@
  * The contract that a service owes its client is that an error is told
  * with a 4xx or 5xx status and a body that says what failed.
  *
- * H3 CONFIRMED if an input is answered with a 2xx status and an empty or
- * success body (or a body that itself admits the failure). H3 DISPROVED if
+ * CS1 CONFIRMED if an input is answered with a 2xx status and an empty or
+ * success body (or a body that itself admits the failure). CS1 DISPROVED if
  * every input gets a 4xx or 5xx with an error body. A 4xx or 5xx with an
  * empty body, or no HTTP status, is reported as not settled. A service-cs
  * that does not start fails the test with the reason "not started" and
@@ -77,7 +77,7 @@ main(int argc, char **argv)
     TEST_START;
 
     TEST_STEP("Start service-cs and wait for its port");
-    cs = svc_start_t(&res, "H3", CS);
+    cs = svc_start_t(&res, "CS1", CS);
     if (cs == NULL)
     {
         ERROR("service-cs did not start: %s", res.msg);
@@ -87,11 +87,11 @@ main(int argc, char **argv)
     TEST_STEP("A valid request gets 200");
     http_get(cs->port, "/ring?value=1&hops=0", 20, &h);
     body_flat(&h, flat, sizeof(flat));
-    RING("webdeps H3: valid request: %s, HTTP %d, body [%s]", hg_str(h.how),
+    RING("webdeps CS1: valid request: %s, HTTP %d, body [%s]", hg_str(h.how),
          h.status, flat);
     if (proc_gone(cs) || h.how != HG_OK || h.status != 200)
     {
-        res_set(&res, R_SETUP, "H3 not started: service-cs did not answer "
+        res_set(&res, R_SETUP, "CS1 not started: service-cs did not answer "
                 "the valid request with 200 (%s, HTTP %d, body [%s]); "
                 "settles nothing", hg_str(h.how), h.status, flat);
         goto verdict;
@@ -106,7 +106,7 @@ main(int argc, char **argv)
         TEST_STEP("Send %s", inputs[i].what);
         http_get(cs->port, inputs[i].path, 20, &h);
         body_flat(&h, flat, sizeof(flat));
-        RING("webdeps H3: GET %s (%s): %s, HTTP %d, body [%s]",
+        RING("webdeps CS1: GET %s (%s): %s, HTTP %d, body [%s]",
              inputs[i].path, inputs[i].what, hg_str(h.how), h.status, flat);
 
         if (h.how != HG_OK)
@@ -161,20 +161,20 @@ main(int argc, char **argv)
     }
 
     if (n_bad > 0)
-        res_set(&res, R_FAIL, "H3 CONFIRMED: service-cs answered %u of %zu "
+        res_set(&res, R_FAIL, "CS1 CONFIRMED: service-cs answered %u of %zu "
                 "bad inputs with a 2xx instead of an error: %s", n_bad,
                 TE_ARRAY_LEN(inputs), bad);
     else if (n_unsure > 0)
-        res_set(&res, R_FAIL, "H3 not settled: no input got a 2xx, but %u "
+        res_set(&res, R_FAIL, "CS1 not settled: no input got a 2xx, but %u "
                 "of %zu got no 4xx/5xx with an error body: %s", n_unsure,
                 TE_ARRAY_LEN(inputs), unsure);
     else
-        res_set(&res, R_PASS, "H3 DISPROVED: service-cs answered all %zu "
+        res_set(&res, R_PASS, "CS1 DISPROVED: service-cs answered all %zu "
                 "bad inputs with a 4xx/5xx and an error body (%s)",
                 TE_ARRAY_LEN(inputs), seen);
 
 verdict:
-    T_VERDICT(&res, "H3");
+    T_VERDICT(&res, "CS1");
 
 cleanup:
     cleanup_all();

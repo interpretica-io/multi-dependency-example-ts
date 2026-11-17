@@ -1163,6 +1163,14 @@
             <objective/>
             <notes/>
           </test>
+          <test name="t14_exposure" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="t15_hardening" type="script">
+            <objective/>
+            <notes/>
+          </test>
           <test name="t5_egress" type="script">
             <objective/>
             <notes/>

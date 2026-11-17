@@ -8,16 +8,18 @@
                      working example per language.
 
           @par Test Groups:
-          - @ref mde-webdeps-t10_build_rust - Build with cargo (H4)
-          - @ref mde-webdeps-t10_build_go - Build with go (H4)
-          - @ref mde-webdeps-t10_build_cs - Build with dotnet (H4)
-          - @ref mde-webdeps-t10_build_cpp - Build with g++ (H4)
-          - @ref mde-webdeps-t10_build_c - Build with gcc (H4)
-          - @ref mde-webdeps-t10_build_python - Byte-compile with python3 (H4)
+          - @ref mde-webdeps-t10_build_rust - Build with cargo (B1)
+          - @ref mde-webdeps-t10_build_go - Build with go (B1)
+          - @ref mde-webdeps-t10_build_cs - Build with dotnet (B1)
+          - @ref mde-webdeps-t10_build_cpp - Build with g++ (B1)
+          - @ref mde-webdeps-t10_build_c - Build with gcc (B1)
+          - @ref mde-webdeps-t10_build_python - Byte-compile with python3 (B1)
           - @ref mde-webdeps-t4_binscan - Binary Scan of the Built Binaries (V1)
           - @ref mde-webdeps-t11_rust_panic - Bad Input to gateway-rs (H1)
           - @ref mde-webdeps-t12_go_idle - Idle Connections to service-go (H2)
-          - @ref mde-webdeps-t13_cs_swallow - Swallowed Errors in service-cs (H3)
+          - @ref mde-webdeps-t13_cs_swallow - Swallowed Errors in service-cs (CS1)
+          - @ref mde-webdeps-t14_exposure - Listeners and Egress of the Web Tier (H3)
+          - @ref mde-webdeps-t15_hardening - Hardening Flags of the Built Binaries (H4)
           - @ref mde-webdeps-t9_go_contract - Contract Violations to service-go (H5)
           - @ref mde-webdeps-t5_egress - Egress of the Web Tier (EG1)
           - @ref mde-webdeps-s_rust - Smoke: gateway-rs
@@ -27,8 +29,8 @@
           - @ref mde-webdeps-s_c - Smoke: libpycore
 
           @par Notes:
-          - t11_rust_panic, t12_go_idle, t13_cs_swallow and the six
-            t10_build_* tests settle H1, H2, H3 and H4; each verdict names
+          - t11_rust_panic, t12_go_idle,
+            t14_exposure and t15_hardening settle H1, H2, H3 and H4 (the t10_build_* tests are B1, t13_cs_swallow is CS1); each verdict names
             its id (H<n> CONFIRMED, H<n> DISPROVED, H<n> PASS or H<n> FAIL
             with what was measured). t4_binscan scans what the t10 tests
             built and answers the earlier V1 only. t9_go_contract (H5) and
@@ -68,7 +70,7 @@
             </script>
         </prologue>
 
-        <!-- @page mde-webdeps-t10_build_rust Build with cargo (H4)
+        <!-- @page mde-webdeps-t10_build_rust Build with cargo (B1)
               @objective Build the Rust projects with cargo and run the result.
 
               @par Scenario:
@@ -79,11 +81,11 @@
         -->
         <run name="t10_build_rust">
             <script name="t10_build_rust">
-                <objective>[H4] Build rustcore, rust-demo and gateway-rs with cargo; print the compiler path and version first; run rust-demo once and check exit code 0 and the "rust-demo: result =" line. FAIL with the compiler text on a build failure; SKIP naming the tool when cargo or rustc is absent. Adds the warning count and the hardcoded endpoints of main.rs:33, :34 and :36 (tapi_egress, allowed list = the addresses the tests start) to the report; those settle nothing.</objective>
+                <objective>[B1] Build rustcore, rust-demo and gateway-rs with cargo; print the compiler path and version first; run rust-demo once and check exit code 0 and the "rust-demo: result =" line. FAIL with the compiler text on a build failure; SKIP naming the tool when cargo or rustc is absent. Adds the warning count and the hardcoded endpoints of main.rs:33, :34 and :36 (tapi_egress, allowed list = the addresses the tests start) to the report; those settle nothing.</objective>
             </script>
         </run>
 
-        <!-- @page mde-webdeps-t10_build_go Build with go (H4)
+        <!-- @page mde-webdeps-t10_build_go Build with go (B1)
               @objective Build the Go projects with go build and run the result.
 
               @par Scenario:
@@ -94,11 +96,11 @@
         -->
         <run name="t10_build_go">
             <script name="t10_build_go">
-                <objective>[H4] Build libgocore and service-go with go build; print the compiler path and version first; start service-go, ask it once, check exit code 0 and "value=". FAIL with the compiler text on a build failure; SKIP naming the tool when go is absent. Adds the warning count and the hardcoded endpoints of main.go:46, :51 and :87 to the report.</objective>
+                <objective>[B1] Build libgocore and service-go with go build; print the compiler path and version first; start service-go, ask it once, check exit code 0 and "value=". FAIL with the compiler text on a build failure; SKIP naming the tool when go is absent. Adds the warning count and the hardcoded endpoints of main.go:46, :51 and :87 to the report.</objective>
             </script>
         </run>
 
-        <!-- @page mde-webdeps-t10_build_cs Build with dotnet (H4)
+        <!-- @page mde-webdeps-t10_build_cs Build with dotnet (B1)
               @objective Build the C# projects with dotnet and run the result.
 
               @par Scenario:
@@ -109,11 +111,11 @@
         -->
         <run name="t10_build_cs">
             <script name="t10_build_cs">
-                <objective>[H4] Build cscore and service-cs with dotnet; print the compiler path and version first; start service-cs, ask it once, check exit code 0 and "value=". FAIL with the compiler text on a build failure; SKIP naming the tool when dotnet is absent. Adds the warning count and the hardcoded endpoints of Program.cs:24, :34 and :78 to the report.</objective>
+                <objective>[B1] Build cscore and service-cs with dotnet; print the compiler path and version first; start service-cs, ask it once, check exit code 0 and "value=". FAIL with the compiler text on a build failure; SKIP naming the tool when dotnet is absent. Adds the warning count and the hardcoded endpoints of Program.cs:24, :34 and :78 to the report.</objective>
             </script>
         </run>
 
-        <!-- @page mde-webdeps-t10_build_cpp Build with g++ (H4)
+        <!-- @page mde-webdeps-t10_build_cpp Build with g++ (B1)
               @objective Build the C++ project with g++ and run the result.
 
               @par Scenario:
@@ -124,11 +126,11 @@
         -->
         <run name="t10_build_cpp">
             <script name="t10_build_cpp">
-                <objective>[H4] Build cppcore.cpp and demo.cpp with g++ (not tcc); print the compiler path and version first; run cpp-demo once and check exit code 0 and "result =". Build cppcore.cpp alone with -fsyntax-only and report whether the 'Parsing failed' report is a real syntax error or a tool gap. FAIL with the compiler text on a build failure; SKIP naming the tool when g++ is absent. Adds the warning count to the report.</objective>
+                <objective>[B1] Build cppcore.cpp and demo.cpp with g++ (not tcc); print the compiler path and version first; run cpp-demo once and check exit code 0 and "result =". Build cppcore.cpp alone with -fsyntax-only and report whether the 'Parsing failed' report is a real syntax error or a tool gap. FAIL with the compiler text on a build failure; SKIP naming the tool when g++ is absent. Adds the warning count to the report.</objective>
             </script>
         </run>
 
-        <!-- @page mde-webdeps-t10_build_c Build with gcc (H4)
+        <!-- @page mde-webdeps-t10_build_c Build with gcc (B1)
               @objective Build the C extension with gcc and run a C driver.
 
               @par Scenario:
@@ -139,11 +141,11 @@
         -->
         <run name="t10_build_c">
             <script name="t10_build_c">
-                <objective>[H4] Build pycore.c with gcc (not tcc) and a C driver; print the compiler path and version first; run the driver once and check exit code 0 and "py_weight() =". Build pycore.c alone with -fsyntax-only and report whether the 'Parsing failed' report is a real syntax error or a tool gap. FAIL with the compiler text on a build failure; SKIP naming the tool when gcc or python3-config is absent. Adds the warning count to the report.</objective>
+                <objective>[B1] Build pycore.c with gcc (not tcc) and a C driver; print the compiler path and version first; run the driver once and check exit code 0 and "py_weight() =". Build pycore.c alone with -fsyntax-only and report whether the 'Parsing failed' report is a real syntax error or a tool gap. FAIL with the compiler text on a build failure; SKIP naming the tool when gcc or python3-config is absent. Adds the warning count to the report.</objective>
             </script>
         </run>
 
-        <!-- @page mde-webdeps-t10_build_python Byte-compile with python3 (H4)
+        <!-- @page mde-webdeps-t10_build_python Byte-compile with python3 (B1)
               @objective Byte-compile the Python files and run the demo.
 
               @par Scenario:
@@ -154,7 +156,7 @@
         -->
         <run name="t10_build_python">
             <script name="t10_build_python">
-                <objective>[H4] Byte-compile the Python files with python3; print the interpreter path and version first; run demo.py once and check exit code 0 and "py-demo: result =". FAIL with the error text on a build failure; SKIP naming the tool when python3 is absent. Adds the warning count to the report.</objective>
+                <objective>[B1] Byte-compile the Python files with python3; print the interpreter path and version first; run demo.py once and check exit code 0 and "py-demo: result =". FAIL with the error text on a build failure; SKIP naming the tool when python3 is absent. Adds the warning count to the report.</objective>
             </script>
         </run>
 
@@ -182,7 +184,7 @@
         -->
         <run name="t11_rust_panic">
             <script name="t11_rust_panic">
-                <objective>[H1] Start gateway-rs, check that a valid request gets 200, send input aimed at main.rs:30 and at main.rs:34 (including a second instance on the same port); after each read the exit status and send a valid request again. H1 CONFIRMED (FAIL) if the process exits or the second request fails; H1 DISPROVED (PASS) if it stays up and answers; "not started" and nothing settled if the gateway does not start.</objective>
+                <objective>[H1] Start gateway-rs, check that a valid request gets 200, send input aimed at main.rs:30 and at main.rs:34 (empty body, bad path, oversized header, a second instance on the same port) and start gateway-rs builds with the setting unset and invalid; after each read the port and the exit status and send a valid request again. H1 CONFIRMED (FAIL) if the process exits or the second request fails; H1 DISPROVED (PASS) if it stays up and answers; "not started" and nothing settled if the gateway does not start.</objective>
             </script>
         </run>
 
@@ -191,16 +193,16 @@
 
               @par Scenario:
               -# Start service-go and open 50 idle TCP connections.
-              -# Wait 10 s, send a valid request with a 2 s timeout.
+              -# Wait 30 s, send a valid request with a 5 s timeout.
               -# Check whether the idle connections are still open, then close them.
         -->
         <run name="t12_go_idle">
             <script name="t12_go_idle">
-                <objective>[H2] Start service-go, open 50 idle TCP connections, wait 10 s, send a valid request with a 2 s timeout and check whether the idle connections are still open; close the sockets at the end. H2 CONFIRMED (FAIL) if they stay open; H2 DISPROVED (PASS) if the service closed them; "not started" and nothing settled if service-go does not start.</objective>
+                <objective>[H2] Start service-go, open 50 idle TCP connections, wait 30 s, send a valid request with a 5 s timeout and record whether the service closed the idle connections; close the sockets at the end. H2 CONFIRMED (FAIL) if the request times out or is refused; H2 DISPROVED (PASS) if it is answered; "not started" and nothing settled if service-go does not start.</objective>
             </script>
         </run>
 
-        <!-- @page mde-webdeps-t13_cs_swallow Swallowed Errors in service-cs (H3)
+        <!-- @page mde-webdeps-t13_cs_swallow Swallowed Errors in service-cs (CS1)
               @objective Check whether service-cs reports a handler failure to the client.
 
               @par Scenario:
@@ -210,7 +212,36 @@
         -->
         <run name="t13_cs_swallow">
             <script name="t13_cs_swallow">
-                <objective>[H3] Start service-cs, check that a valid request gets 200, send input that makes the handler throw near Program.cs:85 and compare the status and body with the contract (an error is a 4xx/5xx with an error body). H3 CONFIRMED (FAIL) on a 2xx with an empty or success body; H3 DISPROVED (PASS) on a 4xx/5xx with an error body; "not started" and nothing settled if service-cs does not start.</objective>
+                <objective>[CS1] Start service-cs, check that a valid request gets 200, send input that makes the handler throw near Program.cs:85 and compare the status and body with the contract (an error is a 4xx/5xx with an error body). CS1 CONFIRMED (FAIL) on a 2xx with an empty or success body; CS1 DISPROVED (PASS) on a 4xx/5xx with an error body; "not started" and nothing settled if service-cs does not start.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-webdeps-t14_exposure Listeners and Egress of the Web Tier (H3)
+              @objective Record what the three services listen on and connect to.
+
+              @par Scenario:
+              -# Start gateway-rs, service-go and service-cs.
+              -# Run tapi_netexpose: every listening address and port and whether it is reachable from outside loopback.
+              -# Send traffic and run tapi_egress: every outbound destination.
+              -# Compare with the literals of main.rs:33-36, main.go:46-51 and Program.cs:24-78.
+        -->
+        <run name="t14_exposure">
+            <script name="t14_exposure">
+                <objective>[H3] Start the three services, record with tapi_netexpose every listening address and port and whether it is reachable from outside loopback, and with tapi_egress every outbound destination; compare with the hardcoded addresses of main.rs:33-36, main.go:46-51 and Program.cs:24-78 and append all results to the tapi_cybersec_report. H3 CONFIRMED (FAIL) if a service listens on a non-loopback address or connects to a host not in those literals; H3 DISPROVED (PASS) otherwise; INCONCLUSIVE if a scanner returns no data.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-webdeps-t15_hardening Hardening Flags of the Built Binaries (H4)
+              @objective List the hardening flags of every built binary.
+
+              @par Scenario:
+              -# Run tapi_binscan on gateway-rs, service-go, service-cs and the C++ and C (Python extension) libraries.
+              -# List each binary with NX, PIE, RELRO, canary and fortify.
+              -# Fail naming each binary that lacks a flag its language supports.
+        -->
+        <run name="t15_hardening">
+            <script name="t15_hardening">
+                <objective>[H4] Run tapi_binscan on gateway-rs, service-go, service-cs, libcppcore and libpycore and list each with its flags (NX, PIE, RELRO, canary, fortify). H4 CONFIRMED (FAIL) if a binary lacks a flag its language supports (Rust and Go: NX, PIE, RELRO; apphost, C and C++: all five), naming it; H4 DISPROVED (PASS) otherwise; INCONCLUSIVE naming a binary that is absent or cannot be scanned.</objective>
             </script>
         </run>
 

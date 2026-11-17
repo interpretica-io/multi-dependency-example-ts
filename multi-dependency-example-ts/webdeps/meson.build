@@ -15,6 +15,8 @@ tests = [
     't11_rust_panic',
     't12_go_idle',
     't13_cs_swallow',
+    't14_exposure',
+    't15_hardening',
     't5_egress',
     't9_go_contract',
     's_rust',

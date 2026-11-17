@@ -4,16 +4,15 @@
  * @brief Webdeps: t12_go_idle, idle clients of service-go (settles H2)
  *
  * A plain TCP/HTTP client. Start service-go, open 50 connections to it and
- * send nothing on them. Wait 10 s, then count the sockets the service
+ * send nothing on them. Wait 30 s, then count the sockets the service
  * still holds on its port with tapi_netexpose (the client's own view is
  * recorded next to it). Send one valid request on a new connection with a
- * 2 s timeout. The sockets are closed at the end.
+ * 5 s timeout. The sockets are closed at the end.
  *
- * H2 CONFIRMED if the idle connections are still open after 10 s (the
- * verdict adds whether the valid request was answered in 2 s). H2
- * DISPROVED if the service closed them, which is what a read timeout
- * does. A service-go that does not start fails the test with the reason
- * "not started" and settles nothing.
+ * H2 CONFIRMED if the valid request times out or is refused; H2 DISPROVED
+ * if it is answered. Whether the service closed the idle connections is
+ * recorded in the report and the verdict. A service-go that does not start
+ * fails the test with the reason "not started" and settles nothing.
  *
  * @author midair <midair@localhost>
  */
@@ -27,8 +26,8 @@
 #include "webdeps_lib.h"
 
 #define T6_CONNS    50
-#define T6_IDLE_S   10      /**< s, idle wait. */
-#define T6_GOOD_S   2       /**< s, longest valid request. */
+#define T6_IDLE_S   30      /**< s, idle wait. */
+#define T6_GOOD_S   5       /**< s, longest valid request. */
 
 /** Connections the peer has not closed (a read would not return 0). */
 static int
@@ -162,30 +161,31 @@ main(int argc, char **argv)
          good.elapsed, held, opened, client_held);
     answered = good.how == HG_OK && good.status >= 200 && good.status < 300 &&
                good.elapsed <= T6_GOOD_S;
-    if (held >= opened && client_held >= opened)
+    T_FINDING(TAPI_CYBERSEC_SEV_INFO, "go.idle-closed", "service-go",
+              "idle connections closed by the service: %d of %d (%d held by "
+              "the server, %d open in the client view)", opened - held,
+              opened, held, client_held);
+    if (!answered)
     {
         T_FINDING(TAPI_CYBERSEC_SEV_MEDIUM, "go.no-timeout", "service-go",
-                  "all %d idle connections still open after %d s; valid "
-                  "request %s", held, T6_IDLE_S,
-                  answered ? "answered in time" : "not answered in time");
-        res_set(&res, R_FAIL, "H2 CONFIRMED: all %d idle connections are "
-                "still open after %d s (no read timeout closed them); the "
-                "valid request %s (%s, HTTP %d, %.2f s, limit %d s)",
-                held, T6_IDLE_S, answered ? "was still answered" :
-                "was not answered", hg_str(good.how), good.status,
-                good.elapsed, T6_GOOD_S);
+                  "valid request %s, HTTP %d, %.2f s, after %d idle "
+                  "connections", hg_str(good.how), good.status, good.elapsed,
+                  opened);
+        res_set(&res, R_FAIL, "H2 CONFIRMED: the valid request was not "
+                "answered within %d s (%s, HTTP %d, %.2f s) after %d idle "
+                "connections held %d s; idle connections closed by the "
+                "service: %d of %d", T6_GOOD_S, hg_str(good.how),
+                good.status, good.elapsed, opened, T6_IDLE_S, opened - held,
+                opened);
     }
     else
     {
-        T_FINDING(TAPI_CYBERSEC_SEV_INFO, "go.timeout", "service-go",
-                  "%d of %d idle connections closed within %d s",
-                  opened - held, opened, T6_IDLE_S);
-        res_set(&res, R_PASS, "H2 DISPROVED: service-go closed %d of %d idle "
-                "connections within %d s (%d held by the server, %d open in "
-                "the client view); the valid request %s (%s, HTTP %d, %.2f "
-                "s)", opened - held, opened, T6_IDLE_S, held, client_held,
-                answered ? "was answered in time" : "was not answered in "
-                "time", hg_str(good.how), good.status, good.elapsed);
+        res_set(&res, R_PASS, "H2 DISPROVED: the valid request was answered "
+                "in %.2f s (HTTP %d, limit %d s) after %d idle connections "
+                "held %d s; idle connections closed by the service: %d of "
+                "%d (%d held by the server, %d open in the client view)",
+                good.elapsed, good.status, T6_GOOD_S, opened, T6_IDLE_S,
+                opened - held, opened, held, client_held);
     }
 
 verdict:

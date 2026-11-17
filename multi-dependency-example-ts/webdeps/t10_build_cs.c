@@ -1,14 +1,14 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief Webdeps: t10_build_cs, the C# examples build and run (settles H4)
+ * @brief Webdeps: t10_build_cs, the C# examples build and run (settles B1)
  *
  * Build cscore and service-cs with dotnet (the build.sh lines), start
  * service-cs once, ask it once and check exit code 0 and "value=" in the
  * answer. Hardcoded endpoints of Program.cs:24, :34 and :78 go to the
  * report.
  * The commands, their exit codes and the first 40 lines of their output are
- * in the test log; the verdict names H4.
+ * in the test log; the verdict names B1.
  *
  * @author midair <midair@localhost>
  */
@@ -45,7 +45,7 @@ main(int argc, char **argv)
 
     t10_run(&res, &lang);
 
-    T_VERDICT(&res, "H4");
+    T_VERDICT(&res, "B1");
 
 cleanup:
     cleanup_all();
