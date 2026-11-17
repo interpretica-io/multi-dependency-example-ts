@@ -1,0 +1,1 @@
+{"mcpServers":{"knodb":{"command":"knodb","args":["serve","--root","/opt/midair/data/raw/knodb","--workspace","2"]}}}
