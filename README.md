@@ -37,9 +37,10 @@ for **maximum evidence**:
 
 | Group | Modules | Tests |
 |---|---|---|
+| `smoke` | none | `t0_smoke` (H0): one fixed verdict, no service |
 | `ring` | suite model (`lib/tsapi_mde_ring`) | `propagation` (72 it.), `reference`, `sweep`, `determinism`, `entry_matrix`: every stage line checked against a reference model of the five formulas |
 | `web` | suite (`lib/tsapi_mde_web`) | `cycle`, `latency`, `contract`, `robustness` |
-| `webdeps` | tsf-cybersec (netexpose, egress, binscan) | `prologue` (installs the Go, Rust, .NET, C/C++ and Python toolchains on the agent, checks them and builds the example when it is not built), `t10_build_rust/go/cs/cpp/c/python` (B1: one language each, built with its own tool, demo run once, warning count and hardcoded endpoints in the report), `t11_rust_panic` (H1), `t12_go_idle` (H2), `t13_cs_swallow` (CS1), `t14_exposure` (H3: listeners and egress), `t15_hardening` (H4: flags of each built binary), `t4_binscan` (V1, scans what the t10 tests built, output printed on success too), `t9_go_contract` (H5) and `t5_egress` (EG1), described on the group page in `package.xml`, kept from earlier rounds: standalone plain TCP/HTTP clients on `webdeps_lib.h`, each filling one `tapi_cybersec_report`; the verdict starts with the hypothesis id and says CONFIRMED, DISPROVED, PASS or FAIL with what was measured; a service that does not start fails with `not started` and settles nothing; a missing tool is a SKIP naming it; plus `s_rust`, `s_go`, `s_cs`, `s_cpp`, `s_c`: one smoke test per language, settling no hypothesis |
+| `webdeps` | tsf-cybersec (netexpose, egress, binscan) | `prologue` (installs the Go, Rust, .NET, C/C++ and Python toolchains on the agent, checks them and builds the example when it is not built), `t10_build_rust/go/cs/cpp/c/python` (B1: one language each, built with its own tool, demo run once, warning count and hardcoded endpoints in the report), `t11_rust_panic` (H1), `t12_idle` (H2), `t13_cs_swallow` (CS1), `t14_exposure` (H3: listeners and egress), `t15_hardening` (H4: flags of each built binary), `t4_binscan` (V1, scans what the t10 tests built, output printed on success too), `t9_go_contract` (H5) and `t5_egress` (EG1), described on the group page in `package.xml`, kept from earlier rounds: standalone plain TCP/HTTP clients on `webdeps_lib.h`, each filling one `tapi_cybersec_report`; the verdict starts with the hypothesis id and says CONFIRMED, DISPROVED, PASS or FAIL with what was measured; a service that does not start fails with `not started` and settles nothing; a missing tool is a SKIP naming it; plus `s_rust`, `s_go`, `s_cs`, `s_cpp`, `s_c`: one smoke test per language, settling no hypothesis |
 | `graph` | binutils | `links`, `symbols`, `cycle_closure` (DOT graph artifact) |
 | `binary` | tsf-cybersec (binscan, objdump) | `hardening`, `hardening_matrix`, `disasm_defect`, `linked_libs` |
 | `devtool` | tsf-devtool | `rebuild_pycore`, `make_stub`, `reproducible` |
@@ -88,6 +89,28 @@ build.
 
 Optional environment: `TE_TS_MDE_BUILD=0` to skip the private build, and
 `TE_TS_MDE_REPORTS=0` to skip reports.
+
+## Run notes (iteration 3)
+
+The run goes one test per session, so a crash in one test hides no other:
+`smoke/t0_smoke` (H0) alone first, then `webdeps/t11_rust_panic` (H1),
+`webdeps/t12_idle` (H2), `webdeps/t14_exposure` (H3) and
+`webdeps/t15_hardening` (H4). Each verdict starts with its hypothesis id.
+
+Not run this round, because they map to no hypothesis (the tests stay in
+the suite): `fuzz/ring_abi` (the fuzz of the ring ABI), `devtool/rebuild_pycore`,
+`devtool/make_stub` and `devtool/reproducible` (the tcc rebuild) and
+`memmap/elf` and `memmap/proc` (memmap). `tapi_sniffrules` and the frida
+hooks of `t14_exposure` are switched off (`T14_CAPTURE_HOOKS`) until
+`t0_smoke` and `t14_exposure` report. `webdeps/t4_binscan` stays until
+`t15_hardening` has reported.
+
+One command per test:
+
+```sh
+TE_TS_MDE_SRC=<example> ./scripts/run.sh docker guess --cfg=localhost \
+    --tester-run=multi-dependency-example-ts/webdeps/t11_rust_panic
+```
 
 ## Reports
 

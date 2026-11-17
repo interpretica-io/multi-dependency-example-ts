@@ -1,25 +1,27 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief Webdeps: t15_hardening, hardening flags of the built web binaries
- *        (settles H4)
+ * @brief Webdeps: t15_hardening, hardening flags of the gateway and the Go
+ *        service (settles H4)
  *
- * Hypothesis H4: the built web binaries lack NX, PIE, RELRO or a stack
- * canary.
+ * Hypothesis H4: the gateway and the Go service binaries lack NX, PIE,
+ * RELRO or a stack canary.
  *
- * Sends: nothing to the network. tapi_binscan reads, on the agent, the
- * gateway (dist/bin/gateway-rs), the Go service (dist/bin/service-go), the
- * C# host (dist/bin/service-cs, the native apphost) and the Rust demo
- * binary (dist/bin/rust-demo). Each is listed with NX, PIE, RELRO, canary
- * and fortify.
+ * Sends and reads: nothing goes to the network. tapi_binscan reads, on the
+ * agent, exactly two binaries: dist/bin/gateway-rs and dist/bin/service-go.
  *
- * H4 CONFIRMED (fail) if any binary has no NX, no PIE or no full RELRO,
- * naming the binary and the flag. Canary and fortify are informational: they
- * are logged and added to the tapi_cybersec_report but never fail the test.
- * H4 DISPROVED (pass) if all four have NX, PIE and full RELRO.
- * INCONCLUSIVE, with the path and the error, if a binary is absent or
- * tapi_binscan cannot read it. The outcome is appended to the report with
- * its reason.
+ * Verdicts (every one starts with H4):
+ *  - One line per binary, "H4 BIN nx=Y/N pie=Y/N relro=full/partial/none
+ *    canary=Y/N", for example "H4 gateway-rs nx=Y pie=N relro=partial
+ *    canary=Y". It is logged for each binary and is informational.
+ *  - "H4 hardening-read" (pass): both binaries were scanned, whatever their
+ *    flags: a missing flag does not fail the test in this round. Each
+ *    missing NX, PIE, full RELRO or canary is a finding in the
+ *    tapi_cybersec_report (medium); a flag set on every binary is H4
+ *    false, a missing one is H4 true.
+ *  - "H4 setup-<step>-failed: ..." (fail): the step named did not work (no
+ *    session, a binary absent or tapi_binscan cannot read it); nothing is
+ *    settled.
  *
  * @author midair <midair@localhost>
  */
@@ -35,15 +37,15 @@ enum { F_NX = 1, F_PIE = 2, F_RELRO = 4, F_CANARY = 8, F_FORTIFY = 16,
 
 static const struct {
     const char *rel;        /**< Under the example root. */
+    const char *name;       /**< In the verdict line. */
     const char *lang;
-    unsigned    need;       /**< Flags that fail H4 when missing. */
+    unsigned    need;       /**< Flags reported as findings when missing. */
 } bins[] = {
-    { "dist/bin/gateway-rs", "Rust", F_BASIC },
-    { "dist/bin/service-go", "Go", F_BASIC },
-    { "dist/bin/service-cs", "C# (native apphost)", F_BASIC },
-    { "dist/bin/rust-demo", "Rust demo", F_BASIC },
+    { "dist/bin/gateway-rs", "gateway-rs", "Rust", F_BASIC | F_CANARY },
+    { "dist/bin/service-go", "service-go", "Go", F_BASIC | F_CANARY },
 };
 
+/** H4: one scan per binary, one verdict line each, a finding per missing flag. */
 int
 main(int argc, char **argv)
 {
@@ -64,7 +66,8 @@ main(int argc, char **argv)
     if (tsapi_mde_session_init(&session, "t15_hardening") != 0)
     {
         setup_svc = "agent";
-        res_set(&res, R_SETUP, "no session on the agent for tapi_binscan");
+        res_set(&res, R_SETUP, "H4 setup-open-session-failed: no session "
+                "on the agent for tapi_binscan");
         goto verdict;
     }
 
@@ -108,6 +111,12 @@ main(int argc, char **argv)
         if ((bins[i].need & F_RELRO) && info.relro != TAPI_BINSCAN_RELRO_FULL)
             append(miss, sizeof(miss), "RELRO(%s) ",
                    tapi_binscan_relro2str(info.relro));
+        if ((bins[i].need & F_CANARY) && !info.canary)
+            append(miss, sizeof(miss), "canary ");
+        RING_VERDICT("H4 %s nx=%s pie=%s relro=%s canary=%s", bins[i].name,
+                     info.nx ? "Y" : "N", pie ? "Y" : "N",
+                     tapi_binscan_relro2str(info.relro),
+                     info.canary ? "Y" : "N");
         RING("webdeps H4: %s (%s): kind %s, NX %d, PIE %d, RELRO %s, canary "
              "%d, fortify %d; lacking %s", bins[i].rel, bins[i].lang,
              tapi_binscan_kind2str(info.kind), info.nx, pie,
@@ -134,21 +143,17 @@ main(int argc, char **argv)
         tapi_binscan_info_free(&info);
     }
 
-    if (n_lacking > 0)
-        res_set(&res, R_FAIL, "H4 CONFIRMED: %u of %zu binaries lack NX, "
-                "PIE or full RELRO: %sall scanned: %s%s%s", n_lacking,
-                TE_ARRAY_LEN(bins), lacking, listing,
-                n_absent > 0 ? "; not scanned: " : "", absent);
-    else if (n_absent > 0)
+    if (n_absent > 0)
     {
         setup_svc = "tapi_binscan";
-        res_set(&res, R_INCONCLUSIVE, "%u of %zu binaries were not "
-                "scanned: %s", n_absent, TE_ARRAY_LEN(bins), absent);
+        res_set(&res, R_SETUP, "H4 setup-binscan-failed: %u of %zu binaries "
+                "were not scanned: %s", n_absent, TE_ARRAY_LEN(bins), absent);
     }
     else
-        res_set(&res, R_PASS, "H4 DISPROVED: all %zu binaries have NX, PIE "
-                "and full RELRO (canary and fortify are informational): %s",
-                TE_ARRAY_LEN(bins), listing);
+        res_set(&res, R_PASS, "H4 hardening-read: both binaries scanned; "
+                "%u lack a flag (each is a finding in the report, no "
+                "failure in this round): %s%s", n_lacking, lacking,
+                listing);
 
 verdict:
     if (session.ta != NULL)

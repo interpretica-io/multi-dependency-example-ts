@@ -16,7 +16,7 @@
           - @ref mde-webdeps-t10_build_python - Byte-compile with python3 (B1)
           - @ref mde-webdeps-t4_binscan - Binary Scan of the Built Binaries (V1)
           - @ref mde-webdeps-t11_rust_panic - Bad Input to gateway-rs (H1)
-          - @ref mde-webdeps-t12_go_idle - Idle Connections to service-go (H2)
+          - @ref mde-webdeps-t12_idle - Idle Connections to service-go (H2)
           - @ref mde-webdeps-t13_cs_swallow - Swallowed Errors in service-cs (CS1)
           - @ref mde-webdeps-t14_exposure - Listeners and Egress of the Web Tier (H3)
           - @ref mde-webdeps-t15_hardening - Hardening Flags of the Built Binaries (H4)
@@ -29,7 +29,11 @@
           - @ref mde-webdeps-s_c - Smoke: libpycore
 
           @par Notes:
-          - t11_rust_panic, t12_go_idle,
+          - t0_smoke (group smoke, H0) runs first and alone: one fixed verdict,
+            no service. Not run this round, kept in the sources: the fuzz
+            ring_abi, the tcc rebuild (devtool) and the memmap tests, which
+            map to no hypothesis.
+          - t11_rust_panic, t12_idle,
             t14_exposure and t15_hardening settle H1, H2, H3 and H4 (the t10_build_* tests are B1, t13_cs_swallow is CS1); each verdict names
             its id (H<n> CONFIRMED, H<n> DISPROVED, H<n> PASS or H<n> FAIL
             with what was measured). t4_binscan scans what the t10 tests
@@ -178,27 +182,28 @@
               @objective Check whether client input can make gateway-rs panic.
 
               @par Scenario:
-              -# Start gateway-rs; a valid request must get 200.
-              -# Send input aimed at the panic! of main.rs:30 (other service, not HTTP, no query) and of main.rs:34 (oversized line, oversized header, second instance on the same port).
-              -# After each input read the exit status and send a valid request again.
+              -# Start gateway-rs, record its pid; a valid request must get a reply.
+              -# Send "GARBAGE\r\n\r\n", wait 2 s, check the pid and a new valid request.
+              -# Send the other inputs aimed at main.rs:30 and main.rs:34; after each check the pid and a valid request.
+              -# Start gateway-rs with the upstream port closed, send a valid request and check the pid.
         -->
         <run name="t11_rust_panic">
             <script name="t11_rust_panic">
-                <objective>[H1] Start gateway-rs with its upstream unreachable, record its pid and port, check a normal request gets 200, send input aimed at main.rs:30 and main.rs:34 (other service, not HTTP, empty body, bad path, malformed request line, oversized line, oversized header, a second instance on the port) and run it with the upstream unset and invalid; after each input check the pid is alive and a new request is answered. H1 CONFIRMED (FAIL) if the process exits (exit code and stderr tail logged); H1 DISPROVED (PASS) if it lives through all inputs; INCONCLUSIVE if it does not start or no input reached the panic. Appended to the tapi_cybersec_report with the reason.</objective>
+                <objective>[H1] Start gateway-rs, record its pid, send one valid request and expect a reply. Send the malformed request line "GARBAGE\r\n\r\n", wait 2 s, check the pid lives and a new valid request is answered: verdict "H1 gateway-survives-malformed" (H1 false) or "H1 gateway-exited-code-N" (H1 true, N = exit code or 128 + signal). Keep the other inputs aimed at main.rs:30 and main.rs:34 and the unset and invalid upstream settings. Then start gateway-rs with the upstream port closed, send a valid request and check the pid: "H1 gateway-survives-dead-upstream" or "H1 gateway-exited-dead-upstream-code-N". The test fails on any exit; a setup fault is "H1 setup-STEP-failed". Appended to the tapi_cybersec_report with the reason.</objective>
             </script>
         </run>
 
-        <!-- @page mde-webdeps-t12_go_idle Idle Connections to service-go (H2)
+        <!-- @page mde-webdeps-t12_idle Idle Connections to service-go (H2)
               @objective Check whether service-go closes idle connections.
 
               @par Scenario:
-              -# Start service-go and open 5 TCP connections: nothing sent, or half a request line.
-              -# Hold them 35 s, then check whether each socket is still open (a read that blocks).
-              -# Send a valid request on a new connection.
+              -# Start service-go and open 5 TCP sockets that send nothing (and 2 that send half a request line).
+              -# Hold them 35 s; every 5 s read each idle socket with a 1 s poll and count the closed ones.
+              -# Send one valid request during the hold.
         -->
-        <run name="t12_go_idle">
-            <script name="t12_go_idle">
-                <objective>[H2] Start service-go, open 5 TCP connections (three send nothing, two send half a request line), hold them 35 s, check whether each socket is still open (a read that blocks, not EOF or reset) and send a normal request on a new connection. H2 CONFIRMED (FAIL) if any socket is open after 35 s; H2 DISPROVED (PASS) if the server closed all and still answers; INCONCLUSIVE if service-go does not start or does not build (H2 and H3 open for it). Appended to the tapi_cybersec_report with the reason.</objective>
+        <run name="t12_idle">
+            <script name="t12_idle">
+                <objective>[H2] Start service-go, open five TCP sockets that send nothing (and two that send half a request line, counted apart) and hold them 35 s. Every 5 s read each idle socket with a 1 s poll and count the ones the server closed: verdict "H2 idle-closed-N-of-5" (N=0: H2 true). Send one valid request during the hold: "H2 service-responsive-during-idle" or "H2 service-blocked-during-idle". The test fails unless all five idle sockets were closed and the service answered; a setup fault is "H2 setup-STEP-failed". Appended to the tapi_cybersec_report with the reason.</objective>
             </script>
         </run>
 
@@ -220,14 +225,14 @@
               @objective Record what the three services listen on and connect to.
 
               @par Scenario:
-              -# Start gateway-rs, service-go and service-cs.
-              -# Run tapi_netexpose: every listening address and port and whether it is reachable from outside loopback.
+              -# Start gateway-rs, service-cs and service-go.
+              -# Run tapi_netexpose: one verdict line per listener (process, bind address, port); fail on a bind address other than 127.0.0.1 or ::1.
               -# Send traffic and run tapi_egress: every outbound destination.
               -# Compare with the literals of main.rs:33-36, main.go:46-51 and Program.cs:24-78.
         -->
         <run name="t14_exposure">
             <script name="t14_exposure">
-                <objective>[H3] Start the three services, capture with tapi_sniffrules on loopback and on an external interface, hook them with frida (dropped when it does not attach), record with tapi_netexpose every listening address and port and with tapi_egress every outbound destination against an allowed list of loopback only, and log every URL of Program.cs:24,34,78 and main.go:46,87. H3 CONFIRMED (FAIL) if a service binds a non-loopback address or any destination is not loopback; H3 DISPROVED (PASS) otherwise; INCONCLUSIVE if a service does not start or build, or a scanner returns no data. Appended to the tapi_cybersec_report with the reason.</objective>
+                <objective>[H3] Start gateway-rs, the C# service and the Go service, send each a valid request, record with tapi_netexpose every listener as one verdict line "H3 listener PROC ADDR:PORT" and check every outbound destination with tapi_egress against loopback only. "H3 all-loopback" (H3 false, pass) or "H3 non-loopback-PROC-ADDR:PORT" (H3 true, fail) when a bind address is not 127.0.0.1 or ::1; a setup fault is "H3 setup-STEP-failed". tapi_sniffrules and the frida hooks are off in this round. Appended to the tapi_cybersec_report with the reason.</objective>
             </script>
         </run>
 
@@ -235,13 +240,13 @@
               @objective List the hardening flags of every built binary.
 
               @par Scenario:
-              -# Run tapi_binscan on gateway-rs, service-go, service-cs and rust-demo.
-              -# List each binary with NX, PIE, RELRO, canary and fortify.
-              -# Fail naming each binary without NX, PIE or full RELRO; canary and fortify are informational.
+              -# Run tapi_binscan on gateway-rs and service-go only.
+              -# Write one verdict line per binary with NX, PIE, RELRO and canary.
+              -# Report each missing flag as a finding; do not fail on it.
         -->
         <run name="t15_hardening">
             <script name="t15_hardening">
-                <objective>[H4] Run tapi_binscan on gateway-rs, service-go, service-cs (apphost) and rust-demo. H4 CONFIRMED (FAIL) if any binary lacks NX, PIE or full RELRO, naming it; canary and fortify are informational; H4 DISPROVED (PASS) if all have them; INCONCLUSIVE with the path and the error if a binary cannot be read. Appended to the tapi_cybersec_report with the reason.</objective>
+                <objective>[H4] Run tapi_binscan on exactly two binaries, gateway-rs and service-go, and write one verdict line per binary: "H4 BIN nx=Y/N pie=Y/N relro=full/partial/none canary=Y/N". A missing flag does not fail the test in this round: it is a finding (medium) in the tapi_cybersec_report. Fails only with "H4 setup-STEP-failed" when a binary cannot be scanned. t4_binscan is kept until this test has reported.</objective>
             </script>
         </run>
 

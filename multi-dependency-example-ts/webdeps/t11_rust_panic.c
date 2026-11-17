@@ -3,30 +3,42 @@
 /** @file
  * @brief Webdeps: t11_rust_panic, bad input to gateway-rs (settles H1)
  *
- * Hypothesis H1: gateway-rs exits on a panic at main.rs:30 or main.rs:34.
+ * Hypothesis H1: gateway-rs exits on a malformed request or a dead
+ * upstream (panic! at main.rs:30 and main.rs:34).
  *
- * Sends: gateway-rs is started with its upstream (service-go) not running,
- * which also records whether it panics at start. Its pid and port (the
- * bind of main.rs:33-36) are logged, and a normal request must get 200.
- * Then, aimed at main.rs:30 (the upstream lookup): a request that names
- * another service, bytes that are not HTTP, an empty body, a bad path and a
- * malformed request line; aimed at main.rs:34 (the bind): an oversized
- * request line, an oversized header and a second gateway-rs on the same
- * port. After each input the pid must be alive and a new normal request
- * must be answered. Finally gateway-rs is built with a missing and with an
- * invalid upstream in a copy of the contract and run for 5 s.
+ * Sends and reads, in this order:
+ *  1. gateway-rs is started (its upstream service-go is not running); its
+ *     pid is recorded and one valid request must get a reply (HTTP 200).
+ *  2. A malformed request line, "GARBAGE\r\n\r\n"; wait 2 s; the pid must
+ *     live and a new valid request must get a reply.
+ *  3. The other inputs aimed at main.rs:30 and main.rs:34 (another
+ *     service, not HTTP, empty body, bad path, short request line,
+ *     oversized line and header, a second gateway on the same port), each
+ *     followed by a pid check and a valid request.
+ *  4. gateway-rs is stopped and started again after the upstream port
+ *     (service-go) was checked to be closed; a valid request is sent and
+ *     the pid is checked again.
+ *  5. gateway-rs built with an unset and with an invalid upstream setting
+ *     is run for 5 s.
  *
- * H1 CONFIRMED (fail) if the process exits or a later normal request
- * fails; the exit code and the last stderr lines are logged and put in the
- * verdict. H1 DISPROVED (pass) if the process lives through all inputs and
- * both bad settings. INCONCLUSIVE if the gateway does not start, or if no
- * input reached main.rs:30 (the bad-setting runs did not happen); the
- * verdict says which. Each outcome is appended to the
- * tapi_cybersec_report with its reason.
+ * Verdicts (every one starts with H1; each is logged when reached and the
+ * last one ends the test):
+ *  - "H1 gateway-survives-malformed" (pass): step 2 found the pid alive and
+ *    a reply; H1 is false for a malformed request.
+ *  - "H1 gateway-exited-code-N" (fail): the process ended after the
+ *    malformed request or another input; N is the exit code, or 128 plus
+ *    the signal. H1 is true.
+ *  - "H1 gateway-survives-dead-upstream" (pass) or
+ *    "H1 gateway-exited-dead-upstream-code-N" (fail): step 4.
+ *  - "H1 gateway-exited-bad-setting" (fail): step 5 ended the process.
+ *  - "H1 setup-<step>-failed: ..." (fail): the step named did not work,
+ *    nothing is settled.
+ * The test fails on any exit of the gateway and passes only when every
+ * step found it alive. All outcomes go to the tapi_cybersec_report.
  *
  * Both panic! calls sit in main() before the accept loop, so a client
- * cannot reach them while the gateway runs; only the bad-setting runs do,
- * and the verdict says so when it disproves H1.
+ * cannot reach them while the gateway runs; the dead-upstream start and
+ * the bad-setting runs do.
  *
  * @author midair <midair@localhost>
  */
@@ -42,6 +54,7 @@
 #define BIG_LINE    (4 * 1024 * 1024)
 
 enum {
+    IN_GARBAGE,                                 /* malformed request line */
     IN_OTHER_SVC, IN_NOT_HTTP, IN_EMPTY,        /* aimed at main.rs:30 */
     IN_BAD_PATH,                                /* 404 path in the handler */
     IN_BAD_REQLINE,                             /* malformed request line */
@@ -53,6 +66,7 @@ static const struct {
     const char *name;
     unsigned    line;       /**< The panic! the input is aimed at. */
 } in_info[N_INPUTS] = {
+    { "a malformed request line (GARBAGE)", 30 },
     { "a request that names another service", 30 },
     { "bytes that are not HTTP", 30 },
     { "an empty body", 30 },
@@ -93,6 +107,10 @@ send_input(unsigned port, int which)
 
     switch (which)
     {
+        case IN_GARBAGE:
+            send_once(port, "GARBAGE\r\n\r\n", 10, false, 500);
+            break;
+
         case IN_OTHER_SVC:
             send_once(port, other, sizeof(other) - 1, false, 500);
             break;
@@ -239,6 +257,116 @@ bad_setting(res_t *r, char *note, size_t size)
     return survived;
 }
 
+/** Name of the first failing verdict; empty while nothing failed. */
+static char first_fail[200];
+
+/** Log one named verdict when it is reached; remember the first failure. */
+static void
+named(bool failed, const char *fmt, ...)
+{
+    char    text[200];
+    va_list ap;
+
+    va_start(ap, fmt);
+    vsnprintf(text, sizeof(text), fmt, ap);
+    va_end(ap);
+    RING_VERDICT("%s", text);
+    if (failed && first_fail[0] == '\0')
+        snprintf(first_fail, sizeof(first_fail), "%s", text);
+}
+
+/** Wait until nothing accepts on @p port (a killed gateway frees it). */
+static bool
+port_free_within(unsigned port, int seconds)
+{
+    double end = now_s() + seconds;
+
+    while (port_accepts(port))
+    {
+        if (now_s() > end)
+            return false;
+        usleep(100000);
+    }
+    return true;
+}
+
+/** Step 4: the upstream port is closed; start gateway-rs, ask, check pid. */
+static void
+dead_upstream(res_t *res, proc_t *old, char *seen, size_t seen_size)
+{
+    proc_t *gw;
+    hg_res  h;
+    char    tail[400];
+    int     n;
+
+    TEST_STEP("Check that the upstream port %u (service-go) is closed",
+              tab_port[GO]);
+    if (port_accepts(tab_port[GO]))
+    {
+        res_set(res, R_SETUP, "H1 setup-upstream-port-not-closed: "
+                "127.0.0.1:%u accepts TCP, the dead-upstream case cannot "
+                "be run", tab_port[GO]);
+        return;
+    }
+    if (old != NULL)
+        proc_stop(old);
+    if (!port_free_within(tab_port[GW], 5))
+    {
+        res_set(res, R_SETUP, "H1 setup-stop-gateway-failed: "
+                "127.0.0.1:%u still accepts after the first gateway-rs was "
+                "stopped", tab_port[GW]);
+        return;
+    }
+
+    TEST_STEP("Start gateway-rs with its upstream port closed");
+    gw = svc_start(res, GW);
+    if (gw == NULL)
+    {
+        char orig[900];
+
+        snprintf(orig, sizeof(orig), "%.890s", res->msg);
+        res_set(res, R_SETUP, "H1 setup-start-gateway-dead-upstream-failed:"
+                " %s", orig);
+        return;
+    }
+    RING("webdeps H1: gateway-rs with the upstream closed: pid %d, port %u",
+         (int)gw->pid, gw->port);
+
+    TEST_STEP("Send a valid request and check the pid");
+    http_get(gw->port, REQUEST, PROBE_TO, &h);
+    exited_within(gw);
+    file_tail(gw->err, tail, sizeof(tail));
+    if (proc_gone(gw))
+    {
+        n = exit_n(gw);
+        gw->stopped = true;
+        named(true, "H1 gateway-exited-dead-upstream-code-%d", n);
+        T_FINDING(TAPI_CYBERSEC_SEV_HIGH, "gateway.exited",
+                  "dead upstream", "exit code %d; stderr tail [%s]", n,
+                  tail);
+        res_set(res, R_FAIL, "H1 gateway-exited-dead-upstream-code-%d: "
+                "gateway-rs ended after a valid request with the upstream "
+                "closed; stderr tail [%s]", n, tail);
+        return;
+    }
+    http_get(gw->port, REQUEST, PROBE_TO, &h);
+    if (h.how != HG_OK)
+    {
+        named(true, "H1 gateway-no-reply-dead-upstream");
+        T_FINDING(TAPI_CYBERSEC_SEV_HIGH, "gateway.no-reply",
+                  "dead upstream", "pid %d alive, request %s",
+                  (int)gw->pid, hg_str(h.how));
+        res_set(res, R_FAIL, "H1 gateway-no-reply-dead-upstream: pid %d is "
+                "alive but a valid request got no reply (%s)",
+                (int)gw->pid, hg_str(h.how));
+        return;
+    }
+    named(false, "H1 gateway-survives-dead-upstream");
+    T_FINDING(TAPI_CYBERSEC_SEV_INFO, "gateway.survived", "dead upstream",
+              "pid %d alive, valid request HTTP %d", (int)gw->pid, h.status);
+    append(seen, seen_size, "dead upstream: alive, HTTP %d; ", h.status);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -249,6 +377,7 @@ main(int argc, char **argv)
     char     tail[400];
     char     note[500];
     char     seen[900] = "";
+    bool     exited = false;
     int      i;
 
     TEST_START;
@@ -257,7 +386,12 @@ main(int argc, char **argv)
     gw = svc_start_t(&res, "H1", GW);
     if (gw == NULL)
     {
+        char orig[sizeof(res.msg)];
+
         ERROR("gateway-rs did not start: %s", res.msg);
+        snprintf(orig, sizeof(orig), "%s", res.msg);
+        res_set(&res, R_SETUP, "H1 setup-start-gateway-failed: %.1400s",
+                orig);
         goto verdict;
     }
 
@@ -268,7 +402,7 @@ main(int argc, char **argv)
               "gateway-rs", "no panic at start with the upstream "
               "unreachable; pid %d, port %u", (int)gw->pid, gw->port);
 
-    TEST_STEP("A valid request gets 200");
+    TEST_STEP("A valid request gets a reply");
     http_get(gw->port, REQUEST, PROBE_TO, &h);
     RING("webdeps H1: GET %s -> %s, HTTP %d", REQUEST, hg_str(h.how),
          h.status);
@@ -276,19 +410,19 @@ main(int argc, char **argv)
     {
         exit_code_str(gw, code, sizeof(code));
         file_tail(gw->err, tail, sizeof(tail));
-        res_set(&res, R_SETUP, "H1 not started: gateway-rs did not answer "
-                "the valid request with 200 (%s, HTTP %d, exit status %s; "
-                "stderr tail [%s]); settles nothing", hg_str(h.how),
-                h.status, code, tail);
+        res_set(&res, R_SETUP, "H1 setup-first-valid-request-failed: "
+                "gateway-rs did not answer the valid request with 200 (%s, "
+                "HTTP %d, exit status %s; stderr tail [%s]); settles "
+                "nothing", hg_str(h.how), h.status, code, tail);
         goto verdict;
     }
 
-    for (i = 0; i < N_INPUTS; i++)
+    for (i = 0; i < N_INPUTS && !exited; i++)
     {
         bool gone;
 
-        TEST_STEP("Send %s (aimed at main.rs:%u) and read the exit status",
-                  in_info[i].name, in_info[i].line);
+        TEST_STEP("Send %s (aimed at main.rs:%u), wait %d s and read the "
+                  "exit status", in_info[i].name, in_info[i].line, WAIT_S);
         note[0] = '\0';
         if (i == IN_BIND)
             second_gateway(note, sizeof(note));
@@ -301,18 +435,22 @@ main(int argc, char **argv)
              "[%s]", in_info[i].name, code, tail);
         if (gone)
         {
+            int n = exit_n(gw);
+
             gw->stopped = true;
+            exited = true;
             ERROR("webdeps H1: gateway-rs gone after %s: exit status %s, "
                   "stderr tail [%s]", in_info[i].name, code, tail);
             T_FINDING(TAPI_CYBERSEC_SEV_HIGH, "gateway.exited",
                       in_info[i].name, "exit status %s; stderr tail [%s]",
                       code, tail);
-            res_set(&res, R_FAIL, "H1 CONFIRMED: gateway-rs %s after %s "
-                    "(aimed at main.rs:%u): exit status %s; stderr tail "
-                    "[%s]", WIFSIGNALED(gw->status) ||
+            named(true, "H1 gateway-exited-code-%d", n);
+            res_set(&res, R_FAIL, "H1 gateway-exited-code-%d: gateway-rs %s "
+                    "after %s (aimed at main.rs:%u): exit status %s; stderr "
+                    "tail [%s]", n, WIFSIGNALED(gw->status) ||
                     WEXITSTATUS(gw->status) == 101 ? "panicked" : "exited",
                     in_info[i].name, in_info[i].line, code, tail);
-            goto verdict;
+            break;
         }
 
         TEST_STEP("A valid request after %s", in_info[i].name);
@@ -329,49 +467,89 @@ main(int argc, char **argv)
             h.how = HG_REFUSED;
         if (proc_gone(gw) || h.how != HG_OK || h.status != 200)
         {
+            int n = exit_n(gw);
+
+            exited = true;
             exit_code_str(gw, code, sizeof(code));
             file_tail(gw->err, tail, sizeof(tail));
             ERROR("webdeps H1: after %s: exit status %s, stderr tail [%s]",
                   in_info[i].name, code, tail);
-            res_set(&res, R_FAIL, "H1 CONFIRMED: after %s (aimed at "
-                    "main.rs:%u) the next valid request %s (HTTP %d); exit "
-                    "status %s; stderr tail [%s]", in_info[i].name,
+            if (proc_gone(gw))
+            {
+                gw->stopped = true;
+                named(true, "H1 gateway-exited-code-%d", n);
+            }
+            else
+                named(true, "H1 gateway-no-reply-after-input-%d", i);
+            res_set(&res, R_FAIL, "%s: after %s (aimed at main.rs:%u) the "
+                    "next valid request %s (HTTP %d); exit status %s; "
+                    "stderr tail [%s]", first_fail, in_info[i].name,
                     in_info[i].line, hg_str(h.how), h.status, code, tail);
-            goto verdict;
+            break;
         }
+        if (i == IN_GARBAGE)
+            named(false, "H1 gateway-survives-malformed");
     }
+
+    if (res.kind == R_SETUP)
+        goto verdict;
+
+    /* Step 4 runs whatever happened above: one crash hides nothing. */
+    {
+        res_t   dres = { .kind = R_PASS };
+
+        dead_upstream(&dres, gw, seen, sizeof(seen));
+        if (dres.kind != R_PASS && res.kind == R_PASS)
+            res = dres;
+        else if (dres.kind != R_PASS)
+            append(res.msg, sizeof(res.msg), "; %s", dres.msg);
+    }
+
+    if (res.kind != R_PASS && res.kind != R_FAIL)
+        goto verdict;
 
     TEST_STEP("Start gateway-rs with its setting unset or invalid");
     {
         char bnote[1000] = "";
+        res_t bres = { .kind = R_PASS };
 
-        bad_setting(&res, bnote, sizeof(bnote));
-        if (res.kind == R_SETUP)
-            goto verdict;
-        if (bnote[0] == '\0')
+        bad_setting(&bres, bnote, sizeof(bnote));
+        if (bres.kind == R_SETUP)
         {
-            res_set(&res, R_INCONCLUSIVE, "no input reached the panic! at "
-                    "main.rs:30: the client inputs cannot reach it (it is "
-                    "before the accept loop) and no bad-setting run took "
-                    "place");
-            goto verdict;
+            if (res.kind == R_PASS)
+            {
+                char orig[sizeof(bres.msg)];
+
+                snprintf(orig, sizeof(orig), "%s", bres.msg);
+                res_set(&res, R_SETUP, "H1 setup-bad-setting-failed: %.1400s",
+                        orig);
+            }
         }
-        if (strstr(bnote, "process ended") != NULL)
+        else if (strstr(bnote, "process ended") != NULL)
         {
-            res_set(&res, R_FAIL, "H1 CONFIRMED: gateway-rs with the "
-                    "setting at main.rs:30 unset or invalid does not stay "
-                    "up (panic! at main.rs:30): %s", bnote);
-            goto verdict;
+            named(true, "H1 gateway-exited-bad-setting");
+            if (res.kind == R_PASS)
+                res_set(&res, R_FAIL, "H1 gateway-exited-bad-setting: "
+                        "gateway-rs with the setting at main.rs:30 unset or "
+                        "invalid does not stay up (panic! at main.rs:30): "
+                        "%s", bnote);
         }
+        else if (bnote[0] == '\0' && res.kind == R_PASS)
+            res_set(&res, R_INCONCLUSIVE, "no bad-setting run took place");
     }
 
-    file_tail(gw->err, tail, sizeof(tail));
-    res_set(&res, R_PASS, "H1 DISPROVED for these inputs: gateway-rs (pid "
-            "%d) stayed up with no exit status and answered 200 after each "
-            "of %d inputs aimed at main.rs:30 and main.rs:34 (%s); both "
-            "panic! calls are in main() before the accept loop, so a "
-            "running gateway-rs takes no client input to them; stderr tail "
-            "[%s]", (int)gw->pid, N_INPUTS, seen, tail);
+    if (res.kind == R_PASS)
+    {
+        file_tail(gw->err, tail, sizeof(tail));
+        res_set(&res, R_PASS, "H1 gateway-survives-malformed; H1 "
+                "gateway-survives-dead-upstream: gateway-rs (pid %d) stayed "
+                "up and answered after each of %d inputs aimed at "
+                "main.rs:30 and main.rs:34 and with the upstream closed "
+                "(%s); both panic! calls are in main() before the accept "
+                "loop, so a running gateway-rs takes no client input to "
+                "them; stderr tail [%s]", (int)gw->pid, N_INPUTS, seen,
+                tail);
+    }
 
 verdict:
     T_VERDICT(&res, "H1");

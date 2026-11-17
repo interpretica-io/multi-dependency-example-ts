@@ -788,6 +788,16 @@ exit_code_str(proc_t *p, char *buf, size_t size)
         snprintf(buf, size, "%d", WEXITSTATUS(p->status));
 }
 
+/** N of a "...-code-N" verdict: the exit code, or 128 plus the signal. */
+static int
+exit_n(proc_t *p)
+{
+    proc_gone(p);
+    if (WIFSIGNALED(p->status))
+        return 128 + WTERMSIG(p->status);
+    return WEXITSTATUS(p->status);
+}
+
 /** Start the listed services in order; false (outcome set) on a problem. */
 static bool
 start_all(res_t *r, proc_t **svc, const int *which, int n)
@@ -1048,7 +1058,7 @@ t_report_begin(void)
         else if ((_r)->kind == R_SETUP &&                                   \
                  strncmp(tmp_, _id, strlen(_id)) != 0)                      \
             snprintf((_r)->msg, sizeof((_r)->msg),                          \
-                     "%s INCONCLUSIVE %s: %.1400s", _id, setup_svc, tmp_);  \
+                     "%s setup-%s-failed: %.1400s", _id, setup_svc, tmp_);  \
         T_FINDING((_r)->kind == R_PASS ? TAPI_CYBERSEC_SEV_INFO :           \
                   (_r)->kind == R_FAIL ? TAPI_CYBERSEC_SEV_HIGH :           \
                   TAPI_CYBERSEC_SEV_LOW, "webdeps.verdict", _id, "%s: %s",  \

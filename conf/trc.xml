@@ -9,6 +9,25 @@
         <objective/>
         <notes/>
       </test>
+      <test name="smoke" type="package">
+        <objective/>
+        <notes/>
+        <iter result="PASSED">
+          <notes/>
+          <test name="t0_smoke" type="script">
+            <objective/>
+            <notes>H0: TEST_VERDICT ends the test with the fixed verdict; FAILED with it is the reported result.</notes>
+            <iter result="FAILED">
+              <notes/>
+              <results>
+                <result value="FAILED">
+                  <verdict>H0 smoke-verdict-reported</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+        </iter>
+      </test>
       <test name="ring" type="package">
         <objective/>
         <notes/>
@@ -1155,7 +1174,7 @@
             <objective/>
             <notes/>
           </test>
-          <test name="t12_go_idle" type="script">
+          <test name="t12_idle" type="script">
             <objective/>
             <notes/>
           </test>

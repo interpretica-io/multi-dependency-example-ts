@@ -13,7 +13,7 @@ tests = [
     't10_build_python',
     't4_binscan',
     't11_rust_panic',
-    't12_go_idle',
+    't12_idle',
     't13_cs_swallow',
     't14_exposure',
     't15_hardening',

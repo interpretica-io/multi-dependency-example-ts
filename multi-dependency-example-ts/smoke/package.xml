@@ -1,0 +1,27 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>Smoke test of the run itself</description>
+
+    <!-- @page mde-smoke Smoke Test of the Run
+          @objective Show that the run reports a verdict for a test (H0).
+
+          @par Test Groups:
+          - @ref mde-smoke-t0_smoke - Fixed verdict, no service (H0)
+    -->
+
+    <author mailto="midair@localhost" />
+
+    <session track_conf="silent">
+        <!-- @page mde-smoke-t0_smoke Fixed verdict, no service (H0)
+              @objective Report one fixed verdict without starting anything.
+
+              @par Scenario:
+              -# Call TEST_VERDICT with "H0 smoke-verdict-reported".
+        -->
+        <run name="t0_smoke">
+            <script name="t0_smoke">
+                <objective>[H0] Start no service. Call TEST_VERDICT with the fixed string "H0 smoke-verdict-reported", then TEST_SUCCESS. The run log must carry that verdict for this test; no verdict means H0 is false and no other result is trusted.</objective>
+            </script>
+        </run>
+    </session>
+</package>

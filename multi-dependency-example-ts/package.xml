@@ -7,6 +7,7 @@
                      of each dependency cycle of the multi-dependency-example.
 
           @par Test Groups:
+          - @ref mde-smoke - one fixed verdict, no service: the run reports a verdict (H0)
           - @ref mde-ring - the native FFI ring (C++/Rust/Go/C#/Python), checked step by step against a model
           - @ref mde-web - the HTTP web tier (gateway-rs/service-go/service-cs)
           - @ref mde-webdeps - hypotheses H1-H5 about gateway-rs, service-go, service-cs and the language builds, the built binaries, plus a smoke test per language
@@ -68,6 +69,13 @@
                 </objective>
             </script>
         </epilogue>
+
+        <!-- @page mde-smoke Smoke Test of the Run
+              @objective One test with a fixed verdict and no service (H0).
+        -->
+        <run>
+            <package name="smoke" />
+        </run>
 
         <!-- @page mde-ring Ring Tests
               @objective The native FFI ring (C++/Rust/Go/C#/Python), checked step by step against a model.

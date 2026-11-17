@@ -4,25 +4,30 @@
  * @brief Webdeps: t14_exposure, listeners and outbound destinations of the
  *        web tier (settles H3)
  *
- * Hypothesis H3: the web services listen on, or call, addresses fixed in
- * the code (main.rs:33-36, Program.cs:24,34,78, main.go:46,87).
+ * Hypothesis H3: a service listens on a non-loopback address (the
+ * addresses fixed in main.rs:33-34, Program.cs:24 and main.go:51).
  *
- * Sends: starts gateway-rs, service-go and service-cs, starts tapi_sniffrules
- * captures on the loopback interface and on the first external interface
- * and tries to hook the three processes with frida. Normal requests then go
- * through the three services. tapi_netexpose records every listening
- * address and port (and whether a non-loopback bind is reachable from
- * outside); tapi_egress reads every outbound connection against an allowed
- * list that holds loopback only; the frida hooks, where they attach, trace
- * connect() against the same list. A hook that cannot attach is dropped and
- * logged. Every URL on the source lines above is logged.
+ * Sends and reads: starts gateway-rs, the C# service (service-cs) and the
+ * Go service (service-go). Normal requests go through the three services.
+ * tapi_netexpose reads every listening socket; each listener owned by one
+ * of the three processes is written as one verdict line "H3 listener
+ * PROC ADDR:PORT". tapi_egress reads the outbound connections against an
+ * allowed list of loopback only; the literal endpoints of the source
+ * lines are logged. The tapi_sniffrules captures and the frida hooks are
+ * not run in this round (T14_CAPTURE_HOOKS is 0): they gave no verdict
+ * twice and come back only after t0_smoke and this test report.
  *
- * H3 CONFIRMED (fail) if a service binds a non-loopback address that is
- * not in the allowed list, or if tapi_egress, the frida hooks or the
- * captures see a destination that is not loopback. H3 DISPROVED (pass)
- * otherwise. INCONCLUSIVE if a service does not start or does not build,
- * or if tapi_netexpose or tapi_egress return no data. Each outcome is
- * appended to the tapi_cybersec_report with its reason.
+ * Verdicts (every one starts with H3):
+ *  - "H3 listener PROC ADDR:PORT": one line per listener, informational.
+ *  - "H3 all-loopback" (pass): every bind address is 127.0.0.1 or ::1 and
+ *    every outbound destination is loopback; H3 is false.
+ *  - "H3 non-loopback-PROC-ADDR:PORT" (fail): PROC binds ADDR:PORT, which
+ *    is not 127.0.0.1 or ::1; H3 is true. A destination outside loopback
+ *    reads "H3 egress-non-loopback-PROC-ADDR:PORT" (fail).
+ *  - "H3 setup-<step>-failed: ..." (fail): the step named did not work
+ *    (a service did not start, a scanner returned no data); nothing is
+ *    settled.
+ * Each outcome is appended to the tapi_cybersec_report with its reason.
  *
  * @author midair <midair@localhost>
  */
@@ -40,6 +45,16 @@
 #include "webdeps_lib.h"
 
 #define EVID_LEN    700
+
+/** 1 runs the tapi_sniffrules captures and the frida hooks; off this round. */
+#define T14_CAPTURE_HOOKS   0
+
+/** The only bind addresses the test accepts. */
+static bool
+bind_allowed(const char *addr)
+{
+    return strcmp(addr, "127.0.0.1") == 0 || strcmp(addr, "::1") == 0;
+}
 
 /** Source lines holding the hardcoded endpoints, per service. */
 static const unsigned gw_lines[] = { 33, 34, 35, 36 };
@@ -241,6 +256,7 @@ hook_judge(tapi_frida_app *app, const char *name, char *evid, size_t size)
     return outside;
 }
 
+/** H3: start the three services, record every listener, check each is loopback. */
 int
 main(int argc, char **argv)
 {
@@ -261,6 +277,8 @@ main(int argc, char **argv)
     te_vec               socks = TE_VEC_INIT(tapi_netexpose_socket);
     const tapi_netexpose_socket *s;
     const int            which[] = { GO, CS, GW };
+    char                 first_bad[200] = "";
+    char                 first_egress[200] = "";
     char                 evid[EVID_LEN] = "";
     char                 listen_[EVID_LEN] = "";
     char                 egress[EVID_LEN] = "";
@@ -280,7 +298,8 @@ main(int argc, char **argv)
     if (tsapi_mde_session_init(&session, "t14_exposure") != 0)
     {
         setup_svc = "agent";
-        res_set(&res, R_SETUP, "no session on the agent for the scanners");
+        res_set(&res, R_SETUP, "H3 setup-open-session-failed: no session "
+                "on the agent for the scanners");
         goto verdict;
     }
 
@@ -289,12 +308,21 @@ main(int argc, char **argv)
     {
         svc[which[i]] = svc_start_exposed(&res, &session, which[i]);
         if (svc[which[i]] == NULL)
+        {
+            char orig[sizeof(res.msg)];
+
+            snprintf(orig, sizeof(orig), "%s", res.msg);
+            res_set(&res, R_SETUP, "H3 setup-start-%s-failed: %.1400s",
+                    names[which[i]], orig);
             goto verdict;
+        }
     }
 
     opt.udp = false;
     opt.tcp = true;
 
+    if (T14_CAPTURE_HOOKS)
+    {
     TEST_STEP("Capture on loopback and on an external interface");
     sniff_start(&session, "lo", &ss_lo);
     if (first_external_iface(ext_if, sizeof(ext_if)))
@@ -326,6 +354,7 @@ main(int argc, char **argv)
             hook_attach(&session, script_path.ptr, names[i], &hooks[i]);
         sleep(2);
     }
+    }
 
     TEST_STEP("Literal endpoints in the sources");
     n_lit += endpoint_scan("web/gateway-rs/src/main.rs", gw_lines,
@@ -341,8 +370,8 @@ main(int argc, char **argv)
     if (tapi_netexpose_sockets(session.factory, &opt, &socks) != 0)
     {
         setup_svc = "tapi_netexpose";
-        res_set(&res, R_INCONCLUSIVE, "tapi_netexpose cannot read the "
-                "socket tables");
+        res_set(&res, R_SETUP, "H3 setup-netexpose-failed: tapi_netexpose "
+                "cannot read the socket tables");
         goto verdict;
     }
     TE_VEC_FOREACH(&socks, s)
@@ -359,10 +388,12 @@ main(int argc, char **argv)
         if (o < 0)
             continue;
         sock_addr(&s->local, addr, sizeof(addr));
-        wild = !is_loopback(addr);
+        wild = !bind_allowed(addr);
         outside = wild && reachable_outside(sock_port(&s->local), via,
                                             sizeof(via));
         n_listen++;
+        RING_VERDICT("H3 listener %s %s:%u", names[o], addr,
+                     sock_port(&s->local));
         append(listen_, sizeof(listen_), "%s %s:%u%s; ", names[o], addr,
                sock_port(&s->local), wild ? " (NON-LOOPBACK)" : "");
         RING("webdeps H3: %s listens on %s:%u, non-loopback bind %s, "
@@ -378,14 +409,18 @@ main(int argc, char **argv)
             n_bad_listen++;
             append(evid, sizeof(evid), "%s listens on %s:%u; ", names[o],
                    addr, sock_port(&s->local));
+            if (first_bad[0] == '\0')
+                snprintf(first_bad, sizeof(first_bad),
+                         "H3 non-loopback-%s-%s:%u", names[o], addr,
+                         sock_port(&s->local));
         }
     }
     te_vec_free(&socks);
     if (n_listen == 0)
     {
         setup_svc = "tapi_netexpose";
-        res_set(&res, R_INCONCLUSIVE, "tapi_netexpose shows no listening "
-                "socket of the three services");
+        res_set(&res, R_SETUP, "H3 setup-netexpose-failed: tapi_netexpose "
+                "shows no listening socket of the three services");
         goto verdict;
     }
 
@@ -403,8 +438,8 @@ main(int argc, char **argv)
         if (tapi_egress_snapshot(session.factory, &opt, &conns) != 0)
         {
             setup_svc = "tapi_egress";
-            res_set(&res, R_INCONCLUSIVE, "tapi_egress cannot read the "
-                    "connections of the agent");
+            res_set(&res, R_SETUP, "H3 setup-egress-failed: tapi_egress "
+                    "cannot read the connections of the agent");
             te_vec_free(&conns);
             goto verdict;
         }
@@ -438,6 +473,10 @@ main(int argc, char **argv)
                           addr, sock_port(&c->remote));
                 append(evid, sizeof(evid), "%s connects to %s:%u; ", names[o],
                        addr, sock_port(&c->remote));
+                if (first_egress[0] == '\0')
+                    snprintf(first_egress, sizeof(first_egress),
+                             "H3 egress-non-loopback-%s-%s:%u", names[o],
+                             addr, sock_port(&c->remote));
             }
         }
         te_vec_free(&conns);
@@ -461,13 +500,14 @@ main(int argc, char **argv)
 
     if (n_bad_listen > 0 || n_bad_egress > 0 || n_bad_cap > 0 ||
         n_bad_hook > 0)
-        res_set(&res, R_FAIL, "H3 CONFIRMED: %s listeners: %s outbound: %s",
-                evid, listen_, egress[0] != '\0' ? egress : "(none)");
+        res_set(&res, R_FAIL, "%s: %s listeners: %s outbound: %s",
+                first_bad[0] != '\0' ? first_bad : first_egress[0] != '\0' ?
+                first_egress : "H3 non-loopback-traffic", evid, listen_,
+                egress[0] != '\0' ? egress : "(none)");
     else
-        res_set(&res, R_PASS, "H3 DISPROVED: every listener is on loopback "
-                "(%s) and every outbound destination (%u connection "
-                "sample(s): %s) is loopback; the captures and the frida "
-                "hooks saw nothing else%s", listen_,
+        res_set(&res, R_PASS, "H3 all-loopback: every listener is on "
+                "127.0.0.1 or ::1 (%s) and every outbound destination (%u connection "
+                "sample(s): %s) is loopback%s", listen_,
                 n_conns, egress[0] != '\0' ? egress : "none seen",
                 n_lit > 0 ? "; note: some literal lines name hosts outside "
                 "the allowed list, see the report" : "");

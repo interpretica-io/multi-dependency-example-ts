@@ -67,9 +67,19 @@ step log-mi   "${TE_LOG}" --mi --output-to="${OUT}/mi.txt" "${RAW}"
 
 if [ -f "${OUT}/mi.txt" ] ; then
     # rgt-bublik-json reads "timestamp line, JSON line" pairs; log.sh --mi
-    # of this TE writes one JSON per line, so give it the pairs.
-    awk '/^\{/ { print "0"; print; next } { print }' "${OUT}/mi.txt" \
-        > "${TE_TMP}/mi-ts.txt"
+    # of this TE writes the JSON without times. Take the real time of each
+    # message from the text log, so Bublik gets a run start and end it can
+    # tell from every other run (a run stamped 1970 has no run id to find).
+    # Without a match between the two files fall back to a zero time and
+    # say so in the notes.
+    if ! python3 -I "${TS_TOPDIR}/scripts/mi_timestamps.py" "${OUT}/mi.txt" \
+         "${OUT}/log.txt" "${RAW}" "${TE_TMP}/mi-ts.txt" \
+         2> "${OUT}/.mi-timestamps.log" ; then
+        echo "bublik: no real times for the MI messages, see" \
+             ".mi-timestamps.log; the run is stamped 1970" >> "${NOTES}"
+        awk '/^\{/ { print "0"; print; next } { print }' "${OUT}/mi.txt" \
+            > "${TE_TMP}/mi-ts.txt"
+    fi
     step bublik python3 "${TE_BASE}/tools/rgt/rgt-bublik-json" \
                         -m "${TE_TMP}/mi-ts.txt" -o "${OUT}/bublik.json"
 fi
