@@ -1172,7 +1172,18 @@
           </test>
           <test name="t11_rust_panic" type="script">
             <objective/>
-            <notes/>
+            <notes>H1: a malformed request line and a dead upstream leave gateway-rs running; a start with the upstream setting unset or invalid panics at main.rs:30 and contract.rs:38 and the test fails on that exit.</notes>
+            <iter result="FAILED">
+              <notes/>
+              <results>
+                <result value="FAILED">
+                  <verdict>H1 gateway-survives-malformed</verdict>
+                  <verdict>H1 gateway-survives-dead-upstream</verdict>
+                  <verdict>H1 gateway-exited-bad-setting</verdict>
+                  <verdict>H1 gateway-exited-bad-setting: gateway-rs with the upstream setting unset or invalid does not stay up (panic! at start-up); exit status and stderr are in the log</verdict>
+                </result>
+              </results>
+            </iter>
           </test>
           <test name="t12_idle" type="script">
             <objective/>

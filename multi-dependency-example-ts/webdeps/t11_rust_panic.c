@@ -530,9 +530,10 @@ main(int argc, char **argv)
             named(true, "H1 gateway-exited-bad-setting");
             if (res.kind == R_PASS)
                 res_set(&res, R_FAIL, "H1 gateway-exited-bad-setting: "
-                        "gateway-rs with the setting at main.rs:30 unset or "
-                        "invalid does not stay up (panic! at main.rs:30): "
-                        "%s", bnote);
+                        "gateway-rs with the upstream setting unset or "
+                        "invalid does not stay up (panic! at start-up); "
+                        "exit status and stderr are in the log");
+            RING("webdeps H1: bad-setting runs: %s", bnote);
         }
         else if (bnote[0] == '\0' && res.kind == R_PASS)
             res_set(&res, R_INCONCLUSIVE, "no bad-setting run took place");
