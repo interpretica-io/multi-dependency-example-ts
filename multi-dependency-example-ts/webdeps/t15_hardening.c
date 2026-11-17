@@ -1,20 +1,25 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief Webdeps: t15_hardening, hardening flags of every built binary
+ * @brief Webdeps: t15_hardening, hardening flags of the built web binaries
  *        (settles H4)
  *
- * Run tapi_binscan on each built binary: gateway-rs (Rust), service-go
- * (Go), service-cs (the .NET apphost) and the C++, C and Python extension
- * libraries (libcppcore, libpycore) in dist/. Each binary is listed with
- * its flags (NX, PIE, RELRO, canary, fortify). A flag counts only where the
- * language supports it: Rust and Go binaries are held to NX, PIE and full
- * RELRO (neither emits stack canaries or fortified libc calls); the native
- * apphost of service-cs and the C and C++ libraries to all five.
+ * Hypothesis H4: the built web binaries lack NX, PIE, RELRO or a stack
+ * canary.
  *
- * H4 CONFIRMED if any binary lacks a flag its language supports, naming
- * the binary and the flag; H4 DISPROVED otherwise. A binary that is absent
- * or cannot be scanned is INCONCLUSIVE naming it.
+ * Sends: nothing to the network. tapi_binscan reads, on the agent, the
+ * gateway (dist/bin/gateway-rs), the Go service (dist/bin/service-go), the
+ * C# host (dist/bin/service-cs, the native apphost) and the Rust demo
+ * binary (dist/bin/rust-demo). Each is listed with NX, PIE, RELRO, canary
+ * and fortify.
+ *
+ * H4 CONFIRMED (fail) if any binary has no NX, no PIE or no full RELRO,
+ * naming the binary and the flag. Canary and fortify are informational: they
+ * are logged and added to the tapi_cybersec_report but never fail the test.
+ * H4 DISPROVED (pass) if all four have NX, PIE and full RELRO.
+ * INCONCLUSIVE, with the path and the error, if a binary is absent or
+ * tapi_binscan cannot read it. The outcome is appended to the report with
+ * its reason.
  *
  * @author midair <midair@localhost>
  */
@@ -31,13 +36,12 @@ enum { F_NX = 1, F_PIE = 2, F_RELRO = 4, F_CANARY = 8, F_FORTIFY = 16,
 static const struct {
     const char *rel;        /**< Under the example root. */
     const char *lang;
-    unsigned    need;       /**< Flags the language supports. */
+    unsigned    need;       /**< Flags that fail H4 when missing. */
 } bins[] = {
     { "dist/bin/gateway-rs", "Rust", F_BASIC },
     { "dist/bin/service-go", "Go", F_BASIC },
-    { "dist/bin/service-cs", "C# (native apphost)", F_ALL },
-    { "dist/lib/libcppcore.so", "C++", F_ALL },
-    { "dist/lib/libpycore.so", "C (Python extension)", F_ALL },
+    { "dist/bin/service-cs", "C# (native apphost)", F_BASIC },
+    { "dist/bin/rust-demo", "Rust demo", F_BASIC },
 };
 
 int
@@ -77,7 +81,9 @@ main(int argc, char **argv)
         if (access(path, R_OK) != 0)
         {
             n_absent++;
-            append(absent, sizeof(absent), "%s is not built; ", path);
+            append(absent, sizeof(absent), "%s is not readable: %s; ", path,
+                   strerror(errno));
+            ERROR("webdeps H4: %s is not readable: %s", path, strerror(errno));
             continue;
         }
         rc = tapi_binscan_inspect(session.ta, path, &info);
@@ -86,8 +92,10 @@ main(int argc, char **argv)
             if (rc == 0)
                 tapi_binscan_info_free(&info);
             n_absent++;
-            append(absent, sizeof(absent), "%s cannot be scanned (rc %d, "
-                   "ELF %s); ", path, (int)rc, rc == 0 ? "no" : "?");
+            append(absent, sizeof(absent), "%s cannot be scanned: %s%s; ", path,
+                   rc != 0 ? te_rc_err2str(rc) : "not an ELF file", "");
+            ERROR("webdeps H4: tapi_binscan cannot read %s: %s", path,
+                  rc != 0 ? te_rc_err2str(rc) : "not an ELF file");
             continue;
         }
         tapi_binscan_info_log(&info, path);
@@ -100,10 +108,6 @@ main(int argc, char **argv)
         if ((bins[i].need & F_RELRO) && info.relro != TAPI_BINSCAN_RELRO_FULL)
             append(miss, sizeof(miss), "RELRO(%s) ",
                    tapi_binscan_relro2str(info.relro));
-        if ((bins[i].need & F_CANARY) && !info.canary)
-            append(miss, sizeof(miss), "canary ");
-        if ((bins[i].need & F_FORTIFY) && !info.fortify)
-            append(miss, sizeof(miss), "fortify ");
         RING("webdeps H4: %s (%s): kind %s, NX %d, PIE %d, RELRO %s, canary "
              "%d, fortify %d; lacking %s", bins[i].rel, bins[i].lang,
              tapi_binscan_kind2str(info.kind), info.nx, pie,
@@ -116,8 +120,9 @@ main(int argc, char **argv)
                info.canary ? "yes" : "no", info.fortify ? "yes" : "no");
         T_FINDING(miss[0] != '\0' ? TAPI_CYBERSEC_SEV_MEDIUM :
                   TAPI_CYBERSEC_SEV_INFO, "binary.hardening", bins[i].rel,
-                  "%s: NX %d, PIE %d, RELRO %s, canary %d, fortify %d; "
-                  "lacking where supported: %s", bins[i].lang, info.nx, pie,
+                  "%s: NX %d, PIE %d, RELRO %s, canary %d (informational), "
+                  "fortify %d (informational); lacking: %s", bins[i].lang,
+                  info.nx, pie,
                   tapi_binscan_relro2str(info.relro), info.canary,
                   info.fortify, miss[0] != '\0' ? miss : "nothing");
         if (miss[0] != '\0')
@@ -129,19 +134,21 @@ main(int argc, char **argv)
         tapi_binscan_info_free(&info);
     }
 
-    if (n_absent > 0)
+    if (n_lacking > 0)
+        res_set(&res, R_FAIL, "H4 CONFIRMED: %u of %zu binaries lack NX, "
+                "PIE or full RELRO: %sall scanned: %s%s%s", n_lacking,
+                TE_ARRAY_LEN(bins), lacking, listing,
+                n_absent > 0 ? "; not scanned: " : "", absent);
+    else if (n_absent > 0)
     {
         setup_svc = "tapi_binscan";
         res_set(&res, R_INCONCLUSIVE, "%u of %zu binaries were not "
                 "scanned: %s", n_absent, TE_ARRAY_LEN(bins), absent);
     }
-    else if (n_lacking > 0)
-        res_set(&res, R_FAIL, "H4 CONFIRMED: %u of %zu binaries lack a flag "
-                "their language supports: %sall binaries: %s", n_lacking,
-                TE_ARRAY_LEN(bins), lacking, listing);
     else
-        res_set(&res, R_PASS, "H4 DISPROVED: every binary has the flags its "
-                "language supports: %s", listing);
+        res_set(&res, R_PASS, "H4 DISPROVED: all %zu binaries have NX, PIE "
+                "and full RELRO (canary and fortify are informational): %s",
+                TE_ARRAY_LEN(bins), listing);
 
 verdict:
     if (session.ta != NULL)

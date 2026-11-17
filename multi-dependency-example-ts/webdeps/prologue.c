@@ -35,7 +35,7 @@ main(int argc, char **argv)
     session_up = true;
 
     TEST_STEP("Install the toolchains and build the example if needed");
-    TSAPI_MDE_ENSURE(session, "base build");
+    TSAPI_MDE_ENSURE(session, "base build exposure soft");
 
     TEST_SUCCESS;
 

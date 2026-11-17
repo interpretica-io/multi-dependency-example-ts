@@ -10,6 +10,10 @@
 # Components: base (toolchains and inspection tools, the default), build (the
 # example itself), exposure (tcpdump, sudo, frida), fuzz (clang with the
 # fuzzer runtime), docker (the docker CLI and a daemon that answers), browser (node, playwright, chromium), all.
+# The component soft turns a failed .NET install or a failed build of the
+# example into a "WARNING" line on stdout (exit status 0), so the tests that
+# depend on the failed part report the cause themselves instead of the whole
+# group having no verdict.
 # Exit status 0 when everything is in place; otherwise 1 and a line starting
 # with "ensure-web-deps:" says what went wrong.
 
@@ -20,6 +24,15 @@ case " ${COMPONENTS} " in *" all "*) COMPONENTS="base build exposure fuzz browse
 want() { case " ${COMPONENTS} " in *" $1 "*) return 0 ;; esac; return 1; }
 
 die() { echo "ensure-web-deps: $*" >&2; exit 1; }
+
+# With the component soft a failure is reported on stdout and the run goes on.
+soft_die() {
+    if want soft ; then
+        echo "ensure-web-deps: WARNING: $*"
+        return 0
+    fi
+    die "$@"
+}
 
 [ -n "${ROOT}" ] && [ -d "${ROOT}" ] || die "no example at '${ROOT}'"
 
@@ -100,9 +113,9 @@ if ! have_dotnet9 ; then
             ${SUDO} bash /tmp/dotnet-install.sh --channel 9.0 \
                 --install-dir /usr/share/dotnet >&2 &&
             ${SUDO} ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet ||
-            die "cannot install the .NET 9 SDK (apt-get install dotnet-sdk-9.0 and dotnet-install.sh both failed)"
+            soft_die "cannot install the .NET 9 SDK (apt-get install dotnet-sdk-9.0 and dotnet-install.sh both failed)"
     fi
-    have_dotnet9 || die "no .NET 9 SDK after the install (dotnet --list-sdks: $(dotnet --list-sdks 2>&1 | tr '\n' ' '))"
+    have_dotnet9 || soft_die "no .NET 9 SDK after the install (dotnet --list-sdks: $(dotnet --list-sdks 2>&1 | tr '\n' ' '))"
 fi
 
 export DEBIAN_FRONTEND=noninteractive
@@ -122,18 +135,20 @@ if want exposure ; then
     if ! command -v frida >/dev/null 2>&1 ; then
         pip3 install frida-tools >&2 ||
             pip3 install --break-system-packages frida-tools >&2 ||
-            die "pip install frida-tools failed"
+            soft_die "pip install frida-tools failed"
     fi
-    command -v frida >/dev/null 2>&1 || die "frida is still missing after pip install"
+    command -v frida >/dev/null 2>&1 || soft_die "frida is still missing after pip install"
 fi
 
 if want fuzz ; then
     if ! command -v clang >/dev/null 2>&1 || ! command -v llvm-symbolizer >/dev/null 2>&1 ; then
         echo "ensure-web-deps: installing clang and the fuzzer runtime"
         apt_update
-        ${SUDO} apt-get install -y clang llvm libclang-rt-dev libfuzzer-dev >&2 ||
-            ${SUDO} apt-get install -y clang llvm >&2 ||
-            die "apt-get install clang llvm failed"
+        ${SUDO} apt-get install -y clang llvm libclang-rt-dev >&2 ||
+            die "apt-get install clang llvm libclang-rt-dev failed"
+        CV="$(clang --version | sed -n 's/.*version \([0-9][0-9]*\)\..*/\1/p' | head -n 1)"
+        # The fuzzer archive ships per clang version where it is separate.
+        [ -z "${CV}" ] || ${SUDO} apt-get install -y "libfuzzer-${CV}-dev" >&2 || true
     fi
     command -v clang >/dev/null 2>&1 || die "clang is still missing after the install"
     T="$(mktemp -d /tmp/mde-fz.XXXXXX)"
@@ -227,9 +242,10 @@ esac
 echo "ensure-web-deps: building the example in ${ROOT}"
 if ! ( cd "${ROOT}" && PATH="${SHIM}:${PATH}" ./build.sh ) > /tmp/mde-ensure-build.log 2>&1 ; then
     tail -n 25 /tmp/mde-ensure-build.log >&2
-    die "build.sh failed (full log /tmp/mde-ensure-build.log)"
+    want soft && tail -n 25 /tmp/mde-ensure-build.log
+    soft_die "build.sh failed (full log /tmp/mde-ensure-build.log)"
 fi
 for b in cpp-demo gateway-rs service-go service-cs ; do
-    built "$b" || die "dist/bin/$b was not produced by build.sh"
+    built "$b" || soft_die "dist/bin/$b was not produced by build.sh"
 done
-echo "ensure-web-deps: built"
+echo "ensure-web-deps: build finished"

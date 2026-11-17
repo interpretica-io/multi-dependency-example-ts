@@ -4,7 +4,11 @@
  * @brief Webdeps: t13_cs_swallow, service-cs answers success on errors
  *        (settles CS1)
  *
- * Start service-cs alone and check that a valid request gets 200. Then
+ * Support test for H3 (service-cs): no hypothesis of its own, it gates H3.
+ * If service-cs does not start or was not built, the error is logged and H3
+ * is INCONCLUSIVE for it. Its verdict id is CS1.
+ *
+ * Sends: service-cs is started alone and a valid request must get 200. Then
  * send it inputs that reach the exception handling near Program.cs:85:
  * payloads that cannot be parsed (value and hops of the wrong type) and a
  * valid request whose upstream is unreachable (gateway-rs is not running,

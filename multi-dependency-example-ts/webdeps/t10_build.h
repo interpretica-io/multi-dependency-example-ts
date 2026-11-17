@@ -11,7 +11,7 @@
  *
  * Every command is logged with its exit code and the first 40 lines of its
  * output. A build that fails fails the test with the compiler text; a tool
- * that is not on the agent after the prologue is a SKIP naming the tool.
+ * that is not on the agent after the prologue is an INCONCLUSIVE naming the tool.
  * The number of compiler warnings and the hardcoded endpoints of the
  * language's service are added to the report as findings; they settle
  * nothing by themselves.
@@ -70,6 +70,19 @@ typedef struct t10_lang {
     const t10_endpoints *ep;    /**< Hardcoded endpoints to report. */
 } t10_lang;
 
+/** Text naming the hypotheses a failed build of the service leaves open. */
+static const char *
+t10_gates(const t10_lang *l)
+{
+    static char buf[120];
+
+    if (l->service == NULL)
+        return "";
+    snprintf(buf, sizeof(buf), "; %s is INCONCLUSIVE for %s", gates[l->port_idx],
+             names[l->port_idx]);
+    return buf;
+}
+
 /** Version of the compiler and its path, the first thing every test logs. */
 static bool
 t10_tools(res_t *r, const t10_lang *l)
@@ -91,10 +104,14 @@ t10_tools(res_t *r, const t10_lang *l)
         log_command("tool", cmd, p);
         if (!WIFEXITED(p->status) || WEXITSTATUS(p->status) != 0)
         {
-            res_set(r, R_SKIP, "B1 SKIP: tool %s is not on the agent",
-                    l->tools[i]);
+            ERROR("webdeps B1: tool %s is not on the agent after the "
+                  "prologue", l->tools[i]);
+            res_set(r, R_INCONCLUSIVE, "tool %s is not on the agent "
+                    "after the prologue, so %s was not built%s", l->tools[i],
+                    l->id, t10_gates(l));
             T_FINDING(TAPI_CYBERSEC_SEV_LOW, "build.tool-missing",
-                      l->tools[i], "not found: build of %s skipped", l->id);
+                      l->tools[i], "not found: build of %s not possible",
+                      l->id);
             return false;
         }
         if (strstr(l->tools[i], "gcc") != NULL ||
@@ -161,8 +178,8 @@ t10_run(res_t *r, const t10_lang *l)
         p = run_sh(r, "build", s->cmd, BUILD_TO);
         if (p == NULL)
         {
-            res_set(r, R_FAIL, "B1 FAIL: %s: build of %s did not finish: %s",
-                    l->id, s->name, r->msg);
+            res_set(r, R_FAIL, "B1 FAIL: %s: build of %s did not finish: %s%s",
+                    l->id, s->name, r->msg, t10_gates(l));
             return;
         }
         log_command("build", s->cmd, p);
@@ -175,8 +192,10 @@ t10_run(res_t *r, const t10_lang *l)
             T_FINDING(TAPI_CYBERSEC_SEV_HIGH, "example.build", s->name,
                       "build failed, exit code %s: %s", code, all_err);
             res_set(r, R_FAIL, "B1 FAIL: %s: build of %s (%s) failed, exit "
-                    "code %s; compiler text: [%.900s]", l->id, s->name,
-                    s->src, code, all_err);
+                    "code %s; compiler text: [%.800s]%s", l->id, s->name,
+                    s->src, code, all_err, t10_gates(l));
+            ERROR("webdeps B1: build of %s failed, exit code %s: %s", s->name,
+                  code, all_err);
             T_FINDING(TAPI_CYBERSEC_SEV_LOW, "build.warnings", l->id,
                       "%u warning line(s) in the build logs before the "
                       "failure", warnings);

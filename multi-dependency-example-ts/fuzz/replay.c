@@ -119,8 +119,8 @@ main(int argc, char **argv)
     double                  t0;
 
     TEST_START;
-    TSAPI_MDE_PROLOGUE_GATE("fuzz");
     tsapi_mde_report_init(&report);
+    TSAPI_MDE_PROLOGUE_GATE("fuzz");
 
     TEST_STEP("Parse test parameters");
     TEST_GET_MDE_SEVERITY(min_sev);

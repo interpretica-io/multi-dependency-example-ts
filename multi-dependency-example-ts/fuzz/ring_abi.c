@@ -230,8 +230,8 @@ main(int argc, char **argv)
     const char             *p;
 
     TEST_START;
-    TSAPI_MDE_PROLOGUE_GATE("fuzz");
     tsapi_mde_report_init(&report);
+    TSAPI_MDE_PROLOGUE_GATE("fuzz");
 
     TEST_STEP("Parse test parameters");
     TEST_GET_STRING_PARAM(target);

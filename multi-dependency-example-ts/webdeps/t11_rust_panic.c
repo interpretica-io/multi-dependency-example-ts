@@ -3,26 +3,30 @@
 /** @file
  * @brief Webdeps: t11_rust_panic, bad input to gateway-rs (settles H1)
  *
- * Start gateway-rs and check that a valid request gets 200. Then send
- * input aimed at the panic! of main.rs:30 (the lookup of the upstream in
- * the contract: a request that names another service, a request that is
- * not HTTP and one that has no query) and input aimed at the panic! of
- * main.rs:34 (the bind: an oversized request line and an oversized header,
- * and a second gateway-rs started on the same port, whose own bind fails).
- * After each input the test reads the exit status of the gateway process
- * and sends a valid request again.
+ * Hypothesis H1: gateway-rs exits on a panic at main.rs:30 or main.rs:34.
  *
- * H1 CONFIRMED if the process exits or the second request fails. H1
- * DISPROVED for that input if the process stays up and answers. A gateway
- * that does not start, or that fails the first valid request, fails the
- * test with the reason "not started" and settles nothing.
+ * Sends: gateway-rs is started with its upstream (service-go) not running,
+ * which also records whether it panics at start. Its pid and port (the
+ * bind of main.rs:33-36) are logged, and a normal request must get 200.
+ * Then, aimed at main.rs:30 (the upstream lookup): a request that names
+ * another service, bytes that are not HTTP, an empty body, a bad path and a
+ * malformed request line; aimed at main.rs:34 (the bind): an oversized
+ * request line, an oversized header and a second gateway-rs on the same
+ * port. After each input the pid must be alive and a new normal request
+ * must be answered. Finally gateway-rs is built with a missing and with an
+ * invalid upstream in a copy of the contract and run for 5 s.
  *
- * The setting at main.rs:30-34 is also set to an unset and an invalid
- * value, in builds of gateway-rs made from a copy of the table.
+ * H1 CONFIRMED (fail) if the process exits or a later normal request
+ * fails; the exit code and the last stderr lines are logged and put in the
+ * verdict. H1 DISPROVED (pass) if the process lives through all inputs and
+ * both bad settings. INCONCLUSIVE if the gateway does not start, or if no
+ * input reached main.rs:30 (the bad-setting runs did not happen); the
+ * verdict says which. Each outcome is appended to the
+ * tapi_cybersec_report with its reason.
  *
- * Both panic! calls sit in main() before the accept loop, so no client
- * input can reach them while the gateway is running; the verdict says so
- * when it disproves H1.
+ * Both panic! calls sit in main() before the accept loop, so a client
+ * cannot reach them while the gateway runs; only the bad-setting runs do,
+ * and the verdict says so when it disproves H1.
  *
  * @author midair <midair@localhost>
  */
@@ -40,6 +44,7 @@
 enum {
     IN_OTHER_SVC, IN_NOT_HTTP, IN_EMPTY,        /* aimed at main.rs:30 */
     IN_BAD_PATH,                                /* 404 path in the handler */
+    IN_BAD_REQLINE,                             /* malformed request line */
     IN_BIG_LINE, IN_BIG_HEADER, IN_BIND,        /* aimed at main.rs:34 */
     N_INPUTS
 };
@@ -52,6 +57,7 @@ static const struct {
     { "bytes that are not HTTP", 30 },
     { "an empty body", 30 },
     { "a bad path", 30 },
+    { "a malformed request line", 30 },
     { "an oversized request line", 34 },
     { "an oversized header", 34 },
     { "a second gateway-rs on the same port", 34 },
@@ -97,6 +103,10 @@ send_input(unsigned port, int which)
 
         case IN_BAD_PATH:
             send_once(port, badpath, sizeof(badpath) - 1, false, 500);
+            break;
+
+        case IN_BAD_REQLINE:
+            send_once(port, "GET\r\n\r\n", 7, false, 500);
             break;
 
         case IN_EMPTY:
@@ -251,6 +261,13 @@ main(int argc, char **argv)
         goto verdict;
     }
 
+    RING("webdeps H1: gateway-rs started with its upstream service-go not "
+         "running: pid %d, port %u (main.rs:33-36); alive after start: %s",
+         (int)gw->pid, gw->port, proc_gone(gw) ? "no" : "yes");
+    T_FINDING(TAPI_CYBERSEC_SEV_INFO, "gateway.start-unreachable-upstream",
+              "gateway-rs", "no panic at start with the upstream "
+              "unreachable; pid %d, port %u", (int)gw->pid, gw->port);
+
     TEST_STEP("A valid request gets 200");
     http_get(gw->port, REQUEST, PROBE_TO, &h);
     RING("webdeps H1: GET %s -> %s, HTTP %d", REQUEST, hg_str(h.how),
@@ -331,6 +348,14 @@ main(int argc, char **argv)
         bad_setting(&res, bnote, sizeof(bnote));
         if (res.kind == R_SETUP)
             goto verdict;
+        if (bnote[0] == '\0')
+        {
+            res_set(&res, R_INCONCLUSIVE, "no input reached the panic! at "
+                    "main.rs:30: the client inputs cannot reach it (it is "
+                    "before the accept loop) and no bad-setting run took "
+                    "place");
+            goto verdict;
+        }
         if (strstr(bnote, "process ended") != NULL)
         {
             res_set(&res, R_FAIL, "H1 CONFIRMED: gateway-rs with the "

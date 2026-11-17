@@ -3,6 +3,11 @@
 /** @file
  * @brief Webdeps: t10_build_cs, the C# examples build and run (settles B1)
  *
+ * Support test for H2 and H3 (service-cs): no hypothesis of its own, it
+ * gates H3; a failed build is logged with the dotnet error text, never
+ * skipped, and H3 is INCONCLUSIVE for service-cs. It sends one request to
+ * the built service.
+ *
  * Build cscore and service-cs with dotnet (the build.sh lines), start
  * service-cs once, ask it once and check exit code 0 and "value=" in the
  * answer. Hardcoded endpoints of Program.cs:24, :34 and :78 go to the

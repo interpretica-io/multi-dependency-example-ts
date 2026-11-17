@@ -91,6 +91,7 @@ static char     workdir[64];
 static unsigned tab_port[NAMES];
 static const char *src_root;
 
+/** Set the outcome of a case: its kind and a printf-style message. */
 static void
 res_set(res_t *r, int kind, const char *fmt, ...)
 {
@@ -102,6 +103,7 @@ res_set(res_t *r, int kind, const char *fmt, ...)
     va_end(ap);
 }
 
+/** Monotonic clock in seconds. */
 static double
 now_s(void)
 {
@@ -139,6 +141,7 @@ file_tail(const char *path, char *buf, size_t size)
     }
 }
 
+/** True when the first 64 KB of a file contain @p needle. */
 static bool
 file_has(const char *path, const char *needle)
 {
@@ -266,6 +269,7 @@ proc_stop(proc_t *p)
     proc_log(p);
 }
 
+/** Read the ports of the three services from the contract table; sets R_SETUP when it cannot. */
 static bool
 read_contract(res_t *r)
 {
@@ -497,6 +501,8 @@ run_sh(res_t *r, const char *label, const char *cmd, int timeout_s)
 
 /** Outcomes of an HTTP request. */
 typedef enum hg_t { HG_OK, HG_NORESP, HG_RESET, HG_TIMEOUT, HG_REFUSED } hg_t;
+
+/** Text of an HTTP outcome. */
 static const char *
 hg_str(hg_t h)
 {
@@ -510,6 +516,7 @@ hg_str(hg_t h)
     }
 }
 
+/** Result of one http_get(): outcome, status, time and the start of the reply. */
 typedef struct hg_res {
     hg_t   how;
     int    status;
@@ -517,6 +524,7 @@ typedef struct hg_res {
     char   body[2048];
 } hg_res;
 
+/** Connect a TCP socket to 127.0.0.1:@p port; -1 when refused. */
 static int
 connect_loop(unsigned port)
 {
@@ -533,6 +541,7 @@ connect_loop(unsigned port)
     return s;
 }
 
+/** True when 127.0.0.1:@p port accepts a TCP connection. */
 static bool
 port_accepts(unsigned port)
 {
@@ -611,6 +620,7 @@ typedef enum fake_t {
     F_SILENT, F_GARBAGE, F_BADJSON, F_EMPTY, F_HUGE, F_HTTP500, F_RESET,
 } fake_t;
 
+/** printf-style append to a fixed buffer, truncating. */
 static void
 append(char *dst, size_t size, const char *fmt, ...)
 {
@@ -622,7 +632,7 @@ append(char *dst, size_t size, const char *fmt, ...)
     va_end(ap);
 }
 
-/** Start the listed services in order; false (outcome set) on a problem. */
+/** Socket inodes held by a process, from /proc/<pid>/fd; returns how many. */
 static size_t
 pid_inodes(pid_t pid, unsigned long *out, size_t max)
 {
@@ -676,12 +686,14 @@ owner_of(proc_t **svc, unsigned long (*ino)[MAX_INO], size_t *n,
     return -1;
 }
 
+/** Local or remote port of a socket address, host order. */
 static unsigned
 sock_port(const struct sockaddr_storage *ss)
 {
     return ntohs(te_sockaddr_get_port(CONST_SA(ss)));
 }
 
+/** Printable address of a socket address ("?" when not IP). */
 static void
 sock_addr(const struct sockaddr_storage *ss, char *buf, size_t size)
 {
@@ -694,6 +706,7 @@ sock_addr(const struct sockaddr_storage *ss, char *buf, size_t size)
                   buf, size);
 }
 
+/** True when @p port is one of the ports of the contract. */
 static bool
 port_in_contract(unsigned port)
 {
@@ -706,6 +719,7 @@ port_in_contract(unsigned port)
     }
     return false;
 }
+/** True for 127.x.x.x and ::1. */
 static bool
 is_loopback(const char *addr)
 {
@@ -762,6 +776,7 @@ svc_start_exposed(res_t *r, tsapi_mde_session *session, int idx)
     return p;
 }
 
+/** Exit status of a process as text: a code, a signal or "none (still running)". */
 static void
 exit_code_str(proc_t *p, char *buf, size_t size)
 {
@@ -1025,6 +1040,7 @@ t_report_begin(void)
     do {                                                                    \
         char tmp_[sizeof((_r)->msg)];                                       \
                                                                             \
+        t_report_begin();                                                   \
         snprintf(tmp_, sizeof(tmp_), "%s", (_r)->msg);                      \
         if ((_r)->kind == R_INCONCLUSIVE)                                   \
             snprintf((_r)->msg, sizeof((_r)->msg),                          \
@@ -1035,7 +1051,9 @@ t_report_begin(void)
                      "%s INCONCLUSIVE %s: %.1400s", _id, setup_svc, tmp_);  \
         T_FINDING((_r)->kind == R_PASS ? TAPI_CYBERSEC_SEV_INFO :           \
                   (_r)->kind == R_FAIL ? TAPI_CYBERSEC_SEV_HIGH :           \
-                  TAPI_CYBERSEC_SEV_LOW, "webdeps.verdict", _id, "%s",      \
+                  TAPI_CYBERSEC_SEV_LOW, "webdeps.verdict", _id, "%s: %s",  \
+                  (_r)->kind == R_PASS ? "pass" :                           \
+                  (_r)->kind == R_FAIL ? "fail" : "inconclusive",           \
                   (_r)->msg);                                               \
         if (t_report_ready)                                                 \
         {                                                                   \
@@ -1055,6 +1073,22 @@ t_report_begin(void)
         TEST_VERDICT("%s", (_r)->msg);                                      \
     } while (0)
 
+/** Hypotheses a service gates, for the INCONCLUSIVE text when it is absent. */
+static const char * const gates[NAMES] = {
+    "H1 and H3", "H2 and H3", "H3",
+};
+
+static int first_error_lines(const char *err_path, const char *out_path,
+                             int max, char *buf, size_t size);
+
+/** First error lines of the build the group prologue ran, on one line. */
+static void
+build_log_tail(char *buf, size_t size)
+{
+    if (first_error_lines("/tmp/mde-ensure-build.log", "/dev/null", 6, buf, size) == 0)
+        snprintf(buf, size, "(no build log)");
+}
+
 /**
  * Open the report, make the work directory and start a service. A service
  * that does not start (or whose binary is missing) leaves an R_SETUP
@@ -1071,9 +1105,19 @@ svc_start_t(res_t *r, const char *id, int idx)
     p = (r->kind == R_SETUP) ? NULL : svc_start(r, idx);
     if (p != NULL)
         return p;
-    snprintf(detail, sizeof(detail), "%.890s", r->msg);
-    res_set(r, R_SETUP, "%s not started: %s did not start, settles nothing "
-            "(%s)", id, names[idx], detail);
+    snprintf(detail, sizeof(detail), "%.600s", r->msg);
+    if (strstr(detail, "not found or not executable") != NULL)
+    {
+        char blog[300];
+
+        build_log_tail(blog, sizeof(blog));
+        append(detail, sizeof(detail), "; build log: [%.280s]", blog);
+    }
+    ERROR("webdeps: %s did not start or was not built: %s", names[idx],
+          detail);
+    res_set(r, R_SETUP, "%s not started: %s did not start or was not built; "
+            "%s is INCONCLUSIVE for %s, settles nothing (%s)", id,
+            names[idx], gates[idx], names[idx], detail);
     return NULL;
 }
 

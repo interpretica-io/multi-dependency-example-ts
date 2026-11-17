@@ -4,18 +4,25 @@
  * @brief Webdeps: t14_exposure, listeners and outbound destinations of the
  *        web tier (settles H3)
  *
- * Start gateway-rs, service-go and service-cs and, while they run, read
- * every listening socket they own with tapi_netexpose: the address, the
- * port and whether it is reachable from outside the loopback interface (a
- * wildcard or non-loopback bind, confirmed by a connect to each non-loopback
- * address of the agent). Send normal traffic and read every outbound
- * connection of the three processes with tapi_egress. The literal
- * addresses of main.rs:33-36, main.go:46-51 and Program.cs:24-78 are read
- * from the sources; a listener or destination outside them is a finding.
- * Every result is appended to the tapi_cybersec_report.
+ * Hypothesis H3: the web services listen on, or call, addresses fixed in
+ * the code (main.rs:33-36, Program.cs:24,34,78, main.go:46,87).
  *
- * H3 CONFIRMED if a service listens on a non-loopback address or connects
- * to a host that is not in those literals; H3 DISPROVED otherwise.
+ * Sends: starts gateway-rs, service-go and service-cs, starts tapi_sniffrules
+ * captures on the loopback interface and on the first external interface
+ * and tries to hook the three processes with frida. Normal requests then go
+ * through the three services. tapi_netexpose records every listening
+ * address and port (and whether a non-loopback bind is reachable from
+ * outside); tapi_egress reads every outbound connection against an allowed
+ * list that holds loopback only; the frida hooks, where they attach, trace
+ * connect() against the same list. A hook that cannot attach is dropped and
+ * logged. Every URL on the source lines above is logged.
+ *
+ * H3 CONFIRMED (fail) if a service binds a non-loopback address that is
+ * not in the allowed list, or if tapi_egress, the frida hooks or the
+ * captures see a destination that is not loopback. H3 DISPROVED (pass)
+ * otherwise. INCONCLUSIVE if a service does not start or does not build,
+ * or if tapi_netexpose or tapi_egress return no data. Each outcome is
+ * appended to the tapi_cybersec_report with its reason.
  *
  * @author midair <midair@localhost>
  */
@@ -27,19 +34,26 @@
 #include <ifaddrs.h>
 #include <net/if.h>
 
+#include "tapi_frida.h"
+#include "tapi_sniffrules.h"
+
 #include "webdeps_lib.h"
 
 #define EVID_LEN    700
 
 /** Source lines holding the hardcoded endpoints, per service. */
 static const unsigned gw_lines[] = { 33, 34, 35, 36 };
-static const unsigned go_lines[] = { 46, 47, 48, 49, 50, 51 };
-static const unsigned cs_lines[] = { 24, 25, 26, 27, 28, 29, 30, 31, 32, 33,
-                                     34, 35, 36, 37, 38, 39, 40, 41, 42, 43,
-                                     44, 45, 46, 47, 48, 49, 50, 51, 52, 53,
-                                     54, 55, 56, 57, 58, 59, 60, 61, 62, 63,
-                                     64, 65, 66, 67, 68, 69, 70, 71, 72, 73,
-                                     74, 75, 76, 77, 78 };
+static const unsigned go_lines[] = { 46, 87 };
+static const unsigned cs_lines[] = { 24, 34, 78 };
+
+/** Allowed list of the egress checks: loopback only, any port. */
+static const tapi_egress_policy loopback_only = {
+    .n_rules = 0, .rules = NULL, .allow_loopback = true,
+    .allow_private = false,
+};
+
+/** Number of hooked processes the test tries. */
+#define N_HOOKS NAMES
 
 /** True when a connect to @p port on a non-loopback address of the agent works. */
 static bool
@@ -78,6 +92,155 @@ reachable_outside(unsigned port, char *via, size_t size)
     return ok;
 }
 
+/**
+ * Name of the first up, non-loopback interface with an IPv4 address; false
+ * when the agent has none.
+ */
+static bool
+first_external_iface(char *name, size_t size)
+{
+    struct ifaddrs *ifa;
+    struct ifaddrs *i;
+    bool            found = false;
+
+    if (getifaddrs(&ifa) != 0)
+        return false;
+    for (i = ifa; i != NULL && !found; i = i->ifa_next)
+    {
+        if (i->ifa_addr == NULL || i->ifa_addr->sa_family != AF_INET ||
+            (i->ifa_flags & (IFF_LOOPBACK | IFF_UP)) != IFF_UP)
+            continue;
+        snprintf(name, size, "%s", i->ifa_name);
+        found = true;
+    }
+    freeifaddrs(ifa);
+    return found;
+}
+
+/**
+ * Start a tapi_sniffrules capture on @p ifname with the loopback-only
+ * allowed list. A capture that cannot start is logged and dropped: @p ss
+ * stays NULL and the reason goes to the report.
+ */
+static void
+sniff_start(tsapi_mde_session *session, const char *ifname,
+            tapi_sniffrules_session **ss)
+{
+    tapi_sniffrules_opt sopt = tapi_sniffrules_default_opt;
+    te_errno            rc;
+
+    sopt.rules = TAPI_SNIFFRULE_ALL;
+    sopt.egress = &loopback_only;
+    *ss = NULL;
+    rc = tapi_sniffrules_start(session->ta, ifname, &sopt, ss);
+    if (rc != 0)
+    {
+        *ss = NULL;
+        WARN("webdeps H3: capture on %s dropped: cannot start (%r)", ifname,
+             rc);
+        T_FINDING(TAPI_CYBERSEC_SEV_LOW, "capture.dropped", ifname,
+                  "tapi_sniffrules cannot start on this interface (rc %d)",
+                  (int)rc);
+    }
+}
+
+/**
+ * Stop a capture and add its findings to the report of the test. Returns
+ * how many of them are destinations outside the allowed list.
+ */
+static unsigned
+sniff_stop(tapi_sniffrules_session *ss, const char *ifname, char *evid,
+           size_t size)
+{
+    tapi_cybersec_report    rep;
+    const tapi_cybersec_finding *f;
+    unsigned                outside = 0;
+    te_errno                rc;
+
+    if (ss == NULL)
+        return 0;
+    tapi_cybersec_report_init(&rep);
+    rc = tapi_sniffrules_stop(ss, &rep);
+    if (rc != 0)
+        T_FINDING(TAPI_CYBERSEC_SEV_LOW, "capture.dropped", ifname,
+                  "tapi_sniffrules_stop failed (rc %d)", (int)rc);
+    TE_VEC_FOREACH(&rep.findings, f)
+    {
+        RING("webdeps H3: capture on %s: %s %s: %s", ifname, f->check,
+             f->subject, f->detail != NULL ? f->detail : "");
+        T_FINDING(f->severity, f->check, f->subject, "capture on %s: %s",
+                  ifname, f->detail != NULL ? f->detail : "");
+        if (strcmp(f->check, "traffic.unexpected-egress") == 0)
+        {
+            outside++;
+            append(evid, size, "capture on %s saw traffic to %s; ", ifname,
+                   f->subject);
+        }
+    }
+    tapi_cybersec_report_free(&rep);
+    return outside;
+}
+
+/**
+ * Attach a frida connect() hook to the process of one service. A hook that
+ * cannot attach is dropped (the app is destroyed, *app is NULL) and the
+ * reason is logged.
+ */
+static void
+hook_attach(tsapi_mde_session *session, const char *script_path,
+            const char *name, tapi_frida_app **app)
+{
+    tapi_frida_opt opt = tapi_frida_default_opt;
+    te_errno       rc;
+
+    *app = NULL;
+    opt.target_name = name;
+    opt.script_path = script_path;
+    rc = tapi_frida_create(session->factory, &opt, app);
+    if (rc == 0)
+        rc = tapi_frida_start(*app);
+    if (rc != 0)
+    {
+        WARN("webdeps H3: frida hook on %s dropped: it does not attach "
+             "(%r)", name, rc);
+        T_FINDING(TAPI_CYBERSEC_SEV_LOW, "frida.dropped", name,
+                  "the hook does not attach (rc %d)", (int)rc);
+        if (*app != NULL)
+            (void)tapi_frida_destroy(*app);
+        *app = NULL;
+    }
+}
+
+/**
+ * Stop a hook, judge the connect() calls it saw against the loopback-only
+ * list and add them to the report. Returns how many are outside the list.
+ */
+static unsigned
+hook_judge(tapi_frida_app *app, const char *name, char *evid, size_t size)
+{
+    tapi_cybersec_report    rep;
+    const tapi_cybersec_finding *f;
+    unsigned                outside = 0;
+
+    if (app == NULL)
+        return 0;
+    tapi_cybersec_report_init(&rep);
+    (void)tapi_frida_stop(app);
+    if (tapi_frida_check_egress(app, &loopback_only, &rep) != 0)
+        T_FINDING(TAPI_CYBERSEC_SEV_LOW, "frida.dropped", name,
+                  "the trace cannot be judged");
+    TE_VEC_FOREACH(&rep.findings, f)
+    {
+        RING("webdeps H3: frida on %s: %s %s", name, f->check, f->subject);
+        T_FINDING(f->severity, f->check, f->subject, "frida on %s", name);
+        outside++;
+        append(evid, size, "%s connects to %s (frida); ", name, f->subject);
+    }
+    tapi_cybersec_report_free(&rep);
+    (void)tapi_frida_destroy(app);
+    return outside;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -87,10 +250,14 @@ main(int argc, char **argv)
     unsigned long        ino[NAMES][MAX_INO];
     size_t               n_ino[NAMES];
     tapi_netexpose_opt   opt = tapi_netexpose_default_opt;
-    tapi_egress_rule     rules[2 * NAMES];
-    tapi_egress_policy   policy = { .n_rules = 2 * NAMES, .rules = rules,
-                                    .allow_loopback = false,
-                                    .allow_private = false };
+    tapi_sniffrules_session *ss_lo = NULL;
+    tapi_sniffrules_session *ss_ext = NULL;
+    tapi_frida_app      *hooks[N_HOOKS] = { NULL };
+    te_string            script = TE_STRING_INIT;
+    te_string            script_path = TE_STRING_INIT;
+    char                 ext_if[64] = "";
+    unsigned             n_bad_cap = 0;
+    unsigned             n_bad_hook = 0;
     te_vec               socks = TE_VEC_INIT(tapi_netexpose_socket);
     const tapi_netexpose_socket *s;
     const int            which[] = { GO, CS, GW };
@@ -125,15 +292,40 @@ main(int argc, char **argv)
             goto verdict;
     }
 
-    for (i = 0; i < NAMES; i++)
-    {
-        rules[2 * i] = (tapi_egress_rule){ IPPROTO_TCP, "127.0.0.1/32",
-                                           tab_port[i], tab_port[i] };
-        rules[2 * i + 1] = (tapi_egress_rule){ IPPROTO_TCP, "::1/128",
-                                               tab_port[i], tab_port[i] };
-    }
     opt.udp = false;
     opt.tcp = true;
+
+    TEST_STEP("Capture on loopback and on an external interface");
+    sniff_start(&session, "lo", &ss_lo);
+    if (first_external_iface(ext_if, sizeof(ext_if)))
+        sniff_start(&session, ext_if, &ss_ext);
+    else
+        RING("webdeps H3: the agent has no external interface; only the "
+             "loopback capture runs");
+
+    TEST_STEP("Hook the three processes with frida (dropped when it "
+              "does not attach)");
+    tapi_frida_script_trace_connect(&script);
+    if (tapi_frida_check_available(session.factory, 30000) != 0)
+    {
+        WARN("webdeps H3: frida is not usable on the agent: the hooks are "
+             "dropped");
+        T_FINDING(TAPI_CYBERSEC_SEV_LOW, "frida.dropped", "frida",
+                  "frida is not usable on the agent");
+    }
+    else if (tapi_frida_script_put(session.ta, script.ptr, &script_path) != 0)
+    {
+        WARN("webdeps H3: the frida script cannot be put on the agent: the "
+             "hooks are dropped");
+        T_FINDING(TAPI_CYBERSEC_SEV_LOW, "frida.dropped", "frida",
+                  "the tracing script cannot be put on the agent");
+    }
+    else
+    {
+        for (i = 0; i < NAMES; i++)
+            hook_attach(&session, script_path.ptr, names[i], &hooks[i]);
+        sleep(2);
+    }
 
     TEST_STEP("Literal endpoints in the sources");
     n_lit += endpoint_scan("web/gateway-rs/src/main.rs", gw_lines,
@@ -231,18 +423,18 @@ main(int argc, char **argv)
             n_conns++;
             if (strstr(egress, rec) == NULL)
                 append(egress, sizeof(egress), "%s; ", rec);
-            if (tapi_egress_policy_allows(&policy, IPPROTO_TCP,
+            if (tapi_egress_policy_allows(&loopback_only, IPPROTO_TCP,
                                           CONST_SA(&c->remote)))
             {
                 T_FINDING(TAPI_CYBERSEC_SEV_INFO, "net.egress", names[o],
-                          "outbound to %s:%u, a literal of the sources",
+                          "outbound to %s:%u, loopback (in the allowed list)",
                           addr, sock_port(&c->remote));
             }
             else
             {
                 n_bad_egress++;
                 T_FINDING(TAPI_CYBERSEC_SEV_HIGH, "net.unexpected-egress",
-                          names[o], "outbound to %s:%u, not in the literals",
+                          names[o], "outbound to %s:%u, not loopback (outside the allowed list)",
                           addr, sock_port(&c->remote));
                 append(evid, sizeof(evid), "%s connects to %s:%u; ", names[o],
                        addr, sock_port(&c->remote));
@@ -251,24 +443,50 @@ main(int argc, char **argv)
         te_vec_free(&conns);
         usleep(100000);
     }
+    TEST_STEP("Stop the captures and the hooks and judge them");
+    n_bad_cap += sniff_stop(ss_lo, "lo", evid, sizeof(evid));
+    ss_lo = NULL;
+    n_bad_cap += sniff_stop(ss_ext, ext_if, evid, sizeof(evid));
+    ss_ext = NULL;
+    for (i = 0; i < NAMES; i++)
+    {
+        n_bad_hook += hook_judge(hooks[i], names[i], evid, sizeof(evid));
+        hooks[i] = NULL;
+    }
     if (n_lit > 0)
         append(evid, sizeof(evid), "%u source line(s) with an address outside "
                "the list; ", n_lit);
     RING("webdeps H3: listeners: %s", listen_);
     RING("webdeps H3: outbound: %s", egress[0] != '\0' ? egress : "(none)");
 
-    if (n_bad_listen > 0 || n_bad_egress > 0)
+    if (n_bad_listen > 0 || n_bad_egress > 0 || n_bad_cap > 0 ||
+        n_bad_hook > 0)
         res_set(&res, R_FAIL, "H3 CONFIRMED: %s listeners: %s outbound: %s",
                 evid, listen_, egress[0] != '\0' ? egress : "(none)");
     else
         res_set(&res, R_PASS, "H3 DISPROVED: every listener is on loopback "
                 "(%s) and every outbound destination (%u connection "
-                "sample(s): %s) is a literal of the sources%s", listen_,
+                "sample(s): %s) is loopback; the captures and the frida "
+                "hooks saw nothing else%s", listen_,
                 n_conns, egress[0] != '\0' ? egress : "none seen",
                 n_lit > 0 ? "; note: some literal lines name hosts outside "
                 "the allowed list, see the report" : "");
 
 verdict:
+    for (i = 0; i < NAMES; i++)
+    {
+        if (hooks[i] != NULL)
+            (void)tapi_frida_destroy(hooks[i]);
+    }
+    {
+        char scratch[64];
+
+        /* Captures still running after an early exit are stopped here. */
+        (void)sniff_stop(ss_lo, "lo", scratch, sizeof(scratch));
+        (void)sniff_stop(ss_ext, ext_if, scratch, sizeof(scratch));
+    }
+    te_string_free(&script);
+    te_string_free(&script_path);
     if (session.ta != NULL)
         tsapi_mde_session_fini(&session);
     T_VERDICT(&res, "H3");

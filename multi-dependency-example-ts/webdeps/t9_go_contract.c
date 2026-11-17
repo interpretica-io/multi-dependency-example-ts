@@ -4,8 +4,13 @@
  * @brief Webdeps: t9_go_contract, service-go accepts input that breaks
  *        the contract (settles H5)
  *
- * Start service-go and send it requests that break the rule checked at
- * contract.go:33: a missing field, a negative value and a wrong type.
+ * Support test for H2 and H3 (service-go): no hypothesis of its own, it
+ * gates them. Hypothesis id of the verdict: H5 (the rule at contract.go:33).
+ *
+ * Sends: service-go is started and gets requests that break the rule
+ * checked at contract.go:33: a missing field, a negative value and a wrong
+ * type. If service-go does not start or was not built, the build error is
+ * logged and H2 and H3 are INCONCLUSIVE for it.
  *
  * H5 FAIL if any of them gets a 2xx (the verdict names each one with its
  * status). H5 PASS if each gets a 4xx. A service-go that does not start

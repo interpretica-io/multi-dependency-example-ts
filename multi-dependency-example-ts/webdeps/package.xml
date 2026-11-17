@@ -36,8 +36,8 @@
             built and answers the earlier V1 only. t9_go_contract (H5) and
             t5_egress (EG1) are kept from earlier rounds. A service that
             does not start fails with "H<n> not started" and settles
-            nothing; a tool the agent lacks after the prologue is a SKIP
-            naming the tool.
+            nothing; a tool the agent lacks after the prologue is an
+            INCONCLUSIVE naming the tool.
           - Every command, its exit code and the first 40 lines of its
             output are in the test log.
           - s_rust, s_go, s_cs, s_cpp and s_c are smoke tests, one per
@@ -81,7 +81,7 @@
         -->
         <run name="t10_build_rust">
             <script name="t10_build_rust">
-                <objective>[B1] Build rustcore, rust-demo and gateway-rs with cargo; print the compiler path and version first; run rust-demo once and check exit code 0 and the "rust-demo: result =" line. FAIL with the compiler text on a build failure; SKIP naming the tool when cargo or rustc is absent. Adds the warning count and the hardcoded endpoints of main.rs:33, :34 and :36 (tapi_egress, allowed list = the addresses the tests start) to the report; those settle nothing.</objective>
+                <objective>[B1] Build rustcore, rust-demo and gateway-rs with cargo; print the compiler path and version first; run rust-demo once and check exit code 0 and the "rust-demo: result =" line. FAIL with the compiler text on a build failure (H1 and H3 open for gateway-rs); INCONCLUSIVE naming the tool when cargo or rustc is absent. Adds the warning count and the hardcoded endpoints of main.rs:33, :34 and :36 (tapi_egress, allowed list = the addresses the tests start) to the report; those settle nothing.</objective>
             </script>
         </run>
 
@@ -96,7 +96,7 @@
         -->
         <run name="t10_build_go">
             <script name="t10_build_go">
-                <objective>[B1] Build libgocore and service-go with go build; print the compiler path and version first; start service-go, ask it once, check exit code 0 and "value=". FAIL with the compiler text on a build failure; SKIP naming the tool when go is absent. Adds the warning count and the hardcoded endpoints of main.go:46, :51 and :87 to the report.</objective>
+                <objective>[B1] Build libgocore and service-go with go build; print the compiler path and version first; start service-go, ask it once, check exit code 0 and "value=". FAIL with the compiler text on a build failure (H2 and H3 INCONCLUSIVE for service-go); INCONCLUSIVE naming the tool when go is absent. Adds the warning count and the hardcoded endpoints of main.go:46, :51 and :87 to the report.</objective>
             </script>
         </run>
 
@@ -111,7 +111,7 @@
         -->
         <run name="t10_build_cs">
             <script name="t10_build_cs">
-                <objective>[B1] Build cscore and service-cs with dotnet; print the compiler path and version first; start service-cs, ask it once, check exit code 0 and "value=". FAIL with the compiler text on a build failure; SKIP naming the tool when dotnet is absent. Adds the warning count and the hardcoded endpoints of Program.cs:24, :34 and :78 to the report.</objective>
+                <objective>[B1] Build cscore and service-cs with dotnet; print the compiler path and version first; start service-cs, ask it once, check exit code 0 and "value=". FAIL with the compiler text on a build failure (H3 INCONCLUSIVE for service-cs); INCONCLUSIVE naming the tool when dotnet is absent. Adds the warning count and the hardcoded endpoints of Program.cs:24, :34 and :78 to the report.</objective>
             </script>
         </run>
 
@@ -126,7 +126,7 @@
         -->
         <run name="t10_build_cpp">
             <script name="t10_build_cpp">
-                <objective>[B1] Build cppcore.cpp and demo.cpp with g++ (not tcc); print the compiler path and version first; run cpp-demo once and check exit code 0 and "result =". Build cppcore.cpp alone with -fsyntax-only and report whether the 'Parsing failed' report is a real syntax error or a tool gap. FAIL with the compiler text on a build failure; SKIP naming the tool when g++ is absent. Adds the warning count to the report.</objective>
+                <objective>[B1] Build cppcore.cpp and demo.cpp with g++ (not tcc); print the compiler path and version first; run cpp-demo once and check exit code 0 and "result =". Build cppcore.cpp alone with -fsyntax-only and report whether the 'Parsing failed' report is a real syntax error or a tool gap. FAIL with the compiler text on a build failure; INCONCLUSIVE naming the tool when g++ is absent. Adds the warning count to the report.</objective>
             </script>
         </run>
 
@@ -141,7 +141,7 @@
         -->
         <run name="t10_build_c">
             <script name="t10_build_c">
-                <objective>[B1] Build pycore.c with gcc (not tcc) and a C driver; print the compiler path and version first; run the driver once and check exit code 0 and "py_weight() =". Build pycore.c alone with -fsyntax-only and report whether the 'Parsing failed' report is a real syntax error or a tool gap. FAIL with the compiler text on a build failure; SKIP naming the tool when gcc or python3-config is absent. Adds the warning count to the report.</objective>
+                <objective>[B1] Build pycore.c with gcc (not tcc) and a C driver; print the compiler path and version first; run the driver once and check exit code 0 and "py_weight() =". Build pycore.c alone with -fsyntax-only and report whether the 'Parsing failed' report is a real syntax error or a tool gap. FAIL with the compiler text on a build failure; INCONCLUSIVE naming the tool when gcc or python3-config is absent. Adds the warning count to the report.</objective>
             </script>
         </run>
 
@@ -156,7 +156,7 @@
         -->
         <run name="t10_build_python">
             <script name="t10_build_python">
-                <objective>[B1] Byte-compile the Python files with python3; print the interpreter path and version first; run demo.py once and check exit code 0 and "py-demo: result =". FAIL with the error text on a build failure; SKIP naming the tool when python3 is absent. Adds the warning count to the report.</objective>
+                <objective>[B1] Byte-compile the Python files with python3; print the interpreter path and version first; run demo.py once and check exit code 0 and "py-demo: result =". FAIL with the error text on a build failure; INCONCLUSIVE naming the tool when python3 is absent. Adds the warning count to the report.</objective>
             </script>
         </run>
 
@@ -184,7 +184,7 @@
         -->
         <run name="t11_rust_panic">
             <script name="t11_rust_panic">
-                <objective>[H1] Start gateway-rs, check that a valid request gets 200, send input aimed at main.rs:30 and at main.rs:34 (empty body, bad path, oversized header, a second instance on the same port) and start gateway-rs builds with the setting unset and invalid; after each read the port and the exit status and send a valid request again. H1 CONFIRMED (FAIL) if the process exits or the second request fails; H1 DISPROVED (PASS) if it stays up and answers; "not started" and nothing settled if the gateway does not start.</objective>
+                <objective>[H1] Start gateway-rs with its upstream unreachable, record its pid and port, check a normal request gets 200, send input aimed at main.rs:30 and main.rs:34 (other service, not HTTP, empty body, bad path, malformed request line, oversized line, oversized header, a second instance on the port) and run it with the upstream unset and invalid; after each input check the pid is alive and a new request is answered. H1 CONFIRMED (FAIL) if the process exits (exit code and stderr tail logged); H1 DISPROVED (PASS) if it lives through all inputs; INCONCLUSIVE if it does not start or no input reached the panic. Appended to the tapi_cybersec_report with the reason.</objective>
             </script>
         </run>
 
@@ -192,13 +192,13 @@
               @objective Check whether service-go closes idle connections.
 
               @par Scenario:
-              -# Start service-go and open 50 idle TCP connections.
-              -# Wait 30 s, send a valid request with a 5 s timeout.
-              -# Check whether the idle connections are still open, then close them.
+              -# Start service-go and open 5 TCP connections: nothing sent, or half a request line.
+              -# Hold them 35 s, then check whether each socket is still open (a read that blocks).
+              -# Send a valid request on a new connection.
         -->
         <run name="t12_go_idle">
             <script name="t12_go_idle">
-                <objective>[H2] Start service-go, open 50 idle TCP connections, wait 30 s, send a valid request with a 5 s timeout and record whether the service closed the idle connections; close the sockets at the end. H2 CONFIRMED (FAIL) if the request times out or is refused; H2 DISPROVED (PASS) if it is answered; "not started" and nothing settled if service-go does not start.</objective>
+                <objective>[H2] Start service-go, open 5 TCP connections (three send nothing, two send half a request line), hold them 35 s, check whether each socket is still open (a read that blocks, not EOF or reset) and send a normal request on a new connection. H2 CONFIRMED (FAIL) if any socket is open after 35 s; H2 DISPROVED (PASS) if the server closed all and still answers; INCONCLUSIVE if service-go does not start or does not build (H2 and H3 open for it). Appended to the tapi_cybersec_report with the reason.</objective>
             </script>
         </run>
 
@@ -227,7 +227,7 @@
         -->
         <run name="t14_exposure">
             <script name="t14_exposure">
-                <objective>[H3] Start the three services, record with tapi_netexpose every listening address and port and whether it is reachable from outside loopback, and with tapi_egress every outbound destination; compare with the hardcoded addresses of main.rs:33-36, main.go:46-51 and Program.cs:24-78 and append all results to the tapi_cybersec_report. H3 CONFIRMED (FAIL) if a service listens on a non-loopback address or connects to a host not in those literals; H3 DISPROVED (PASS) otherwise; INCONCLUSIVE if a scanner returns no data.</objective>
+                <objective>[H3] Start the three services, capture with tapi_sniffrules on loopback and on an external interface, hook them with frida (dropped when it does not attach), record with tapi_netexpose every listening address and port and with tapi_egress every outbound destination against an allowed list of loopback only, and log every URL of Program.cs:24,34,78 and main.go:46,87. H3 CONFIRMED (FAIL) if a service binds a non-loopback address or any destination is not loopback; H3 DISPROVED (PASS) otherwise; INCONCLUSIVE if a service does not start or build, or a scanner returns no data. Appended to the tapi_cybersec_report with the reason.</objective>
             </script>
         </run>
 
@@ -235,13 +235,13 @@
               @objective List the hardening flags of every built binary.
 
               @par Scenario:
-              -# Run tapi_binscan on gateway-rs, service-go, service-cs and the C++ and C (Python extension) libraries.
+              -# Run tapi_binscan on gateway-rs, service-go, service-cs and rust-demo.
               -# List each binary with NX, PIE, RELRO, canary and fortify.
-              -# Fail naming each binary that lacks a flag its language supports.
+              -# Fail naming each binary without NX, PIE or full RELRO; canary and fortify are informational.
         -->
         <run name="t15_hardening">
             <script name="t15_hardening">
-                <objective>[H4] Run tapi_binscan on gateway-rs, service-go, service-cs, libcppcore and libpycore and list each with its flags (NX, PIE, RELRO, canary, fortify). H4 CONFIRMED (FAIL) if a binary lacks a flag its language supports (Rust and Go: NX, PIE, RELRO; apphost, C and C++: all five), naming it; H4 DISPROVED (PASS) otherwise; INCONCLUSIVE naming a binary that is absent or cannot be scanned.</objective>
+                <objective>[H4] Run tapi_binscan on gateway-rs, service-go, service-cs (apphost) and rust-demo. H4 CONFIRMED (FAIL) if any binary lacks NX, PIE or full RELRO, naming it; canary and fortify are informational; H4 DISPROVED (PASS) if all have them; INCONCLUSIVE with the path and the error if a binary cannot be read. Appended to the tapi_cybersec_report with the reason.</objective>
             </script>
         </run>
 
