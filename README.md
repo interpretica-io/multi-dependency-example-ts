@@ -180,3 +180,12 @@ scripts/
   reports.sh, mde_reports.py, trc-known-issues.py
   docker/build/Dockerfile   toolchains and tools
 ```
+
+## Run notes (iteration 1 of this avenue)
+
+New in `webdeps`: `gateway_startup_panic` (H1: three starts, exit code and
+stderr), `go_slow_client` (H2: idle and one-byte-per-second connections up
+to 120 s, then 200 idle connections), `port_and_egress_policy` (H3:
+tapi_netexpose and tapi_egress against loopback and the run.sh ports) and
+`binary_hardening` (tapi_binscan on the gateway, informational, context for
+H1). The suite is written in C; no TypeScript is added.

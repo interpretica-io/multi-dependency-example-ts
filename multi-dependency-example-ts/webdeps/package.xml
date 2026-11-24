@@ -250,6 +250,58 @@
             </script>
         </run>
 
+        <!-- @page mde-webdeps-gateway_startup_panic Gateway Start-up Panic (H1)
+              @objective Start gateway-rs three times (normal, empty and malformed upstream setting), record exit code and stderr, and confirm H1 on exit 101, SIGABRT or a Rust panic message; "H1 NOT SETTLED" when the setting cannot be changed.
+
+              @par Scenario:
+              -# Run the installed gateway-rs for 5 s.
+              -# Rebuild it from a copy of the contract with an empty and with a malformed upstream and run each for 5 s.
+              -# Log exit code and stderr of each run.
+        -->
+        <run name="gateway_startup_panic">
+            <script name="gateway_startup_panic">
+                <objective>[H1] Start gateway-rs three times (normal, empty and malformed upstream setting), record exit code and stderr, and confirm H1 on exit 101, SIGABRT or a Rust panic message; "H1 NOT SETTLED" when the setting cannot be changed.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-webdeps-go_slow_client Slow Client of service-go (H2)
+              @objective Hold an idle and a one-byte-per-second connection to service-go for up to 120 s, log the close time, then open 200 idle connections and require a normal reply within 5 s; H2 CONFIRMED when a connection is held 120 s or the request fails.
+
+              @par Scenario:
+              -# Open an idle and a slow connection; watch 120 s.
+              -# Open 200 idle connections; send a normal request.
+        -->
+        <run name="go_slow_client">
+            <script name="go_slow_client">
+                <objective>[H2] Hold an idle and a one-byte-per-second connection to service-go for up to 120 s, log the close time, then open 200 idle connections and require a normal reply within 5 s; H2 CONFIRMED when a connection is held 120 s or the request fails.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-webdeps-port_and_egress_policy Port and Egress Policy (H3)
+              @objective List listeners (tapi_netexpose) and outbound connections (tapi_egress) of gateway-rs, service-cs and service-go; allowed: loopback and the ports run.sh starts. H3 CONFIRMED on a non-loopback listener or an outside destination, with the addresses.
+
+              @par Scenario:
+              -# Start the three services, send each a request.
+              -# tapi_netexpose, tapi_egress; add each result to the report.
+        -->
+        <run name="port_and_egress_policy">
+            <script name="port_and_egress_policy">
+                <objective>[H3] List listeners (tapi_netexpose) and outbound connections (tapi_egress) of gateway-rs, service-cs and service-go; allowed: loopback and the ports run.sh starts. H3 CONFIRMED on a non-loopback listener or an outside destination, with the addresses.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-webdeps-binary_hardening Gateway Binary Hardening (H1)
+              @objective Run tapi_binscan on gateway-rs and log NX, PIE, RELRO, canary and fortify; informational context for H1, never fails on a flag.
+
+              @par Scenario:
+              -# tapi_binscan on dist/bin/gateway-rs; log flags.
+        -->
+        <run name="binary_hardening">
+            <script name="binary_hardening">
+                <objective>[H1] Run tapi_binscan on gateway-rs and log NX, PIE, RELRO, canary and fortify; informational context for H1, never fails on a flag.</objective>
+            </script>
+        </run>
+
         <!-- @page mde-webdeps-t9_go_contract Contract Violations to service-go (H5)
               @objective Check that service-go enforces the rule at contract.go:33.
 

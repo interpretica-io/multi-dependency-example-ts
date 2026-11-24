@@ -1201,6 +1201,22 @@
             <objective/>
             <notes/>
           </test>
+          <test name="gateway_startup_panic" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="go_slow_client" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="port_and_egress_policy" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="binary_hardening" type="script">
+            <objective/>
+            <notes/>
+          </test>
           <test name="t5_egress" type="script">
             <objective/>
             <notes/>
