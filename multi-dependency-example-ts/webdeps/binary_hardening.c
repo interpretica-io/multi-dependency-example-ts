@@ -30,7 +30,6 @@ main(int argc, char **argv)
     tapi_binscan_info   info;
     char                path[700];
     char                miss[160] = "";
-    te_errno            rc;
     bool                pie;
 
     TEST_START;
