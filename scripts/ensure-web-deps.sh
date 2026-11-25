@@ -228,13 +228,15 @@ if want ts ; then
     rm -rf "${TT}"
 fi
 
-want build || { echo "ensure-web-deps: ${COMPONENTS} ready"; exit 0; }
+want build || want ts || { echo "ensure-web-deps: ${COMPONENTS} ready"; exit 0; }
 
 built() {
     [ -x "${ROOT}/dist/bin/$1" ]
 }
 
-if built cpp-demo && built gateway-rs && built service-go &&
+# The ts component always runs ./build.sh: the TypeScript step is its last
+# stage and only a run of the script shows that it works.
+if ! want ts && built cpp-demo && built gateway-rs && built service-go &&
    built service-cs ; then
     echo "ensure-web-deps: the example is built in ${ROOT}"
     exit 0
@@ -263,12 +265,34 @@ case "$(uname -m)" in
 esac
 
 echo "ensure-web-deps: building the example in ${ROOT}"
-if ! ( cd "${ROOT}" && PATH="${SHIM}:${PATH}" ./build.sh ) > /tmp/mde-ensure-build.log 2>&1 ; then
+BUILD_RC=0
+( cd "${ROOT}" && PATH="${SHIM}:${PATH}" ./build.sh ) > /tmp/mde-ensure-build.log 2>&1 || BUILD_RC=$?
+TS_MARK="TypeScript: ts example"
+if want ts ; then
+    # A failure here is never softened: the TypeScript example is what the
+    # group tests, so a run without it would read green and prove nothing.
+    if ! grep -q "${TS_MARK}" /tmp/mde-ensure-build.log ; then
+        if [ "${BUILD_RC}" != 0 ] ; then
+            tail -n 25 /tmp/mde-ensure-build.log >&2
+            die "./build.sh exited ${BUILD_RC} before the TypeScript step was reached, so it was not built (full log /tmp/mde-ensure-build.log)"
+        fi
+        die "./build.sh exited 0 but has no TypeScript step: no '${TS_MARK}' line in /tmp/mde-ensure-build.log"
+    fi
+    if [ "${BUILD_RC}" != 0 ] ; then
+        tail -n 25 /tmp/mde-ensure-build.log >&2
+        die "the TypeScript step of ./build.sh failed (exit ${BUILD_RC}); last lines: $(tail -n 5 /tmp/mde-ensure-build.log | tr '\n' ' ')"
+    fi
+    [ -f "${ROOT}/src/ts/dist/main.js" ] ||
+        die "./build.sh exited 0 but src/ts/dist/main.js was not produced by the TypeScript step"
+    echo "ensure-web-deps: the TypeScript example is built (src/ts/dist/main.js)"
+elif [ "${BUILD_RC}" != 0 ] ; then
     tail -n 25 /tmp/mde-ensure-build.log >&2
     want soft && tail -n 25 /tmp/mde-ensure-build.log
     soft_die "build.sh failed (full log /tmp/mde-ensure-build.log)"
 fi
-for b in cpp-demo gateway-rs service-go service-cs ; do
-    built "$b" || soft_die "dist/bin/$b was not produced by build.sh"
-done
+if [ "${BUILD_RC}" = 0 ] ; then
+    for b in cpp-demo gateway-rs service-go service-cs ; do
+        built "$b" || soft_die "dist/bin/$b was not produced by build.sh"
+    done
+fi
 echo "ensure-web-deps: build finished"
