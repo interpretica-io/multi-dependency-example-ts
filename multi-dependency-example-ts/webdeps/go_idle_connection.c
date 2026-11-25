@@ -116,7 +116,7 @@ main(int argc, char **argv)
     char     state[200] = "service-go running";
     char     times[300] = "";
     char     extra[200] = "";
-    char     why[500] = "";
+    char     why[2200] = "";
     bool     blocked = false;
     bool     not_run = false;
     int      i;

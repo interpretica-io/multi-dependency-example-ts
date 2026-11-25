@@ -176,7 +176,7 @@ second_gateway(char *note, size_t size)
     p = run_once(&r, "gateway-rs-2", path, argv_, 10);
     if (p == NULL)
     {
-        snprintf(note, size, "the second gateway-rs did not end: %s", r.msg);
+        snprintf(note, size, "the second gateway-rs did not end: %.400s", r.msg);
         return;
     }
     p->stopped = true;

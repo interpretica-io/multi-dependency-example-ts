@@ -179,7 +179,7 @@ main(int argc, char **argv)
     char    bin[600];
     char    cwd[160];
     char    summary[900] = "";
-    char    why[500] = "";
+    char    why[2200] = "";
     char    hit[200] = "";
     int     blocker = -1;
     int     i;

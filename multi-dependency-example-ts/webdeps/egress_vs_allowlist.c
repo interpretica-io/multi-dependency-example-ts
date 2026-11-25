@@ -104,7 +104,7 @@ main(int argc, char **argv)
     char                 seen[LIST_LEN] = "";
     char                 listens[LIST_LEN] = "";
     char                 notrun[200] = "";
-    char                 why[600] = "";
+    char                 why[2200] = "";
     unsigned             total = 0;
     unsigned             n_listen = 0;
     bool                 not_run = false;
