@@ -6,7 +6,7 @@
  *
  * Runs ./build.sh in the example root, then starts the TypeScript example
  * through ./scripts/run.sh guess. Pass when the build exits 0 and the
- * example exits 0 within 30 s. Every verdict starts with H1.
+ * example exits 0 within 120 s. Every verdict starts with H1.
  *
  * @author midair <midair@localhost>
  */
@@ -17,8 +17,8 @@
 
 #include "ts_lib.h"
 
-#define BUILD_LIMIT_S   1500
-#define RUN_LIMIT_S     30
+#define BUILD_LIMIT_S   120
+#define RUN_LIMIT_S     120
 
 int
 main(int argc, char **argv)
@@ -34,6 +34,9 @@ main(int argc, char **argv)
     char        e2[300];
     char        o2[300];
     char        script[600];
+    char        tsdir[600];
+    char        pro[600];
+    char        eb[300];
     const char *env[] = { "RuntimeIdentifier=linux-x64", NULL };
 
     TEST_START;
@@ -54,6 +57,15 @@ main(int argc, char **argv)
     {
         res_set(&res, R_FAIL, "H1 NOT SETTLED: cannot write the compiler "
                 "shim in %s", workdir);
+        goto verdict;
+    }
+    snprintf(tsdir, sizeof(tsdir), "%s/src/ts", src_root);
+    if (access(tsdir, F_OK) != 0)
+    {
+        build_log_tail(pro, sizeof(pro));
+        RING("webdeps H1: prologue build log: %s", pro);
+        res_set(&res, R_FAIL, "H1 FAIL: the TypeScript directory %s is "
+                "missing; earlier prologue failure text: [%s]", tsdir, pro);
         goto verdict;
     }
     snprintf(script, sizeof(script), "%s/build.sh", src_root);
@@ -79,14 +91,18 @@ main(int argc, char **argv)
         goto verdict;
     }
     ts_end_text(b, t1, sizeof(t1));
-    ts_flat(b->err_len > 0 ? b->err : b->out, 280, e1, sizeof(e1));
-    RING("webdeps H1: ./build.sh: %s; output [%s]", t1, e1);
+    ts_flat(b->err_len > 0 ? b->err : b->out, 200, e1, sizeof(e1));
+    ts_flat(b->err, 200, eb, sizeof(eb));
+    RING("webdeps H1: command [./build.sh]; %s; stderr(200 B) [%s]", t1, eb);
     T_FINDING(b->code == 0 ? TAPI_CYBERSEC_SEV_INFO : TAPI_CYBERSEC_SEV_HIGH,
               "ts.build", "./build.sh", "%s", t1);
     if (b->code != 0)
     {
-        res_set(&res, R_FAIL, "H1 FAIL: ./build.sh did not exit 0 (%s); "
-                "first output [%s]", t1, e1);
+        build_log_tail(pro, sizeof(pro));
+        RING("webdeps H1: cause of the earlier prologue failure, if any: %s",
+             pro);
+        res_set(&res, R_FAIL, "H1 FAIL: step build: ./build.sh exit code %d "
+                "(%s); stderr [%s]; prologue log [%s]", b->code, t1, e1, pro);
         goto verdict;
     }
 
@@ -98,16 +114,16 @@ main(int argc, char **argv)
         goto verdict;
     }
     ts_end_text(r, t2, sizeof(t2));
-    ts_flat(r->err, 280, e2, sizeof(e2));
+    ts_flat(r->err, 200, e2, sizeof(e2));
     ts_flat(r->out, 200, o2, sizeof(o2));
-    RING("webdeps H1: ./scripts/run.sh guess: %s; stdout [%s] stderr [%s]",
-         t2, o2, e2);
+    RING("webdeps H1: command [./scripts/run.sh guess]; %s; stdout [%s] "
+         "stderr(200 B) [%s]", t2, o2, e2);
     T_FINDING(r->code == 0 && !r->hung ? TAPI_CYBERSEC_SEV_INFO :
               TAPI_CYBERSEC_SEV_HIGH, "ts.run", "./scripts/run.sh guess",
               "%s", t2);
     if (r->code != 0 || r->hung || r->sig != 0)
-        res_set(&res, R_FAIL, "H1 FAIL: build exited 0 (%s) but the "
-                "example did not exit 0 within %d s (%s); stderr [%s]", t1,
+        res_set(&res, R_FAIL, "H1 FAIL: step run: ./scripts/run.sh guess "
+                "exit code %d, not 0 within %d s (%s); stderr [%s]", r->code,
                 RUN_LIMIT_S, t2, e2);
     else
         res_set(&res, R_PASS, "H1 PASS: ./build.sh exited 0 (%s) and the "

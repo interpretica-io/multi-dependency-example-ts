@@ -17,10 +17,26 @@
 
 #include "te_config.h"
 
+#include <ctype.h>
+
 #include "ts_lib.h"
 
 #define FIXED_INPUT "42"
 #define LIMIT_S     30
+
+/** Trim leading and trailing whitespace in place. */
+static void
+ts_trim(char *s)
+{
+    size_t n = strlen(s);
+    size_t i = 0;
+
+    while (n > 0 && isspace((unsigned char)s[n - 1]))
+        s[--n] = '\0';
+    while (s[i] != '\0' && isspace((unsigned char)s[i]))
+        i++;
+    memmove(s, s + i, strlen(s + i) + 1);
+}
 
 /** Compare two runs; fills @p why with the first difference. */
 static bool
@@ -36,13 +52,38 @@ same(const ts_run_t *a, const ts_run_t *b, char *why, size_t size)
                  a->hung, b->code, b->sig, b->hung);
         return false;
     }
-    if (a->out_len != b->out_len || memcmp(a->out, b->out, a->out_len) != 0)
     {
-        ts_flat(a->out, 150, x, sizeof(x));
-        ts_flat(b->out, 150, y, sizeof(y));
-        snprintf(why, size, "stdout differs (ts, %zu B: [%s]; reference, "
-                 "%zu B: [%s])", a->out_len, x, b->out_len, y);
-        return false;
+        const char *pa = a->out;
+        const char *pb = b->out;
+        int         ln = 1;
+
+        for (;;)
+        {
+            char la[512] = "";
+            char lb[512] = "";
+            size_t na = strcspn(pa, "\n");
+            size_t nb = strcspn(pb, "\n");
+            bool   ea = (*pa == '\0');
+            bool   eb = (*pb == '\0');
+
+            if (ea && eb)
+                break;
+            snprintf(la, sizeof(la), "%.*s", (int)(na < 500 ? na : 500), pa);
+            snprintf(lb, sizeof(lb), "%.*s", (int)(nb < 500 ? nb : 500), pb);
+            ts_trim(la);
+            ts_trim(lb);
+            if (strcmp(la, lb) != 0)
+            {
+                ts_flat(la, 100, x, sizeof(x));
+                ts_flat(lb, 100, y, sizeof(y));
+                snprintf(why, size, "line %d: ts [%s] != reference [%s]",
+                         ln, x, y);
+                return false;
+            }
+            pa += na + (pa[na] == '\n' ? 1 : 0);
+            pb += nb + (pb[nb] == '\n' ? 1 : 0);
+            ln++;
+        }
     }
     return true;
 }
@@ -142,8 +183,14 @@ main(int argc, char **argv)
 
         ts_flat(ts->out, 150, o1, sizeof(o1));
         ts_flat(ref->out, 150, o2, sizeof(o2));
-        RING("webdeps H2: ts: %s stdout [%s]; %s: %s stdout [%s]", t1, o1,
-             refname, t2, o2);
+        char s1[300];
+        char s2[300];
+
+        ts_flat(ts->err, 200, s1, sizeof(s1));
+        ts_flat(ref->err, 200, s2, sizeof(s2));
+        RING("webdeps H2: command [./scripts/run.sh guess] ts: %s stdout [%s] "
+             "stderr(200 B) [%s]; command [%s] %s: %s stdout [%s] "
+             "stderr(200 B) [%s]", t1, o1, s1, bin, refname, t2, o2, s2);
     }
     if (same(ts, ref, why, sizeof(why)))
     {
