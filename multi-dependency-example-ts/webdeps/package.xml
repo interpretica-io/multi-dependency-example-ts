@@ -342,7 +342,7 @@
         -->
         <run name="gateway_exit_code">
             <script name="gateway_exit_code">
-                <objective>[H1] Start gateway-rs well (control), then with bad input (unusable address, port in use, empty environment); wait at most 10 s, record the exit code and the last 20 lines of stderr. H1 CONFIRMED when a run exits 101 and stderr names a panic at main.rs:30 or main.rs:34; H1 REFUTED when the exits are non-panic; H1 SKIPPED (not FAIL) when the binary cannot start.</objective>
+                <objective>[H1] Run gateway-rs twice as a child process (startup input unset, then a bad address), at most 10 s each, killed on timeout; capture stdout, stderr and the waitpid status. H1 CONFIRMED (fail) when a run exits 101 with "panicked" in stderr, both exit codes and the first stderr line logged; H1 REFUTED (pass) otherwise; H1 NOT SETTLED (fail, exec error text) when the binary does not start.</objective>
             </script>
         </run>
 
@@ -356,7 +356,7 @@
         -->
         <run name="go_idle_connection">
             <script name="go_idle_connection">
-                <objective>[H2] Open one silent connection and one with a partial request line without the final CRLF to service-go (port from tapi_netexpose), poll both for 60 s. H2 CONFIRMED when both are still held at 60 s (hold time printed); H2 REFUTED for a connection the server closes earlier (close time printed). Extra evidence: 200 idle connections and a GET answered within 2 s.</objective>
+                <objective>[H2] Open one silent socket and one with the partial line "GET / HTTP/1.1" to service-go; poll each with a non-blocking recv once per second for 35 s and record the close second. H2 CONFIRMED (fail, hold time) when either stays open for 35 s; H2 REFUTED (pass, close times) otherwise; H2 NOT SETTLED (fail) when the port does not open in 20 s.</objective>
             </script>
         </run>
 
@@ -370,7 +370,7 @@
         -->
         <run name="egress_vs_allowlist">
             <script name="egress_vs_allowlist">
-                <objective>[H3] Start gateway-rs, service-go and, when t10_build_cs built it, service-cs (else 'service-cs not built'); list listeners with tapi_netexpose and capture outgoing connections with tapi_egress for 30 s while GET / is sent to each. Allowed list: 127.0.0.0/8 and ::1. H3 CONFIRMED on a non-loopback listener or connection (address, port and the H3 evidence source line printed); H3 REFUTED when all traffic is loopback.</objective>
+                <objective>[H3] Start gateway-rs, service-go and service-cs (dropped with a note that the C# build is untrusted when it does not start), send one GET to each main route, capture outgoing connections with tapi_egress for 15 s against the allowed list (127.0.0.1, ::1 and the three service ports) and add every outside destination to the tapi_cybersec_report. H3 CONFIRMED (fail, address and process) or H3 REFUTED (pass); H3 NOT SETTLED (fail) on a harness error.</objective>
             </script>
         </run>
 

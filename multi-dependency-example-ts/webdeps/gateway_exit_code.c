@@ -1,30 +1,23 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief Webdeps: gateway_exit_code, gateway-rs started well and badly
+ * @brief Webdeps: gateway_exit_code, gateway-rs started with bad input
  *        (settles H1)
  *
  * Hypothesis H1: gateway-rs exits with code 101 (panic at main.rs:30 or
- * main.rs:34) when it starts with a bad address or a bad environment.
+ * main.rs:34) on bad startup input.
  *
- * Four runs of dist/bin/gateway-rs, each killed after 10 s; exit code,
- * stderr and run time of each are logged:
- *  1. good: normal setup (the service start of the group); it must start
- *     and accept TCP, else the test reports SKIPPED;
- *  2. bad-address: unusable listen address in the environment and on the
- *     command line;
- *  3. port-in-use: another listener holds the gateway port;
- *  4. empty-env: empty environment, empty work directory.
+ * Two runs of dist/bin/gateway-rs as a child process (stdout and stderr
+ * captured, status from waitpid, at most 10 s, killed on timeout):
+ *  1. unset-env: startup variables unset (main.rs:30);
+ *  2. bad-address: malformed listen address (main.rs:34).
  *
- * Verdicts (each starts with H1):
- *  - "H1 CONFIRMED": a bad run exited with 101 and its stderr names a
- *    panic ("panicked at") at main.rs:30 or main.rs:34; the test fails;
- *  - "H1 REFUTED": every bad run ended with a non-panic code and a
- *    message (code 1 or another), or kept running until killed; the test
- *    passes;
- *  - "H1 SKIPPED": the binary is missing or cannot be exec'd, or the
- *    good run does not start; the exec error is printed, no verdict.
- * The exit code and the last 20 lines of stderr of every run are printed.
+ * Verdicts (each starts with H1; never empty, never a skip):
+ *  - "H1 CONFIRMED": a run exited 101 and stderr contains "panicked";
+ *    the test fails and logs both exit codes and the first stderr line;
+ *  - "H1 REFUTED": no run did; the test passes;
+ *  - "H1 NOT SETTLED": the binary does not start (exec error text) or a
+ *    harness step broke (the step is named); the test fails.
  *
  * @author midair <midair@localhost>
  */
@@ -86,9 +79,7 @@ slurp(const char *path, char *buf, size_t size)
 static bool
 panic_at_main(const char *err)
 {
-    return strstr(err, "panicked at") != NULL &&
-           (strstr(err, "main.rs:30") != NULL ||
-            strstr(err, "main.rs:34") != NULL);
+    return strstr(err, "panicked") != NULL;
 }
 
 /** Run the gateway once; return false (reason in @p why) if it cannot start. */
@@ -98,12 +89,14 @@ run_gateway(run_t *r, const char *bin, const char *cwd, bool bad_addr,
             char *why, size_t why_size)
 {
     char    errp[160];
+    char    outp[160];
     pid_t   pid;
     double  end;
     double  t0;
     int     status = 0;
 
     snprintf(errp, sizeof(errp), "%s/%s.stderr", workdir, r->name);
+    snprintf(outp, sizeof(outp), "%s/%s.stdout", workdir, r->name);
     t0 = now_s();
     pid = fork();
     if (pid < 0)
@@ -114,7 +107,7 @@ run_gateway(run_t *r, const char *bin, const char *cwd, bool bad_addr,
     if (pid == 0)
     {
         int  e = open(errp, O_WRONLY | O_CREAT | O_TRUNC, 0600);
-        int  o = open("/dev/null", O_WRONLY);
+        int  o = open(outp, O_WRONLY | O_CREAT | O_TRUNC, 0600);
         int  z = open("/dev/null", O_RDONLY);
         char lib[600];
         char *argv_[3] = { (char *)bin, NULL, NULL };
@@ -209,18 +202,21 @@ int
 main(int argc, char **argv)
 {
     res_t   res = { .kind = R_PASS };
-    run_t   runs[3] = { { .name = "bad-address", .code = -1 },
-                        { .name = "port-in-use", .code = -1 },
-                        { .name = "empty-env", .code = -1 } };
+    run_t   runs[2] = { { .name = "unset-env", .code = -1 },
+                        { .name = "bad-address", .code = -1 } };
     char    bin[600];
     char    cwd[160];
     char    summary[900] = "";
     char    why[2200] = "";
     char    hit[200] = "";
-    char    good[300] = "";
+    char    codes[200] = "";
+    char    first_line[300] = "";
+    const char *first_run = "none";
+    char    good[8];
     proc_t *gw;
     double  t0;
     int     blocker = -1;
+    char   *bar;
     int     i;
     bool    skipped = false;
 
@@ -229,76 +225,47 @@ main(int argc, char **argv)
     wd_init(&res);
     if (res.kind == R_SETUP)
     {
-        snprintf(why, sizeof(why), "%s", res.msg);
+        snprintf(why, sizeof(why), "step prepare work dir broke: %s", res.msg);
         skipped = true;
         goto verdict;
     }
     snprintf(bin, sizeof(bin), "%s/dist/bin/gateway-rs", src_root);
     if (access(bin, X_OK) != 0)
     {
-        snprintf(why, sizeof(why), "%s does not exist or is not executable "
-                 "(build failure?)", bin);
+        snprintf(why, sizeof(why), "step locate binary broke: %s does not exist or is not "
+                 "executable (build failure?)", bin);
         skipped = true;
         goto verdict;
     }
     snprintf(cwd, sizeof(cwd), "%s/empty", workdir);
     if (mkdir(cwd, 0700) != 0)
     {
-        snprintf(why, sizeof(why), "cannot create %s: %s", cwd,
+        snprintf(why, sizeof(why), "step create work dir broke: cannot create %s: %s", cwd,
                  strerror(errno));
         skipped = true;
         goto verdict;
     }
 
-    TEST_STEP("Good run: gateway-rs with its normal setup");
     t0 = now_s();
-    gw = svc_start(&res, GW);
-    if (gw == NULL)
-    {
-        snprintf(why, sizeof(why), "good run did not start: %.800s",
-                 res.msg);
-        skipped = true;
-        goto verdict;
-    }
-    snprintf(good, sizeof(good), "good: started, accepts TCP on %u after "
-             "%.1f s", gw->port, now_s() - t0);
-    RING("webdeps H1: %s", good);
-    T_FINDING(TAPI_CYBERSEC_SEV_INFO, "gateway.startup", "good", "%s", good);
-    proc_stop(gw);
+    good[0] = '\0';
+    (void)good;
+    (void)blocker;
 
-    for (i = 0; i < 3; i++)
+    for (i = 0; i < 2; i++)
     {
         char t[200];
 
         TEST_STEP("Bad run: gateway-rs, %s", runs[i].name);
-        if (i == 1)
-        {
-            struct sockaddr_in sa = { .sin_family = AF_INET,
-                                      .sin_port = htons(tab_port[GW]) };
-
-            inet_pton(AF_INET, "127.0.0.1", &sa.sin_addr);
-            blocker = socket(AF_INET, SOCK_STREAM, 0);
-            if (blocker < 0 ||
-                bind(blocker, (struct sockaddr *)&sa, sizeof(sa)) != 0 ||
-                listen(blocker, 4) != 0)
-            {
-                snprintf(why, sizeof(why), "cannot hold port %u for the "
-                         "port-in-use run: %s", tab_port[GW],
-                         strerror(errno));
-                skipped = true;
-                goto verdict;
-            }
-        }
-        if (!run_gateway(&runs[i], bin, cwd, i == 0, i == 2, why,
+        if (!run_gateway(&runs[i], bin, cwd, i == 1, i == 0, why,
                          sizeof(why)))
         {
+            char tmp[2200];
+
+            snprintf(tmp, sizeof(tmp), "step run %s broke or binary does "
+                     "not start: %s", runs[i].name, why);
+            snprintf(why, sizeof(why), "%s", tmp);
             skipped = true;
             goto verdict;
-        }
-        if (i == 1)
-        {
-            close(blocker);
-            blocker = -1;
         }
         run_text(&runs[i], t, sizeof(t));
         RING("webdeps H1: %s; stderr [%s]", t, runs[i].err);
@@ -308,23 +275,33 @@ main(int argc, char **argv)
                   runs[i].err);
         append(summary, sizeof(summary), "%s; stderr [%.200s]; ", t,
                runs[i].err);
+        append(codes, sizeof(codes), "%s=%d ", runs[i].name, runs[i].code);
         if (runs[i].code == 101 && runs[i].panic)
+        {
+            if (hit[0] == '\0')
+            {
+                first_run = runs[i].name;
+                snprintf(first_line, sizeof(first_line), "%s", runs[i].err);
+                bar = strchr(first_line, '|');
+                if (bar != NULL)
+                    *bar = '\0';
+            }
             append(hit, sizeof(hit), "%s ", runs[i].name);
+        }
     }
 
 verdict:
     if (blocker >= 0)
         close(blocker);
     if (skipped)
-        res_set(&res, R_SKIP, "H1 SKIPPED: %.900s (no verdict on H1)",
-                why);
+        res_set(&res, R_FAIL, "H1 NOT SETTLED: %.900s", why);
     else if (hit[0] != '\0')
-        res_set(&res, R_FAIL, "H1 CONFIRMED: exit 101 with a panic at "
-                "main.rs:30/34 in run(s) %s; %s; %s", hit,
-                good, summary);
+        res_set(&res, R_FAIL, "H1 CONFIRMED: exit 101 with 'panicked' in "
+                "run(s) %s; exit codes: %s; first stderr line of %s: "
+                "[%s]; %s", hit, codes, first_run, first_line, summary);
     else
-        res_set(&res, R_PASS, "H1 REFUTED: no bad run exited 101 with a "
-                "panic at main.rs:30/34 (non-panic exit or no exit); %s; %s", good, summary);
+        res_set(&res, R_PASS, "H1 REFUTED: no bad run exited 101 with 'panicked' "
+                "(handled exit or no exit); %s", summary);
     T_VERDICT(&res, "H1");
 
 cleanup:

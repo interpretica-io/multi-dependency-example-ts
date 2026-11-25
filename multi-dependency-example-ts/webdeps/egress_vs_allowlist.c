@@ -9,12 +9,13 @@
  *
  * gateway-rs and service-go are started; service-cs only when
  * t10_build_cs built it (its output is in place), otherwise
- * "service-cs not built" is printed and H3 is settled for the other two.
+ * "service-cs not built (C# build is untrusted)" is printed and H3 is settled for the other two.
  * tapi_netexpose lists the listening sockets of each process; tapi_egress
- * captures outgoing connections for 30 s while GET / (and one request per
+ * captures outgoing connections for 15 s while GET / (and one request per
  * route written in the source) is sent to each service.
  *
- * The allowed list is loopback only: 127.0.0.0/8 and ::1. A listener on
+ * The allowed list holds only 127.0.0.1, ::1 and the ports of the three
+ * services themselves. A listener on
  * any other address, or an outgoing connection to one, is a finding; the
  * address, the port and the source line of the H3 evidence list
  * (main.rs:33-36, Program.cs:24,34,78, main.go:46,51,87) that holds the
@@ -24,8 +25,9 @@
  *  - "H3 CONFIRMED": a listener or an outgoing connection outside
  *    loopback; the test fails;
  *  - "H3 REFUTED": all traffic stayed on loopback; the test passes;
- *  - "H3 SETUP_FAILED": gateway-rs or service-go did not start, or a
- *    scanner gave no data; the reason is printed, no verdict.
+ *  - "H3 NOT SETTLED": gateway-rs or service-go did not start, or a
+ *    harness step or scanner broke (the step is named); the test fails.
+ * service-cs that does not start is dropped; the C# build is untrusted.
  *
  * @author midair <midair@localhost>
  */
@@ -36,7 +38,7 @@
 
 #include "webdeps_lib.h"
 
-#define CAPTURE_S 30
+#define CAPTURE_S 15
 #define LIST_LEN 700
 
 #define MAX_ROUTES 16
@@ -153,8 +155,15 @@ read_source(int idx)
 static bool
 is_allowed(const char *addr)
 {
-    return strncmp(addr, "127.", 4) == 0 || strcmp(addr, "::1") == 0 ||
-           strncmp(addr, "::ffff:127.", 11) == 0;
+    return strcmp(addr, "127.0.0.1") == 0 || strcmp(addr, "::1") == 0 ||
+           strcmp(addr, "::ffff:127.0.0.1") == 0;
+}
+
+/** Allowed destination: 127.0.0.1 or ::1 on a port of one of the services. */
+static bool
+is_allowed_dest(const char *addr, unsigned port)
+{
+    return is_allowed(addr) && port_in_contract(port);
 }
 
 /** Source lines of the H3 evidence list holding @p addr or port @p port. */
@@ -225,14 +234,14 @@ main(int argc, char **argv)
     wd_init(&res);
     if (res.kind == R_SETUP)
     {
-        snprintf(why, sizeof(why), "%s", res.msg);
+        snprintf(why, sizeof(why), "step prepare work dir broke: %s", res.msg);
         not_run = true;
         goto verdict;
     }
     if (tsapi_mde_session_init(&session, "egress_vs_allowlist") != 0)
     {
-        snprintf(why, sizeof(why), "no session on the agent for the "
-                 "scanners");
+        snprintf(why, sizeof(why), "step open session broke: no session for "
+                 "the scanners");
         not_run = true;
         goto verdict;
     }
@@ -243,7 +252,7 @@ main(int argc, char **argv)
         if (!read_source(i))
         {
             src_ok = false;
-            append(why, sizeof(why), "%s cannot be read; ", src_files[i]);
+            append(why, sizeof(why), "step read sources broke: %s cannot be read; ", src_files[i]);
         }
     }
     if (!src_ok)
@@ -260,7 +269,7 @@ main(int argc, char **argv)
         if (order[i] == CS &&
             access(H3_OUT "/service-cs/service-cs", X_OK) != 0)
         {
-            snprintf(notrun, sizeof(notrun), "service-cs not built");
+            snprintf(notrun, sizeof(notrun), "service-cs not built (C# build is untrusted)");
             RING("webdeps H3: %s (t10_build_cs did not pass): H3 is "
                  "settled for gateway-rs and service-go only", notrun);
             continue;
@@ -275,7 +284,7 @@ main(int argc, char **argv)
             RING("webdeps H3: %s", notrun);
             continue;
         }
-        snprintf(why, sizeof(why), "%s did not start: %.400s",
+        snprintf(why, sizeof(why), "step start %s broke: did not start: %.400s",
                  names[order[i]], r2.msg);
         not_run = true;
         goto verdict;
@@ -295,8 +304,8 @@ main(int argc, char **argv)
         opt.tcp = true;
         if (tapi_netexpose_sockets(session.factory, &opt, &socks) != 0)
         {
-            snprintf(why, sizeof(why), "tapi_netexpose cannot read the "
-                     "socket tables");
+            snprintf(why, sizeof(why), "step list listeners broke: tapi_netexpose "
+                     "cannot read the socket tables");
             not_run = true;
             te_vec_free(&socks);
             goto verdict;
@@ -359,8 +368,8 @@ main(int argc, char **argv)
         }
         if (tapi_egress_snapshot(session.factory, &opt, &conns) != 0)
         {
-            snprintf(why, sizeof(why), "tapi_egress cannot read the "
-                     "connections of the agent");
+            snprintf(why, sizeof(why), "step tapi_egress capture broke: cannot read "
+                     "the connections of the agent");
             not_run = true;
             te_vec_free(&conns);
             goto verdict;
@@ -387,7 +396,7 @@ main(int argc, char **argv)
                 if (strcmp(lits[k].addr, addr) == 0)
                     lits[k].reached = true;
             }
-            if (is_allowed(addr))
+            if (is_allowed_dest(addr, sock_port(&c->remote)))
             {
                 T_FINDING(TAPI_CYBERSEC_SEV_INFO, "net.egress", names[o],
                           "outgoing connection to %s:%u, in the allowed list",
@@ -412,7 +421,7 @@ main(int argc, char **argv)
     }
     if (total == 0 && !not_run)
     {
-        snprintf(why, sizeof(why), "tapi_egress returned no connections at "
+        snprintf(why, sizeof(why), "step tapi_egress capture broke: no connections at "
                  "all in %d s", CAPTURE_S);
         not_run = true;
     }

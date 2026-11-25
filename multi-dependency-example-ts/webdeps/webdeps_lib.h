@@ -48,7 +48,7 @@
 #define MAX_PORTS   8
 #define NAMES       3
 #define REQUEST     "/ring?value=1&hops=3"
-#define START_WAIT  10      /**< s to wait for a port to accept TCP. */
+#define START_WAIT  20      /**< s to wait for a port to accept TCP. */
 #define PROBE_TO    3       /**< s, client timeout of every probe. */
 /** Where T3 puts what it builds and T4 scans it. */
 #define H3_OUT      "/tmp/mde-h3-out"
