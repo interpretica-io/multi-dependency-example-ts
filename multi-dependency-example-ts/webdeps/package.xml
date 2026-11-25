@@ -457,7 +457,7 @@
         </run>
 
         <!-- @page mde-webdeps-ts_contract TypeScript Example Contract (H2)
-              @objective Compare the TypeScript example with the Rust example on one fixed input.
+              @objective Compare the TypeScript example with the Go and C# examples on one fixed input.
 
               @par Scenario:
               -# Check the comparison against two planted differences.
@@ -466,7 +466,7 @@
         -->
         <run name="ts_contract">
             <script name="ts_contract">
-                <objective>[H2] Run the TypeScript example and dist/bin/rust-demo (service-go as fallback) with the same fixed input and compare stdout and exit code. H2 PASS when they match; H2 FAIL naming the first difference; H2 NOT SETTLED when a reference binary is missing.</objective>
+                <objective>[H2] Same test as ts_example/ts_contract: TypeScript, Go and C# with the same input, answer lines and exit codes compared. "H1 build missing", "H2 start-up fault" and "H2 FAIL: mismatch" are separate verdicts.</objective>
             </script>
         </run>
 
@@ -480,7 +480,7 @@
         -->
         <run name="ts_robust">
             <script name="ts_robust">
-                <objective>[H3] Send an empty, an oversize and a non-numeric input to the TypeScript example and point it at a peer that accepts a connection and never answers. H3 PASS when every case exits non-zero with a message, no stack trace, no signal, within 10 s; H3 FAIL on a hang, a crash, a trace or exit 0; H3 NOT SETTLED when the example never contacts the peer.</objective>
+                <objective>[H3] Same test as ts_example/ts_robust: (a) source scan, (b) endpoint variable, (c) silent peer within 10 s, (d) bad input; the verdict names the failing check.</objective>
             </script>
         </run>
     </session>

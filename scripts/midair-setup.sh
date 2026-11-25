@@ -35,7 +35,7 @@ echo "midair-setup: installing the toolchains and tools (base, exposure, ts)"
 "${ENSURE}" "${ROOT}" base exposure ts soft ||
     fail "scripts/ensure-web-deps.sh base exposure ts failed (see above)"
 
-for c in node npm gcc g++ make go cargo python3 curl; do
+for c in node npm gcc g++ make go cargo python3 curl tar; do
     command -v "$c" >/dev/null 2>&1 || fail "$c is still missing after the install"
 done
 echo "midair-setup: node $(node --version), npm $(npm --version), $(go version 2>&1)"

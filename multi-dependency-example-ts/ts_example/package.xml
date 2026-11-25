@@ -8,10 +8,10 @@
                      elapsed time and the last 40 lines of stdout and stderr.
 
           @par Test Groups:
-          - @ref mde-ts_example-ts_build - Build from the project root (H1)
+          - @ref mde-ts_example-ts_build - Build in a clean copy (H1)
           - @ref mde-ts_example-ts_run_guess - Start with guess (H1)
-          - @ref mde-ts_example-ts_contract - Same output as Go, Rust and C++ (H2)
-          - @ref mde-ts_example-ts_robust - Bad input and a silent peer (H3)
+          - @ref mde-ts_example-ts_contract - Same answer as Go and C# (H2)
+          - @ref mde-ts_example-ts_robust - Endpoint variable, no hardcoded URL, silent peer (H3)
     -->
 
     <author mailto="midair@localhost" />
@@ -31,18 +31,18 @@
         </prologue>
 
         <!-- @page mde-ts_example-ts_build Build (H1)
-              @objective Run ./build.sh in the project root within 300 s.
+              @objective Run ./build.sh in a clean copy (no node_modules, no dist) within 540 s.
 
               @par Scenario:
               -# Check the runner against a planted hang and signal.
-              -# Run ./build.sh; log command, exit code, time, output tails.
-              -# On a failure name the step (npm install, tsc, an earlier
-                 stage, a missing file) and run npm install and tsc alone.
-              -# Check the TypeScript output and that ./scripts/run.sh is executable.
+              -# Copy the project without node_modules and dist; check both are absent.
+              -# Run ./build.sh in the copy; log command, exit code, time, output.
+              -# On a failure print the last 40 lines and name the step (npm install, tsc, the C build).
+              -# Pass only on exit code 0 and an existing typescript/dist/index.js.
         -->
         <run name="ts_build">
             <script name="ts_build">
-                <objective>[H1] Run ./build.sh with a 300 s limit. H1 PASS when it exits 0, the TypeScript output exists and ./scripts/run.sh is executable; H1 FAIL naming npm install, tsc, the earlier stage or the missing file.</objective>
+                <objective>[H1] Run ./build.sh in a clean copy of the project with a 540 s limit. H1 PASS only when it exits 0 and typescript/dist/index.js exists; H1 FAIL naming npm install, tsc or the C build, with the last 40 lines of the output in the log.</objective>
             </script>
         </run>
 
@@ -60,30 +60,34 @@
         </run>
 
         <!-- @page mde-ts_example-ts_contract Contract (H2)
-              @objective Compare guess of the TypeScript example with Go, Rust and C++.
+              @objective Compare guess of the TypeScript example with the Go and C# examples.
 
               @par Scenario:
+              -# Fail with "H1 build missing" when dist/index.js does not exist.
               -# Check the comparison against planted differences.
-              -# Run the four with the same input.
-              -# Compare stdout and exit code; log both side by side on a difference.
+              -# Start the services; a port not open within 10 s is a "start-up fault".
+              -# Log what the TypeScript process listens on (tapi_netexpose).
+              -# Run ./scripts/run.sh guess and the same input on Go and C#; log all outputs in full.
+              -# Compare the answer lines and exit codes; print both values on a mismatch.
         -->
         <run name="ts_contract">
             <script name="ts_contract">
-                <objective>[H2] Run guess for the TypeScript, Go, Rust and C++ examples with the same input and compare stdout and exit code. H2 PASS when they are equal (or, when the references differ among themselves, exit code and result number); H2 FAIL when the TypeScript output differs, with both outputs side by side.</objective>
+                <objective>[H2] Run guess for the TypeScript example and the same input for the Go and C# examples, log all three outputs, compare answer lines and exit codes. H2 PASS when the three match; H2 FAIL mismatch with both values; "H1 build missing" when dist/index.js is absent; "H2 start-up fault" when a port is not open within 10 s.</objective>
             </script>
         </run>
 
-        <!-- @page mde-ts_example-ts_robust Bad Input and a Silent Peer (H3)
-              @objective Bounded time on malformed input and on a peer that never answers.
+        <!-- @page mde-ts_example-ts_robust Endpoint Variable and a Silent Peer (H3)
+              @objective Three checks with their own messages, plus bad input.
 
               @par Scenario:
-              -# Check the trace detector and the runner against planted defects.
-              -# Run empty, non-numeric, oversize (argument, 1 MiB stdin) input and the silent peer, at most 10 s each.
-              -# Fail on a timeout kill, a signal or a stack trace.
+              -# (a) Scan src/ outside comments for a literal http://, https:// or IP address.
+              -# (b) Run with GUESS_ENDPOINT on a chosen local port; it must connect there and nowhere else.
+              -# (c) Point GUESS_ENDPOINT at a listener that never answers; non-zero exit within 10 s.
+              -# (d) Empty, non-numeric and oversize input: no hang, signal or trace.
         -->
         <run name="ts_robust">
             <script name="ts_robust">
-                <objective>[H3] Run the TypeScript example with an empty, a non-numeric and an oversize input and against a local peer that accepts and never replies. H3 PASS when each run ends within 10 s with no signal and no stack trace; H3 FAIL on a timeout kill or a trace; H3 NOT SETTLED when the example never connects to the peer.</objective>
+                <objective>[H3] (a) no literal URL or IP in the TypeScript source outside comments; (b) the example connects to the port in GUESS_ENDPOINT and no other; (c) against a listener that never answers it exits non-zero within 10 s, elapsed time and exit code logged; (d) bad input ends cleanly. The verdict names the failing check; "H1 build missing" when dist/index.js is absent.</objective>
             </script>
         </run>
     </session>
