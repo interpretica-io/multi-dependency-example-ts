@@ -21,7 +21,7 @@ tests = [
     'go_slow_client',
     'port_and_egress_policy',
     'binary_hardening',
-    'gateway_panic_exit',
+    'gateway_exit_code',
     'go_idle_connection',
     'egress_vs_allowlist',
     't5_egress',

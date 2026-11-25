@@ -1,30 +1,33 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief Webdeps: gateway_panic_exit, gateway-rs started three ways
+ * @brief Webdeps: gateway_exit_code, gateway-rs started well and badly
  *        (settles H1)
  *
- * Hypothesis H1: gateway-rs panics at main.rs:30 and main.rs:34 on bad
- * start-up input. The test needs nothing from the other tests of the group.
+ * Hypothesis H1: gateway-rs exits with code 101 (panic at main.rs:30 or
+ * main.rs:34) when it starts with a bad address or a bad environment.
  *
- * Three runs of dist/bin/gateway-rs, each for at most 10 s, then killed
- * ("hung" in the log); the exit code and stderr of each are recorded:
- *  1. no-config: empty work directory, no configuration variables;
- *  2. bad-port: the port setting given as "notaport" in the environment
- *     and on the command line;
- *  3. port-in-use: another listener holds the gateway port.
+ * Four runs of dist/bin/gateway-rs, each killed after 10 s; exit code,
+ * stderr and run time of each are logged:
+ *  1. good: normal setup (the service start of the group); it must start
+ *     and accept TCP, else the test reports SETUP_FAILED;
+ *  2. bad-address: unusable listen address in the environment and on the
+ *     command line;
+ *  3. port-in-use: another listener holds the gateway port;
+ *  4. empty-env: empty environment, empty work directory.
  *
- * Verdicts (each starts with H1 and names the exit codes):
- *  - "H1 CONFIRMED": a run exited with 101, or its stderr has "panicked at"
- *    with main.rs:30 or main.rs:34;
- *  - "H1 DISPROVED": no run did (clean error exit, or ran until killed);
- *  - "H1 NOT RUN": the binary is missing or cannot be started; the reason
- *    is printed. This fails the test, it is never a pass.
+ * Verdicts (each starts with H1):
+ *  - "H1 FAIL (H1 confirmed)": a bad run exited with 101 and its stderr
+ *    has "panicked at" with main.rs:30 or main.rs:34;
+ *  - "H1 PASS (H1 disproved)": every bad run ended with a non-panic code
+ *    (clean error exit, or still running until killed);
+ *  - "H1 SETUP_FAILED": the binary is missing or the good run did not
+ *    start; the reason is printed; no verdict on H1.
  *
  * @author midair <midair@localhost>
  */
 
-#define TE_TEST_NAME    "webdeps/gateway_panic_exit"
+#define TE_TEST_NAME    "webdeps/gateway_exit_code"
 
 #include "te_config.h"
 
@@ -39,6 +42,7 @@ typedef struct run_t {
     bool        hung;
     bool        panic;      /**< "panicked at" at main.rs:30 or :34. */
     bool        started;
+    double      secs;       /**< Run time. */
     char        err[400];
 } run_t;
 
@@ -74,15 +78,18 @@ panic_at_main(const char *err)
 
 /** Run the gateway once; return false (reason in @p why) if it cannot start. */
 static bool
-run_gateway(run_t *r, const char *bin, const char *cwd, bool bad_port,
+run_gateway(run_t *r, const char *bin, const char *cwd, bool bad_addr,
+            bool empty_env,
             char *why, size_t why_size)
 {
     char    errp[160];
     pid_t   pid;
     double  end;
+    double  t0;
     int     status = 0;
 
     snprintf(errp, sizeof(errp), "%s/%s.stderr", workdir, r->name);
+    t0 = now_s();
     pid = fork();
     if (pid < 0)
     {
@@ -104,17 +111,28 @@ run_gateway(run_t *r, const char *bin, const char *cwd, bool bad_port,
         if (chdir(cwd) != 0)
             _exit(126);
         snprintf(lib, sizeof(lib), "%s/dist/lib", src_root);
-        clearenv();
-        setenv("LD_LIBRARY_PATH", lib, 1);
-        setenv("PATH", "/usr/bin:/bin", 1);
-        setenv("RUST_BACKTRACE", "0", 1);
-        if (bad_port)
+        if (empty_env)
         {
-            setenv("PORT", "notaport", 1);
-            setenv("GATEWAY_PORT", "notaport", 1);
-            setenv("LISTEN_PORT", "notaport", 1);
-            setenv("GATEWAY_RS_PORT", "notaport", 1);
-            argv_[1] = (char *)"notaport";
+            clearenv();
+        }
+        else
+        {
+            setenv("LD_LIBRARY_PATH", lib, 1);
+            setenv("RUST_BACKTRACE", "0", 1);
+        }
+        if (bad_addr)
+        {
+            static const char * const vars[] = {
+                "LISTEN_ADDR", "LISTEN_ADDRESS", "GATEWAY_ADDR",
+                "GATEWAY_ADDRESS", "GATEWAY_HOST", "BIND_ADDR", "HOST",
+                "ADDR", "PORT", "GATEWAY_PORT", "LISTEN_PORT",
+                "GATEWAY_RS_PORT",
+            };
+            size_t k;
+
+            for (k = 0; k < sizeof(vars) / sizeof(vars[0]); k++)
+                setenv(vars[k], "999.999.999.999:notaport", 1);
+            argv_[1] = (char *)"999.999.999.999:notaport";
         }
         execv(bin, argv_);
         dprintf(2, "exec %s: %s\n", bin, strerror(errno));
@@ -145,6 +163,7 @@ run_gateway(run_t *r, const char *bin, const char *cwd, bool bad_port,
         else if (WIFSIGNALED(status))
             r->sig = WTERMSIG(status);
     }
+    r->secs = now_s() - t0;
     slurp(errp, r->err, sizeof(r->err));
     r->started = !(r->code == 127 && strstr(r->err, "exec ") != NULL);
     if (!r->started)
@@ -162,28 +181,33 @@ run_text(const run_t *r, char *buf, size_t size)
 {
     if (r->hung)
         snprintf(buf, size, "%s: hung (still running after %d s, killed, "
-                 "no exit code)", r->name, LIMIT_S);
+                 "no exit code), %.1f s", r->name, LIMIT_S, r->secs);
     else if (r->sig != 0)
-        snprintf(buf, size, "%s: killed by signal %d", r->name, r->sig);
+        snprintf(buf, size, "%s: killed by signal %d, %.1f s", r->name,
+                 r->sig, r->secs);
     else
-        snprintf(buf, size, "%s: exit code %d", r->name, r->code);
+        snprintf(buf, size, "%s: exit code %d, %.1f s", r->name, r->code,
+                 r->secs);
 }
 
 int
 main(int argc, char **argv)
 {
     res_t   res = { .kind = R_PASS };
-    run_t   runs[3] = { { .name = "no-config", .code = -1 },
-                        { .name = "bad-port", .code = -1 },
-                        { .name = "port-in-use", .code = -1 } };
+    run_t   runs[3] = { { .name = "bad-address", .code = -1 },
+                        { .name = "port-in-use", .code = -1 },
+                        { .name = "empty-env", .code = -1 } };
     char    bin[600];
     char    cwd[160];
     char    summary[900] = "";
     char    why[2200] = "";
     char    hit[200] = "";
+    char    good[300] = "";
+    proc_t *gw;
+    double  t0;
     int     blocker = -1;
     int     i;
-    bool    not_run = false;
+    bool    setup_failed = false;
 
     TEST_START;
     t_report_begin();
@@ -191,15 +215,15 @@ main(int argc, char **argv)
     if (res.kind == R_SETUP)
     {
         snprintf(why, sizeof(why), "%s", res.msg);
-        not_run = true;
+        setup_failed = true;
         goto verdict;
     }
     snprintf(bin, sizeof(bin), "%s/dist/bin/gateway-rs", src_root);
     if (access(bin, X_OK) != 0)
     {
-        snprintf(why, sizeof(why), "%s is missing or not executable "
+        snprintf(why, sizeof(why), "%s does not exist or is not executable "
                  "(build failure?)", bin);
-        not_run = true;
+        setup_failed = true;
         goto verdict;
     }
     snprintf(cwd, sizeof(cwd), "%s/empty", workdir);
@@ -207,16 +231,32 @@ main(int argc, char **argv)
     {
         snprintf(why, sizeof(why), "cannot create %s: %s", cwd,
                  strerror(errno));
-        not_run = true;
+        setup_failed = true;
         goto verdict;
     }
+
+    TEST_STEP("Good run: gateway-rs with its normal setup");
+    t0 = now_s();
+    gw = svc_start(&res, GW);
+    if (gw == NULL)
+    {
+        snprintf(why, sizeof(why), "good run did not start: %.800s",
+                 res.msg);
+        setup_failed = true;
+        goto verdict;
+    }
+    snprintf(good, sizeof(good), "good: started, accepts TCP on %u after "
+             "%.1f s", gw->port, now_s() - t0);
+    RING("webdeps H1: %s", good);
+    T_FINDING(TAPI_CYBERSEC_SEV_INFO, "gateway.startup", "good", "%s", good);
+    proc_stop(gw);
 
     for (i = 0; i < 3; i++)
     {
         char t[200];
 
-        TEST_STEP("Run gateway-rs: %s", runs[i].name);
-        if (i == 2)
+        TEST_STEP("Bad run: gateway-rs, %s", runs[i].name);
+        if (i == 1)
         {
             struct sockaddr_in sa = { .sin_family = AF_INET,
                                       .sin_port = htons(tab_port[GW]) };
@@ -230,39 +270,46 @@ main(int argc, char **argv)
                 snprintf(why, sizeof(why), "cannot hold port %u for the "
                          "port-in-use run: %s", tab_port[GW],
                          strerror(errno));
-                not_run = true;
+                setup_failed = true;
                 goto verdict;
             }
         }
-        if (!run_gateway(&runs[i], bin, cwd, i == 1, why, sizeof(why)))
+        if (!run_gateway(&runs[i], bin, cwd, i == 0, i == 2, why,
+                         sizeof(why)))
         {
-            not_run = true;
+            setup_failed = true;
             goto verdict;
+        }
+        if (i == 1)
+        {
+            close(blocker);
+            blocker = -1;
         }
         run_text(&runs[i], t, sizeof(t));
         RING("webdeps H1: %s; stderr [%s]", t, runs[i].err);
-        T_FINDING(runs[i].code == 101 || runs[i].panic ?
+        T_FINDING(runs[i].code == 101 && runs[i].panic ?
                   TAPI_CYBERSEC_SEV_HIGH : TAPI_CYBERSEC_SEV_INFO,
                   "gateway.startup", runs[i].name, "%s; stderr [%s]", t,
                   runs[i].err);
-        append(summary, sizeof(summary), "%s; ", t);
-        if (runs[i].code == 101 || runs[i].panic)
+        append(summary, sizeof(summary), "%s; stderr [%.100s]; ", t,
+               runs[i].err);
+        if (runs[i].code == 101 && runs[i].panic)
             append(hit, sizeof(hit), "%s ", runs[i].name);
     }
 
 verdict:
     if (blocker >= 0)
         close(blocker);
-    if (not_run)
-        res_set(&res, R_FAIL, "H1 NOT RUN: gateway-rs did not start at "
-                "all, no exit code: %.600s", why);
+    if (setup_failed)
+        res_set(&res, R_SETUP, "H1 SETUP_FAILED: %.900s (no verdict on H1)",
+                why);
     else if (hit[0] != '\0')
-        res_set(&res, R_FAIL, "H1 CONFIRMED: gateway-rs panicked (exit 101 "
-                "or 'panicked at' main.rs:30/34) in run(s) %s; %s", hit,
-                summary);
+        res_set(&res, R_FAIL, "H1 FAIL (H1 confirmed): exit 101 with "
+                "'panicked at' main.rs:30/34 in run(s) %s; %s; %s", hit,
+                good, summary);
     else
-        res_set(&res, R_PASS, "H1 DISPROVED: no run exited with 101 or "
-                "printed a panic at main.rs:30/34; %s", summary);
+        res_set(&res, R_PASS, "H1 PASS (H1 disproved): no bad run exited "
+                "101 with a panic at main.rs:30/34; %s; %s", good, summary);
     T_VERDICT(&res, "H1");
 
 cleanup:

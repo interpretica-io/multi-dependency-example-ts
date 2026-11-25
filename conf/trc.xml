@@ -1217,7 +1217,7 @@
             <objective/>
             <notes/>
           </test>
-          <test name="gateway_panic_exit" type="script">
+          <test name="gateway_exit_code" type="script">
             <objective/>
             <notes/>
           </test>
