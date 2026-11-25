@@ -22,6 +22,9 @@
           - @ref mde-webdeps-t15_hardening - Hardening Flags of the Built Binaries (H4)
           - @ref mde-webdeps-t9_go_contract - Contract Violations to service-go (H5)
           - @ref mde-webdeps-t5_egress - Egress of the Web Tier (EG1)
+          - @ref mde-webdeps-gateway_panic_exit - Gateway Panic Exit (H1)
+          - @ref mde-webdeps-go_idle_connection - Idle Connection to service-go (H2)
+          - @ref mde-webdeps-egress_vs_allowlist - Egress vs Allowed List (H3)
           - @ref mde-webdeps-s_rust - Smoke: gateway-rs
           - @ref mde-webdeps-s_go - Smoke: service-go
           - @ref mde-webdeps-s_cs - Smoke: service-cs
@@ -326,6 +329,47 @@
         <run name="t5_egress">
             <script name="t5_egress">
                 <objective>[EG1] Start gateway-rs, service-go and service-cs, send each a valid request, run tapi_egress with an allowed list of localhost and the contract ports. Every result goes in the tapi_cybersec_report; FAIL names each address outside the list; INCONCLUSIVE with the reason when tapi_egress is unavailable. Kept from round 2; settles no H hypothesis.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-webdeps-gateway_panic_exit Gateway Panic Exit (H1)
+              @objective Start gateway-rs with no config, a bad port and the port in use, wait at most 10 s, record exit code and stderr; H1 CONFIRMED on exit 101 or a panic at main.rs:30/34, H1 DISPROVED otherwise, H1 NOT RUN when the binary does not start.
+
+              @par Scenario:
+              -# Run dist/bin/gateway-rs three ways, each killed after 10 s.
+              -# Log exit code (or "hung") and stderr of each.
+        -->
+        <run name="gateway_panic_exit">
+            <script name="gateway_panic_exit">
+                <objective>[H1] Start gateway-rs with no config, a bad port and the port in use, wait at most 10 s, record exit code and stderr; H1 CONFIRMED on exit 101 or a panic at main.rs:30/34, H1 DISPROVED otherwise, H1 NOT RUN when the binary does not start.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-webdeps-go_idle_connection Idle Connection to service-go (H2)
+              @objective Hold one silent and one byte-per-5-s connection to service-go for up to 60 s, then 50 idle connections and one normal request; H2 CONFIRMED when a connection is held at 60 s, H2 DISPROVED when both close in under 30 s.
+
+              @par Scenario:
+              -# Open a silent connection; time the close.
+              -# Send the request line one byte every 5 s; time the close.
+              -# Open 50 idle connections; send a normal request.
+        -->
+        <run name="go_idle_connection">
+            <script name="go_idle_connection">
+                <objective>[H2] Hold one silent and one byte-per-5-s connection to service-go for up to 60 s, then 50 idle connections and one normal request; H2 CONFIRMED when a connection is held at 60 s, H2 DISPROVED when both close in under 30 s.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-webdeps-egress_vs_allowlist Egress and Listeners vs the Allowed List (H3)
+              @objective Start the web tier, send normal requests, and with tapi_egress and tapi_netexpose compare outgoing connections with loopback and listening ports with the sources; H3 CONFIRMED naming each offender, H3 DISPROVED if none, service-cs not run when it does not start.
+
+              @par Scenario:
+              -# Start the three services; send normal requests.
+              -# List outgoing connections and listening ports.
+              -# Compare with the allowed list; print each offender.
+        -->
+        <run name="egress_vs_allowlist">
+            <script name="egress_vs_allowlist">
+                <objective>[H3] Start the web tier, send normal requests, and with tapi_egress and tapi_netexpose compare outgoing connections with loopback and listening ports with the sources; H3 CONFIRMED naming each offender, H3 DISPROVED if none, service-cs not run when it does not start.</objective>
             </script>
         </run>
 

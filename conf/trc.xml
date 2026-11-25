@@ -1217,6 +1217,18 @@
             <objective/>
             <notes/>
           </test>
+          <test name="gateway_panic_exit" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="go_idle_connection" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="egress_vs_allowlist" type="script">
+            <objective/>
+            <notes/>
+          </test>
           <test name="t5_egress" type="script">
             <objective/>
             <notes/>
