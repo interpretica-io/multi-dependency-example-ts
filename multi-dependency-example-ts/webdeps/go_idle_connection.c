@@ -1,25 +1,29 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief Webdeps: go_idle_connection, how long service-go holds idle and
- *        half-sent connections (settles H2)
+ * @brief Webdeps: go_idle_connection, how long service-go holds an idle and
+ *        a half-sent connection (settles H2)
  *
- * Hypothesis H2: service-go holds an idle client connection open with no
- * limit (main.go:54). The listen port comes from the service contract
- * table (the run script reads the same one).
+ * Hypothesis H2: service-go keeps an idle or slow connection open with no
+ * time limit (main.go:54). service-go is started and its listen port is
+ * found with tapi_netexpose.
  *
- * 20 TCP connections are opened: 10 send nothing, 10 send the partial
- * request line "GET / HTTP/1.1\r\n" and nothing more. All are kept for
- * 60 s; once per second each is polled for a close by the server (read
- * returns 0). Then a normal request on a new connection is timed (answer
- * within 2 s or not), recorded as extra data.
+ * Connection A is opened and sends nothing. Connection B sends the
+ * partial request line "GET / HTTP/1.1" without the final CRLF. Both are
+ * polled for 60 s (a status line every 5 s; the close is noticed within
+ * 0.25 s and its time printed in whole seconds, the number that
+ * examples/idle_socket.ts prints for one connection). Then 200 more idle
+ * connections are opened and a normal GET must be answered within 2 s;
+ * this is extra evidence for H2.
  *
  * Verdicts (each starts with H2):
- *  - "H2 FAIL (H2 confirmed)": 15 or more of the 20 are open after 60 s;
- *  - "H2 PASS (H2 disproved)": the server closed all 20 before 60 s;
- *  - "H2 NOT SETTLED": anything in between, counts printed (fails);
- *  - "H2 SETUP_FAILED": service-go did not start; reason printed.
- * Close time of each group is reported (first and last close, seconds).
+ *  - "H2 CONFIRMED": both connections still held at 60 s (hold time
+ *    printed); the test fails;
+ *  - "H2 REFUTED": the server closed both before 60 s (close times
+ *    printed); the test passes. When only one is closed the verdict reads
+ *    "H2 CONFIRMED for <held>; H2 REFUTED for <closed>" and the test fails;
+ *  - "H2 SKIPPED": service-go cannot be started or its port not found;
+ *    the reason is printed.
  *
  * @author midair <midair@localhost>
  */
@@ -31,9 +35,8 @@
 #include "webdeps_lib.h"
 
 #define HOLD_MAX    60
-#define N_PER_GROUP 10
-#define N_CONN      (2 * N_PER_GROUP)
-#define FAIL_OPEN   15
+#define POLL_S      5
+#define N_EXTRA     200
 #define NEW_REQ_S   2
 
 /** True when the peer closed the connection (read returns 0 or fails). */
@@ -58,153 +61,170 @@ closed_by_peer(int s)
     }
 }
 
-/** Text of the close times of one group. */
-static void
-group_text(const char *name, const double *t, int open_n, char *buf,
-           size_t size)
-{
-    double first = -1;
-    double last = -1;
-    int    i;
-
-    for (i = 0; i < N_PER_GROUP; i++)
-    {
-        if (t[i] < 0)
-            continue;
-        if (first < 0 || t[i] < first)
-            first = t[i];
-        if (t[i] > last)
-            last = t[i];
-    }
-    if (first < 0)
-        snprintf(buf, size, "%s: none closed, %d of %d open after %d s",
-                 name, open_n, N_PER_GROUP, HOLD_MAX);
-    else
-        snprintf(buf, size, "%s: %d closed (first at %.0f s, last at "
-                 "%.0f s), %d of %d open after %d s", name,
-                 N_PER_GROUP - open_n, first, last, open_n, N_PER_GROUP,
-                 HOLD_MAX);
-}
-
 int
 main(int argc, char **argv)
 {
-    static const char partial[] = "GET / HTTP/1.1\r\n";
-    res_t    res = { .kind = R_PASS };
-    proc_t  *go;
-    int      fds[N_CONN];
-    double   tclose[N_CONN];
-    int      open_g[2] = { 0, 0 };
-    hg_res   h = { .how = HG_NORESP };
-    char     gtext[2][220];
-    char     extra[200] = "";
-    char     state[200] = "service-go running";
-    char     why[2200] = "";
-    double   t0;
-    int      i;
-    int      sec;
-    bool     setup_failed = false;
+    static const char * const label[2] = { "idle (nothing sent)",
+                                           "partial request line" };
+    static const char partial[] = "GET / HTTP/1.1";
+    res_t              res = { .kind = R_PASS };
+    tsapi_mde_session  session = { .ta = NULL };
+    bool               session_up = false;
+    proc_t            *go;
+    int                fds[2] = { -1, -1 };
+    int               *extra = NULL;
+    double             tclose[2] = { -1, -1 };
+    hg_res             h = { .how = HG_NORESP };
+    char               ex[300] = "no extra check run";
+    char               why[1200] = "";
+    char               part[2][160];
+    char               state[200] = "service-go running";
+    double             t0;
+    double             next_status;
+    int                i;
+    int                n_extra = 0;
+    int                held = 0;
+    bool               skipped = false;
 
     TEST_START;
     t_report_begin();
-    for (i = 0; i < N_CONN; i++)
-    {
-        fds[i] = -1;
-        tclose[i] = -1;
-    }
     wd_init(&res);
     if (res.kind == R_SETUP)
     {
         snprintf(why, sizeof(why), "%s", res.msg);
-        setup_failed = true;
+        skipped = true;
         goto verdict;
     }
-    TEST_STEP("Start service-go");
-    go = svc_start(&res, GO);
+    if (tsapi_mde_session_init(&session, "go_idle_connection") != 0)
+    {
+        snprintf(why, sizeof(why), "no session on the agent for "
+                 "tapi_netexpose");
+        skipped = true;
+        goto verdict;
+    }
+    session_up = true;
+
+    TEST_STEP("Start service-go and find its port with tapi_netexpose");
+    go = svc_start_exposed(&res, &session, GO);
     if (go == NULL)
     {
         snprintf(why, sizeof(why), "%s", res.msg);
-        setup_failed = true;
+        skipped = true;
         goto verdict;
     }
 
-    TEST_STEP("Open %d connections: %d silent, %d with a partial line",
-              N_CONN, N_PER_GROUP, N_PER_GROUP);
-    for (i = 0; i < N_CONN; i++)
+    TEST_STEP("Open one silent connection and one with a partial line");
+    for (i = 0; i < 2; i++)
     {
         fds[i] = connect_loop(go->port);
         if (fds[i] < 0)
         {
             snprintf(why, sizeof(why), "connection %d to 127.0.0.1:%u "
                      "failed", i, go->port);
-            setup_failed = true;
+            skipped = true;
             goto verdict;
         }
-        if (i >= N_PER_GROUP &&
-            write(fds[i], partial, sizeof(partial) - 1) < 0)
-            tclose[i] = 0;
     }
+    if (write(fds[1], partial, sizeof(partial) - 1) < 0)
+        tclose[1] = 0;
 
-    TEST_STEP("Hold %d s, poll once per second", HOLD_MAX);
+    TEST_STEP("Poll both for %d s, status every %d s", HOLD_MAX, POLL_S);
     t0 = now_s();
-    for (sec = 1; sec <= HOLD_MAX; sec++)
+    next_status = POLL_S;
+    while (now_s() - t0 < HOLD_MAX)
     {
-        double wait = t0 + sec - now_s();
+        double el;
 
-        if (wait > 0)
-            usleep((useconds_t)(wait * 1e6));
-        for (i = 0; i < N_CONN; i++)
+        usleep(250000);
+        el = now_s() - t0;
+        for (i = 0; i < 2; i++)
         {
-            if (fds[i] >= 0 && tclose[i] < 0 && closed_by_peer(fds[i]))
-                tclose[i] = now_s() - t0;
+            if (tclose[i] < 0 && closed_by_peer(fds[i]))
+            {
+                tclose[i] = el;
+                RING("webdeps H2: %s closed by the server after %.0f s",
+                     label[i], el);
+            }
         }
+        if (el >= next_status)
+        {
+            RING("webdeps H2: at %.0f s: %s %s, %s %s", el, label[0],
+                 tclose[0] < 0 ? "open" : "closed", label[1],
+                 tclose[1] < 0 ? "open" : "closed");
+            next_status += POLL_S;
+        }
+        if (tclose[0] >= 0 && tclose[1] >= 0)
+            break;
     }
-    for (i = 0; i < N_CONN; i++)
+    for (i = 0; i < 2; i++)
     {
         if (tclose[i] < 0)
-            open_g[i / N_PER_GROUP]++;
+        {
+            held++;
+            snprintf(part[i], sizeof(part[i]), "%s: still held at %d s "
+                     "(hold time %.0f s)", label[i], HOLD_MAX,
+                     now_s() - t0);
+        }
+        else
+            snprintf(part[i], sizeof(part[i]), "%s: closed by the server "
+                     "after %.0f s", label[i], tclose[i]);
     }
-    group_text("silent", tclose, open_g[0], gtext[0], sizeof(gtext[0]));
-    group_text("partial-request", tclose + N_PER_GROUP, open_g[1], gtext[1],
-               sizeof(gtext[1]));
-    RING("webdeps H2: %s", gtext[0]);
-    RING("webdeps H2: %s", gtext[1]);
 
-    TEST_STEP("Normal request on a new connection");
+    TEST_STEP("Open %d idle connections, then one normal GET", N_EXTRA);
+    extra = calloc(N_EXTRA, sizeof(*extra));
+    if (extra == NULL)
+    {
+        snprintf(why, sizeof(why), "out of memory");
+        skipped = true;
+        goto verdict;
+    }
+    for (i = 0; i < N_EXTRA; i++)
+    {
+        extra[n_extra] = connect_loop(go->port);
+        if (extra[n_extra] < 0)
+            break;
+        n_extra++;
+    }
     http_get(go->port, REQUEST, NEW_REQ_S, &h);
-    snprintf(extra, sizeof(extra), "new request %s within %d s (%.1f s)",
-             h.how == HG_OK ? "answered" : "NOT answered", NEW_REQ_S,
+    snprintf(ex, sizeof(ex), "%d idle connections open (of %d), a normal "
+             "GET %s within %d s (%.1f s)", n_extra, N_EXTRA,
+             h.how == HG_OK ? "was answered" : "was NOT answered", NEW_REQ_S,
              h.elapsed);
-    RING("webdeps H2: %s", extra);
+    RING("webdeps H2: %s", ex);
     if (proc_gone(go))
         proc_describe(go, state, sizeof(state));
-    T_FINDING(open_g[0] + open_g[1] >= FAIL_OPEN ? TAPI_CYBERSEC_SEV_HIGH :
-              TAPI_CYBERSEC_SEV_INFO, "go.hold-time", "service-go",
-              "%s; %s; %s", gtext[0], gtext[1], extra);
+    T_FINDING(held > 0 ? TAPI_CYBERSEC_SEV_HIGH : TAPI_CYBERSEC_SEV_INFO,
+              "go.hold-time", "service-go", "%s; %s; %s", part[0], part[1],
+              ex);
 
 verdict:
-    for (i = 0; i < N_CONN; i++)
+    for (i = 0; i < 2; i++)
     {
         if (fds[i] >= 0)
             close(fds[i]);
     }
-    if (setup_failed)
-        res_set(&res, R_SETUP, "H2 SETUP_FAILED: service-go: %.900s (no "
-                "verdict on H2)", why);
-    else if (open_g[0] + open_g[1] >= FAIL_OPEN)
-        res_set(&res, R_FAIL, "H2 FAIL (H2 confirmed): %d of %d connections "
-                "still open after %d s; %s; %s; %s (extra data); %s",
-                open_g[0] + open_g[1], N_CONN, HOLD_MAX, gtext[0], gtext[1],
-                extra, state);
-    else if (open_g[0] + open_g[1] == 0)
-        res_set(&res, R_PASS, "H2 PASS (H2 disproved): the server closed all "
-                "%d connections before %d s; %s; %s; %s (extra data); %s",
-                N_CONN, HOLD_MAX, gtext[0], gtext[1], extra, state);
+    for (i = 0; i < n_extra; i++)
+        close(extra[i]);
+    free(extra);
+    if (session_up)
+        tsapi_mde_session_fini(&session);
+    if (skipped)
+        res_set(&res, R_SKIP, "H2 SKIPPED: service-go: %.900s (no verdict "
+                "on H2)", why);
+    else if (held == 2)
+        res_set(&res, R_FAIL, "H2 CONFIRMED: the server holds both "
+                "connections at %d s; %s; %s; extra evidence: %s; %s",
+                HOLD_MAX, part[0], part[1], ex, state);
+    else if (held == 1)
+        res_set(&res, R_FAIL, "H2 CONFIRMED for the %s connection, H2 "
+                "REFUTED for the %s connection; %s; %s; extra evidence: "
+                "%s; %s", tclose[0] < 0 ? label[0] : label[1],
+                tclose[0] < 0 ? label[1] : label[0], part[0], part[1], ex,
+                state);
     else
-        res_set(&res, R_FAIL, "H2 NOT SETTLED: %d of %d connections open "
-                "after %d s; %s; %s; %s (extra data); %s",
-                open_g[0] + open_g[1], N_CONN, HOLD_MAX, gtext[0], gtext[1],
-                extra, state);
+        res_set(&res, R_PASS, "H2 REFUTED: the server closed both "
+                "connections before %d s; %s; %s; extra evidence: %s; %s",
+                HOLD_MAX, part[0], part[1], ex, state);
     T_VERDICT(&res, "H2");
 
 cleanup:

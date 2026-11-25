@@ -10,19 +10,21 @@
  * Four runs of dist/bin/gateway-rs, each killed after 10 s; exit code,
  * stderr and run time of each are logged:
  *  1. good: normal setup (the service start of the group); it must start
- *     and accept TCP, else the test reports SETUP_FAILED;
+ *     and accept TCP, else the test reports SKIPPED;
  *  2. bad-address: unusable listen address in the environment and on the
  *     command line;
  *  3. port-in-use: another listener holds the gateway port;
  *  4. empty-env: empty environment, empty work directory.
  *
  * Verdicts (each starts with H1):
- *  - "H1 FAIL (H1 confirmed)": a bad run exited with 101 and its stderr
- *    has "panicked at" with main.rs:30 or main.rs:34;
- *  - "H1 PASS (H1 disproved)": every bad run ended with a non-panic code
- *    (clean error exit, or still running until killed);
- *  - "H1 SETUP_FAILED": the binary is missing or the good run did not
- *    start; the reason is printed; no verdict on H1.
+ *  - "H1 CONFIRMED": a bad run exited with 101 and its stderr names a
+ *    panic ("panicked at") at main.rs:30 or main.rs:34; the test fails;
+ *  - "H1 REFUTED": every bad run ended with a non-panic code and a
+ *    message (code 1 or another), or kept running until killed; the test
+ *    passes;
+ *  - "H1 SKIPPED": the binary is missing or cannot be exec'd, or the
+ *    good run does not start; the exec error is printed, no verdict.
+ * The exit code and the last 20 lines of stderr of every run are printed.
  *
  * @author midair <midair@localhost>
  */
@@ -43,28 +45,41 @@ typedef struct run_t {
     bool        panic;      /**< "panicked at" at main.rs:30 or :34. */
     bool        started;
     double      secs;       /**< Run time. */
-    char        err[400];
+    char        err[1600];
 } run_t;
 
-/** Read the first bytes of a file with newlines flattened. */
+/** Read the last 20 lines of a file, newlines flattened to " | ". */
 static void
 slurp(const char *path, char *buf, size_t size)
 {
+    char    raw[8192];
     FILE   *f = fopen(path, "r");
     size_t  n = 0;
     size_t  i;
+    size_t  start;
+    int     lines = 0;
 
     buf[0] = '\0';
     if (f == NULL)
         return;
-    n = fread(buf, 1, size - 1, f);
+    n = fread(raw, 1, sizeof(raw) - 1, f);
     fclose(f);
-    buf[n] = '\0';
-    for (i = 0; i < n; i++)
+    while (n > 0 && (raw[n - 1] == '\n' || raw[n - 1] == '\r'))
+        n--;
+    raw[n] = '\0';
+    start = n;
+    while (start > 0)
     {
-        if (buf[i] == '\n' || buf[i] == '\r')
-            buf[i] = ' ';
+        if (raw[start - 1] == '\n' && ++lines == 20)
+            break;
+        start--;
     }
+    for (i = start; i < n; i++)
+    {
+        if (raw[i] == '\n' || raw[i] == '\r')
+            raw[i] = '|';
+    }
+    snprintf(buf, size, "%s", raw + start);
 }
 
 /** True when stderr names a panic at main.rs:30 or main.rs:34. */
@@ -207,7 +222,7 @@ main(int argc, char **argv)
     double  t0;
     int     blocker = -1;
     int     i;
-    bool    setup_failed = false;
+    bool    skipped = false;
 
     TEST_START;
     t_report_begin();
@@ -215,7 +230,7 @@ main(int argc, char **argv)
     if (res.kind == R_SETUP)
     {
         snprintf(why, sizeof(why), "%s", res.msg);
-        setup_failed = true;
+        skipped = true;
         goto verdict;
     }
     snprintf(bin, sizeof(bin), "%s/dist/bin/gateway-rs", src_root);
@@ -223,7 +238,7 @@ main(int argc, char **argv)
     {
         snprintf(why, sizeof(why), "%s does not exist or is not executable "
                  "(build failure?)", bin);
-        setup_failed = true;
+        skipped = true;
         goto verdict;
     }
     snprintf(cwd, sizeof(cwd), "%s/empty", workdir);
@@ -231,7 +246,7 @@ main(int argc, char **argv)
     {
         snprintf(why, sizeof(why), "cannot create %s: %s", cwd,
                  strerror(errno));
-        setup_failed = true;
+        skipped = true;
         goto verdict;
     }
 
@@ -242,7 +257,7 @@ main(int argc, char **argv)
     {
         snprintf(why, sizeof(why), "good run did not start: %.800s",
                  res.msg);
-        setup_failed = true;
+        skipped = true;
         goto verdict;
     }
     snprintf(good, sizeof(good), "good: started, accepts TCP on %u after "
@@ -270,14 +285,14 @@ main(int argc, char **argv)
                 snprintf(why, sizeof(why), "cannot hold port %u for the "
                          "port-in-use run: %s", tab_port[GW],
                          strerror(errno));
-                setup_failed = true;
+                skipped = true;
                 goto verdict;
             }
         }
         if (!run_gateway(&runs[i], bin, cwd, i == 0, i == 2, why,
                          sizeof(why)))
         {
-            setup_failed = true;
+            skipped = true;
             goto verdict;
         }
         if (i == 1)
@@ -291,7 +306,7 @@ main(int argc, char **argv)
                   TAPI_CYBERSEC_SEV_HIGH : TAPI_CYBERSEC_SEV_INFO,
                   "gateway.startup", runs[i].name, "%s; stderr [%s]", t,
                   runs[i].err);
-        append(summary, sizeof(summary), "%s; stderr [%.100s]; ", t,
+        append(summary, sizeof(summary), "%s; stderr [%.200s]; ", t,
                runs[i].err);
         if (runs[i].code == 101 && runs[i].panic)
             append(hit, sizeof(hit), "%s ", runs[i].name);
@@ -300,16 +315,16 @@ main(int argc, char **argv)
 verdict:
     if (blocker >= 0)
         close(blocker);
-    if (setup_failed)
-        res_set(&res, R_SETUP, "H1 SETUP_FAILED: %.900s (no verdict on H1)",
+    if (skipped)
+        res_set(&res, R_SKIP, "H1 SKIPPED: %.900s (no verdict on H1)",
                 why);
     else if (hit[0] != '\0')
-        res_set(&res, R_FAIL, "H1 FAIL (H1 confirmed): exit 101 with "
-                "'panicked at' main.rs:30/34 in run(s) %s; %s; %s", hit,
+        res_set(&res, R_FAIL, "H1 CONFIRMED: exit 101 with a panic at "
+                "main.rs:30/34 in run(s) %s; %s; %s", hit,
                 good, summary);
     else
-        res_set(&res, R_PASS, "H1 PASS (H1 disproved): no bad run exited "
-                "101 with a panic at main.rs:30/34; %s; %s", good, summary);
+        res_set(&res, R_PASS, "H1 REFUTED: no bad run exited 101 with a "
+                "panic at main.rs:30/34 (non-panic exit or no exit); %s; %s", good, summary);
     T_VERDICT(&res, "H1");
 
 cleanup:

@@ -342,7 +342,7 @@
         -->
         <run name="gateway_exit_code">
             <script name="gateway_exit_code">
-                <objective>[H1] Run gateway-rs with its normal setup, then with a bad listen address, a port in use and an empty environment, each killed after 10 s; record exit code, stderr and run time. H1 FAIL when a bad run exits 101 with 'panicked at' main.rs:30/34, H1 PASS when none does, H1 SETUP_FAILED when the binary is missing or the good run does not start.</objective>
+                <objective>[H1] Start gateway-rs well (control), then with bad input (unusable address, port in use, empty environment); wait at most 10 s, record the exit code and the last 20 lines of stderr. H1 CONFIRMED when a run exits 101 and stderr names a panic at main.rs:30 or main.rs:34; H1 REFUTED when the exits are non-panic; H1 SKIPPED (not FAIL) when the binary cannot start.</objective>
             </script>
         </run>
 
@@ -356,7 +356,7 @@
         -->
         <run name="go_idle_connection">
             <script name="go_idle_connection">
-                <objective>[H2] Open 20 connections to service-go, 10 silent and 10 with the partial line 'GET / HTTP/1.1', keep them 60 s polling once per second, then send a normal request. H2 FAIL when 15 or more are still open at 60 s, H2 PASS when the server closes all of them before 60 s.</objective>
+                <objective>[H2] Open one silent connection and one with a partial request line without the final CRLF to service-go (port from tapi_netexpose), poll both for 60 s. H2 CONFIRMED when both are still held at 60 s (hold time printed); H2 REFUTED for a connection the server closes earlier (close time printed). Extra evidence: 200 idle connections and a GET answered within 2 s.</objective>
             </script>
         </run>
 
@@ -370,7 +370,7 @@
         -->
         <run name="egress_vs_allowlist">
             <script name="egress_vs_allowlist">
-                <objective>[H3] Start gateway-rs and service-go (service-cs when it starts), list listening ports with tapi_netexpose, drive GET / and every route of the sources, record outgoing connections with tapi_egress and compare with the allowed list (127.0.0.1, ::1, the service addresses) and the literal addresses of the sources. H3 FAIL on a connection outside the list, H3 PASS otherwise; literals never contacted are reported as not reached.</objective>
+                <objective>[H3] Start gateway-rs, service-go and, when t10_build_cs built it, service-cs (else 'service-cs not built'); list listeners with tapi_netexpose and capture outgoing connections with tapi_egress for 30 s while GET / is sent to each. Allowed list: 127.0.0.0/8 and ::1. H3 CONFIRMED on a non-loopback listener or connection (address, port and the H3 evidence source line printed); H3 REFUTED when all traffic is loopback.</objective>
             </script>
         </run>
 

@@ -7,25 +7,25 @@
  * Hypothesis H3: gateway-rs, service-cs and service-go open connections
  * to fixed addresses outside the allowed list.
  *
- * gateway-rs and service-go are started; service-cs only when it starts
- * here, otherwise "service-cs SETUP_FAILED: <reason>" is printed and the
- * test goes on. tapi_netexpose lists the listening ports of each. Each
- * service gets GET / and one request per route written in its source
- * (quoted strings that start with "/"). tapi_egress snapshots the
- * outgoing connections after every request; each is recorded by process
- * name, destination address and port.
+ * gateway-rs and service-go are started; service-cs only when
+ * t10_build_cs built it (its output is in place), otherwise
+ * "service-cs not built" is printed and H3 is settled for the other two.
+ * tapi_netexpose lists the listening sockets of each process; tapi_egress
+ * captures outgoing connections for 30 s while GET / (and one request per
+ * route written in the source) is sent to each service.
  *
- * The allowed list is 127.0.0.1, ::1 and the addresses the three services
- * listen on. The literal addresses at main.rs:33-36, Program.cs:24,34,78
- * and main.go:46,51,87 are read from the sources and compared with the
- * connections seen; each one never contacted is printed as "not reached"
- * (a literal never reached is not proven harmless).
+ * The allowed list is loopback only: 127.0.0.0/8 and ::1. A listener on
+ * any other address, or an outgoing connection to one, is a finding; the
+ * address, the port and the source line of the H3 evidence list
+ * (main.rs:33-36, Program.cs:24,34,78, main.go:46,51,87) that holds the
+ * same value are printed.
  *
  * Verdicts (each starts with H3):
- *  - "H3 FAIL (H3 confirmed)": a process connected outside the list;
- *  - "H3 PASS (H3 disproved)": every connection stayed inside the list;
+ *  - "H3 CONFIRMED": a listener or an outgoing connection outside
+ *    loopback; the test fails;
+ *  - "H3 REFUTED": all traffic stayed on loopback; the test passes;
  *  - "H3 SETUP_FAILED": gateway-rs or service-go did not start, or a
- *    scanner gave no data; the reason is printed.
+ *    scanner gave no data; the reason is printed, no verdict.
  *
  * @author midair <midair@localhost>
  */
@@ -36,7 +36,7 @@
 
 #include "webdeps_lib.h"
 
-#define ROUNDS  6
+#define CAPTURE_S 30
 #define LIST_LEN 700
 
 #define MAX_ROUTES 16
@@ -62,7 +62,7 @@ static lit_t    lits[MAX_LIT];
 static unsigned n_lits;
 static char     routes[NAMES][MAX_ROUTES][80];
 static unsigned n_routes[NAMES];
-static char     allowed[NAMES][64];
+static char     evid[NAMES][4][2][160];  /**< Evidence lines: where, text. */
 
 /** Add a dotted-quad found in @p line to the literal list. */
 static void
@@ -117,6 +117,8 @@ read_source(int idx)
 
                 snprintf(where, sizeof(where), "%s:%u",
                          strrchr(src_files[idx], '/') + 1, ln);
+                snprintf(evid[idx][k][0], 160, "%s", where);
+                snprintf(evid[idx][k][1], 160, "%s", line);
                 scan_literals(line, where);
             }
         }
@@ -147,20 +149,37 @@ read_source(int idx)
     return true;
 }
 
-/** True when @p addr is in the allowed list. */
+/** True when @p addr is loopback: 127.0.0.0/8 or ::1. */
 static bool
 is_allowed(const char *addr)
 {
-    int i;
+    return strncmp(addr, "127.", 4) == 0 || strcmp(addr, "::1") == 0 ||
+           strncmp(addr, "::ffff:127.", 11) == 0;
+}
 
-    if (strcmp(addr, "127.0.0.1") == 0 || strcmp(addr, "::1") == 0)
-        return true;
+/** Source lines of the H3 evidence list holding @p addr or port @p port. */
+static void
+evidence_for(const char *addr, unsigned port, char *buf, size_t size)
+{
+    char     pstr[16];
+    int      i;
+    unsigned k;
+
+    snprintf(pstr, sizeof(pstr), ":%u", port);
+    buf[0] = '\0';
     for (i = 0; i < NAMES; i++)
     {
-        if (allowed[i][0] != '\0' && strcmp(allowed[i], addr) == 0)
-            return true;
+        for (k = 0; k < 4; k++)
+        {
+            if (evid[i][k][0][0] == '\0')
+                continue;
+            if (strstr(evid[i][k][1], addr) != NULL ||
+                strstr(evid[i][k][1], pstr) != NULL)
+                append(buf, size, "%s ", evid[i][k][0]);
+        }
     }
-    return false;
+    if (buf[0] == '\0')
+        snprintf(buf, size, "no evidence line holds it");
 }
 
 /** Add @p what to a list once, bounded. */
@@ -187,6 +206,7 @@ main(int argc, char **argv)
     char                 seen[LIST_LEN] = "";
     char                 listens[LIST_LEN] = "";
     char                 notrun[200] = "";
+    char                 bad_listen[LIST_LEN] = "";
     char                 why[2200] = "";
     unsigned             total = 0;
     unsigned             n_listen = 0;
@@ -198,6 +218,7 @@ main(int argc, char **argv)
     const int            order[] = { GO, CS, GW };
     int                  i;
     int                  round;
+    double               t_start;
 
     TEST_START;
     t_report_begin();
@@ -236,6 +257,14 @@ main(int argc, char **argv)
     {
         res_t r2 = { .kind = R_PASS };
 
+        if (order[i] == CS &&
+            access(H3_OUT "/service-cs/service-cs", X_OK) != 0)
+        {
+            snprintf(notrun, sizeof(notrun), "service-cs not built");
+            RING("webdeps H3: %s (t10_build_cs did not pass): H3 is "
+                 "settled for gateway-rs and service-go only", notrun);
+            continue;
+        }
         svc[order[i]] = svc_start_exposed(&r2, &session, order[i]);
         if (svc[order[i]] != NULL)
             continue;
@@ -275,7 +304,7 @@ main(int argc, char **argv)
         TE_VEC_FOREACH(&socks, s)
         {
             char     addr[64];
-            char     one[160];
+            char     one[400];
             unsigned port = sock_port(&s->local);
             int      o;
 
@@ -289,18 +318,31 @@ main(int argc, char **argv)
             snprintf(one, sizeof(one), "%s %s:%u", names[o], addr, port);
             add_once(listens, one);
             RING("webdeps H3: listening port %s", one);
-            if (strcmp(addr, "0.0.0.0") != 0 && strcmp(addr, "::") != 0 &&
-                allowed[o][0] == '\0')
-                snprintf(allowed[o], sizeof(allowed[o]), "%s", addr);
-            T_FINDING(TAPI_CYBERSEC_SEV_INFO, "net.listener", names[o],
-                      "listens on %s:%u", addr, port);
+            if (is_allowed(addr))
+            {
+                T_FINDING(TAPI_CYBERSEC_SEV_INFO, "net.listener", names[o],
+                          "listens on %s:%u, loopback", addr, port);
+            }
+            else
+            {
+                char ev[200];
+
+                evidence_for(addr, port, ev, sizeof(ev));
+                snprintf(one, sizeof(one), "%s listens on %s:%u, evidence "
+                         "line(s) %s", names[o], addr, port, ev);
+                add_once(bad_listen, one);
+                RING("webdeps H3: non-loopback listener: %s", one);
+                T_FINDING(TAPI_CYBERSEC_SEV_HIGH, "net.listener-exposed",
+                          names[o], "%s", one);
+            }
         }
         te_vec_free(&socks);
     }
 
     TEST_STEP("Normal requests and tapi_egress against the allowed list");
     opt.udp = true;
-    for (round = 0; round < ROUNDS; round++)
+    t_start = now_s();
+    for (round = 0; round == 0 || now_s() - t_start < CAPTURE_S; round++)
     {
         te_vec conns = TE_VEC_INIT(tapi_netexpose_socket);
         const tapi_netexpose_socket *c;
@@ -327,7 +369,7 @@ main(int argc, char **argv)
         TE_VEC_FOREACH(&conns, c)
         {
             char addr[64];
-            char one[200];
+            char one[400];
             int  o = owner_of(svc, ino, n_ino, c->inode);
 
             if (o < 0 || c->inode == 0 || sock_port(&c->remote) == 0)
@@ -352,18 +394,26 @@ main(int argc, char **argv)
                           addr, sock_port(&c->remote));
                 continue;
             }
+            {
+                char ev[200];
+
+                evidence_for(addr, sock_port(&c->remote), ev, sizeof(ev));
+                snprintf(one, sizeof(one), "%s -> %s:%u, evidence line(s) "
+                         "%s", names[o], addr, sock_port(&c->remote), ev);
+            }
             add_once(bad_out, one);
+            RING("webdeps H3: outgoing connection outside loopback: %s", one);
             T_FINDING(TAPI_CYBERSEC_SEV_HIGH, "net.unexpected-egress",
                       names[o], "outgoing connection to %s:%u, outside the allowed list",
                       addr, sock_port(&c->remote));
         }
         te_vec_free(&conns);
-        usleep(100000);
+        usleep(1000000);
     }
     if (total == 0 && !not_run)
     {
         snprintf(why, sizeof(why), "tapi_egress returned no connections at "
-                 "all in %d rounds", ROUNDS);
+                 "all in %d s", CAPTURE_S);
         not_run = true;
     }
 
@@ -379,20 +429,21 @@ verdict:
     if (not_run)
         res_set(&res, R_SETUP, "H3 SETUP_FAILED: %.700s%s%s (no verdict on "
                 "H3)", why, notrun[0] != '\0' ? "; " : "", notrun);
-    else if (bad_out[0] != '\0')
-        res_set(&res, R_FAIL, "H3 FAIL (H3 confirmed): connections outside "
-                "the allowed list: [%s]; literals reached: [%s]; literals "
-                "not reached: [%s]; all outgoing seen: [%s]; listening: "
-                "[%s]; %s", bad_out, reached_s, notreached, seen, listens,
-                notrun[0] != '\0' ? notrun : "all three services ran");
-    else
-        res_set(&res, R_PASS, "H3 PASS (H3 disproved for this run): every "
-                "connection stayed in the allowed list; literals reached: "
-                "[%s]; literals not reached: [%s] (not proof they are "
-                "harmless); outgoing seen: [%s]; listening: [%s]; %s",
-                reached_s, notreached, seen[0] != '\0' ? seen : "none",
+    else if (bad_out[0] != '\0' || bad_listen[0] != '\0')
+        res_set(&res, R_FAIL, "H3 CONFIRMED: non-loopback listeners: [%s]; "
+                "outgoing connections outside loopback: [%s]; literals "
+                "reached: [%s]; literals not reached: [%s]; listening: "
+                "[%s]; %s", bad_listen, bad_out, reached_s, notreached,
                 listens, notrun[0] != '\0' ? notrun : "all three services "
                 "ran");
+    else
+        res_set(&res, R_PASS, "H3 REFUTED: every listener and every "
+                "outgoing connection stayed on loopback (127.0.0.0/8, ::1) "
+                "in a %d s capture; literals reached: [%s]; literals not "
+                "reached: [%s] (not proof they are harmless); outgoing "
+                "seen: [%s]; listening: [%s]; %s", CAPTURE_S, reached_s,
+                notreached, seen[0] != '\0' ? seen : "none", listens,
+                notrun[0] != '\0' ? notrun : "all three services ran");
     T_VERDICT(&res, "H3");
 
 cleanup:
