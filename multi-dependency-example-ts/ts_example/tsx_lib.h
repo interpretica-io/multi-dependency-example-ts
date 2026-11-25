@@ -68,6 +68,7 @@ tsx_log_tail(const char *label, const char *path, int n)
     int     cnt = 0;
     int     i;
 
+    (void)n; /* the tail length is fixed at TSX_TAIL */
     if (f == NULL)
     {
         RING("%s: (no file %s)", label, path);
