@@ -31,6 +31,9 @@ tests = [
     's_cs',
     's_cpp',
     's_c',
+    'ts_build_run',
+    'ts_contract',
+    'ts_robust',
 ]
 
 foreach test : tests

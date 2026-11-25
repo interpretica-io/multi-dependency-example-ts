@@ -30,6 +30,9 @@
           - @ref mde-webdeps-s_cs - Smoke: service-cs
           - @ref mde-webdeps-s_cpp - Smoke: cpp-demo
           - @ref mde-webdeps-s_c - Smoke: libpycore
+          - @ref mde-webdeps-ts_build_run - TypeScript example builds and runs (H1)
+          - @ref mde-webdeps-ts_contract - TypeScript example contract (H2)
+          - @ref mde-webdeps-ts_robust - TypeScript example on bad input and a silent peer (H3)
 
           @par Notes:
           - t0_smoke (group smoke, H0) runs first and alone: one fixed verdict,
@@ -436,6 +439,48 @@
         <run name="s_c">
             <script name="s_c">
                 <objective>[smoke] dlopen dist/lib/libpycore.so (the C extension) and call its leaf C-ABI function py_weight() once in a child process. Checks the child's exit code is 0 and the value it printed is a finite number. Settles no hypothesis.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-webdeps-ts_build_run TypeScript Example Builds and Runs (H1)
+              @objective Run ./build.sh, then the TypeScript example through ./scripts/run.sh guess.
+
+              @par Scenario:
+              -# Check the runner against a planted hang and a planted signal.
+              -# Run ./build.sh; it must exit 0.
+              -# Run ./scripts/run.sh guess; it must exit 0 within 30 s.
+        -->
+        <run name="ts_build_run">
+            <script name="ts_build_run">
+                <objective>[H1] Run ./build.sh, then ./scripts/run.sh guess. H1 PASS when the build exits 0 and the example exits 0 within 30 s; H1 FAIL otherwise, with exit codes, times and the first stderr text; H1 NOT SETTLED when the harness broke.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-webdeps-ts_contract TypeScript Example Contract (H2)
+              @objective Compare the TypeScript example with the Rust example on one fixed input.
+
+              @par Scenario:
+              -# Check the comparison against two planted differences.
+              -# Run both with input 42 (argument and stdin).
+              -# Compare stdout and exit code.
+        -->
+        <run name="ts_contract">
+            <script name="ts_contract">
+                <objective>[H2] Run the TypeScript example and dist/bin/rust-demo (service-go as fallback) with the same fixed input and compare stdout and exit code. H2 PASS when they match; H2 FAIL naming the first difference; H2 NOT SETTLED when a reference binary is missing.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-webdeps-ts_robust TypeScript Example on Bad Input and a Silent Peer (H3)
+              @objective Send empty, oversize and non-numeric input, and point the example at a peer that never answers.
+
+              @par Scenario:
+              -# Check the stack-trace detector and the runner against planted defects.
+              -# Run the four cases, at most 10 s each.
+              -# Require a non-zero exit with a message, no stack trace, no signal.
+        -->
+        <run name="ts_robust">
+            <script name="ts_robust">
+                <objective>[H3] Send an empty, an oversize and a non-numeric input to the TypeScript example and point it at a peer that accepts a connection and never answers. H3 PASS when every case exits non-zero with a message, no stack trace, no signal, within 10 s; H3 FAIL on a hang, a crash, a trace or exit 0; H3 NOT SETTLED when the example never contacts the peer.</objective>
             </script>
         </run>
     </session>

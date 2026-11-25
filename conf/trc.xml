@@ -1257,6 +1257,18 @@
             <objective/>
             <notes/>
           </test>
+          <test name="ts_build_run" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="ts_contract" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="ts_robust" type="script">
+            <objective/>
+            <notes/>
+          </test>
         </iter>
       </test>
       <test name="graph" type="package">

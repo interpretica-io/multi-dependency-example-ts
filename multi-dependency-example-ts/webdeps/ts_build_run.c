@@ -1,0 +1,125 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright (C) 2026 midair <midair@localhost> */
+/** @file
+ * @brief Webdeps: ts_build_run, the TypeScript example builds and runs
+ *        (settles H1)
+ *
+ * Runs ./build.sh in the example root, then starts the TypeScript example
+ * through ./scripts/run.sh guess. Pass when the build exits 0 and the
+ * example exits 0 within 30 s. Every verdict starts with H1.
+ *
+ * @author midair <midair@localhost>
+ */
+
+#define TE_TEST_NAME    "webdeps/ts_build_run"
+
+#include "te_config.h"
+
+#include "ts_lib.h"
+
+#define BUILD_LIMIT_S   1500
+#define RUN_LIMIT_S     30
+
+int
+main(int argc, char **argv)
+{
+    res_t       res = { .kind = R_PASS };
+    ts_run_t   *b = calloc(1, sizeof(*b));
+    ts_run_t   *r = calloc(1, sizeof(*r));
+    char        shim[300];
+    char        why[400];
+    char        t1[200];
+    char        t2[200];
+    char        e1[300];
+    char        e2[300];
+    char        o2[300];
+    char        script[600];
+    const char *env[] = { "RuntimeIdentifier=linux-x64", NULL };
+
+    TEST_START;
+    t_report_begin();
+    if (b == NULL || r == NULL)
+    {
+        res_set(&res, R_FAIL, "H1 NOT SETTLED: out of memory");
+        goto verdict;
+    }
+    wd_init(&res);
+    if (res.kind == R_SETUP)
+    {
+        res_set(&res, R_FAIL, "H1 NOT SETTLED: harness step broke: %.800s",
+                res.msg);
+        goto verdict;
+    }
+    if (!ts_cc_shim(workdir, shim, sizeof(shim)))
+    {
+        res_set(&res, R_FAIL, "H1 NOT SETTLED: cannot write the compiler "
+                "shim in %s", workdir);
+        goto verdict;
+    }
+    snprintf(script, sizeof(script), "%s/build.sh", src_root);
+    if (access(script, X_OK) != 0)
+    {
+        res_set(&res, R_FAIL, "H1 FAIL: %s does not exist or is not "
+                "executable", script);
+        goto verdict;
+    }
+
+    TEST_STEP("Known-bad control: the runner reports a hang and a signal");
+    if (!ts_runner_control_ok(workdir, why, sizeof(why)))
+    {
+        res_set(&res, R_FAIL, "H1 NOT SETTLED: control failed: %s", why);
+        goto verdict;
+    }
+
+    TEST_STEP("Run ./build.sh");
+    if (!ts_run(b, src_root, "./build.sh", NULL, env, shim, BUILD_LIMIT_S,
+                "build"))
+    {
+        res_set(&res, R_FAIL, "H1 NOT SETTLED: cannot start ./build.sh");
+        goto verdict;
+    }
+    ts_end_text(b, t1, sizeof(t1));
+    ts_flat(b->err_len > 0 ? b->err : b->out, 280, e1, sizeof(e1));
+    RING("webdeps H1: ./build.sh: %s; output [%s]", t1, e1);
+    T_FINDING(b->code == 0 ? TAPI_CYBERSEC_SEV_INFO : TAPI_CYBERSEC_SEV_HIGH,
+              "ts.build", "./build.sh", "%s", t1);
+    if (b->code != 0)
+    {
+        res_set(&res, R_FAIL, "H1 FAIL: ./build.sh did not exit 0 (%s); "
+                "first output [%s]", t1, e1);
+        goto verdict;
+    }
+
+    TEST_STEP("Run ./scripts/run.sh guess, at most %d s", RUN_LIMIT_S);
+    if (!ts_run(r, src_root, "./scripts/run.sh guess", NULL, NULL, NULL,
+                RUN_LIMIT_S, "run"))
+    {
+        res_set(&res, R_FAIL, "H1 NOT SETTLED: cannot start the example");
+        goto verdict;
+    }
+    ts_end_text(r, t2, sizeof(t2));
+    ts_flat(r->err, 280, e2, sizeof(e2));
+    ts_flat(r->out, 200, o2, sizeof(o2));
+    RING("webdeps H1: ./scripts/run.sh guess: %s; stdout [%s] stderr [%s]",
+         t2, o2, e2);
+    T_FINDING(r->code == 0 && !r->hung ? TAPI_CYBERSEC_SEV_INFO :
+              TAPI_CYBERSEC_SEV_HIGH, "ts.run", "./scripts/run.sh guess",
+              "%s", t2);
+    if (r->code != 0 || r->hung || r->sig != 0)
+        res_set(&res, R_FAIL, "H1 FAIL: build exited 0 (%s) but the "
+                "example did not exit 0 within %d s (%s); stderr [%s]", t1,
+                RUN_LIMIT_S, t2, e2);
+    else
+        res_set(&res, R_PASS, "H1 PASS: ./build.sh exited 0 (%s) and the "
+                "example exited 0 (%s) within %d s; stdout [%s]", t1, t2,
+                RUN_LIMIT_S, o2);
+
+verdict:
+    free(b);
+    free(r);
+    T_VERDICT(&res, "H1");
+
+cleanup:
+    cleanup_all();
+    TEST_END;
+}

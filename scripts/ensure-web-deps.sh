@@ -9,7 +9,7 @@
 # Usage: ensure-web-deps.sh <example root> [component...]
 # Components: base (toolchains and inspection tools, the default), build (the
 # example itself), exposure (tcpdump, sudo, frida), fuzz (clang with the
-# fuzzer runtime), docker (the docker CLI and a daemon that answers), browser (node, playwright, chromium), all.
+# fuzzer runtime), docker (the docker CLI and a daemon that answers), browser (node, playwright, chromium), ts (node, npm, typescript, ts-node), all.
 # The component soft turns a failed .NET install or a failed build of the
 # example into a "WARNING" line on stdout (exit status 0), so the tests that
 # depend on the failed part report the cause themselves instead of the whole
@@ -20,7 +20,7 @@
 ROOT="$1"
 shift
 COMPONENTS="${*:-base build}"
-case " ${COMPONENTS} " in *" all "*) COMPONENTS="base build exposure fuzz browser docker" ;; esac
+case " ${COMPONENTS} " in *" all "*) COMPONENTS="base build exposure fuzz browser docker ts" ;; esac
 want() { case " ${COMPONENTS} " in *" $1 "*) return 0 ;; esac; return 1; }
 
 die() { echo "ensure-web-deps: $*" >&2; exit 1; }
@@ -203,6 +203,29 @@ if want docker ; then
     fi
     docker info >/dev/null 2>&1 ||
         die "docker is installed but its daemon does not answer: $(docker info 2>&1 | tail -n 3 | tr '\n' ' ') dockerd log: $(tail -n 5 /tmp/mde-dockerd.log 2>/dev/null | tr '\n' ' ')"
+fi
+
+if want ts ; then
+    if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1 ; then
+        echo "ensure-web-deps: installing nodejs and npm"
+        apt_update
+        ${SUDO} apt-get install -y nodejs npm >&2 || die "apt-get install nodejs npm failed"
+    fi
+    command -v node >/dev/null 2>&1 || die "node is still missing after the install"
+    command -v npm >/dev/null 2>&1 || die "npm is still missing after the install"
+    if ! command -v tsc >/dev/null 2>&1 || ! command -v ts-node >/dev/null 2>&1 ; then
+        echo "ensure-web-deps: installing typescript and ts-node with npm"
+        ${SUDO} npm install -g typescript ts-node @types/node >&2 ||
+            die "npm install -g typescript ts-node @types/node failed"
+        hash -r
+    fi
+    command -v tsc >/dev/null 2>&1 || die "tsc is still missing after the install"
+    command -v ts-node >/dev/null 2>&1 || die "ts-node is still missing after the install"
+    TT="$(mktemp -d /tmp/mde-ts.XXXXXX)"
+    echo 'const n: number = 41; console.log(n + 1);' > "${TT}/t.ts"
+    [ "$(cd "${TT}" && ts-node t.ts 2>&1)" = "42" ] ||
+        { rm -rf "${TT}"; die "ts-node cannot run a trivial TypeScript file (node $(node --version 2>&1))"; }
+    rm -rf "${TT}"
 fi
 
 want build || { echo "ensure-web-deps: ${COMPONENTS} ready"; exit 0; }
