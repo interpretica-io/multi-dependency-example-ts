@@ -213,8 +213,6 @@ main(int argc, char **argv)
     char    first_line[300] = "";
     const char *first_run = "none";
     char    good[8];
-    proc_t *gw;
-    double  t0;
     int     blocker = -1;
     char   *bar;
     int     i;
@@ -246,7 +244,6 @@ main(int argc, char **argv)
         goto verdict;
     }
 
-    t0 = now_s();
     good[0] = '\0';
     (void)good;
     (void)blocker;

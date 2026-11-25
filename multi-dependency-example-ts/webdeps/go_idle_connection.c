@@ -60,7 +60,6 @@ main(int argc, char **argv)
     int                fds[2] = { -1, -1 };
     int               *extra = NULL;
     double             tclose[2] = { -1, -1 };
-    hg_res             h = { .how = HG_NORESP };
     char               ex[8] = "";
     char               why[1200] = "";
     char               part[2][160];
