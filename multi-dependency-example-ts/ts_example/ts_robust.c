@@ -257,10 +257,10 @@ main(int argc, char **argv)
     char        srcdir[800];
     char        why[400];
     char        hits[500];
-    char        msg_a[800] = "";
+    char        msg_a[2048] = "";
     char        msg_b[900] = "";
     char        msg_c[900] = "";
-    char        msg_d[1400] = "";
+    char        msg_d[2048] = "";
     bool        ok_a = false;
     bool        ok_b = false;
     bool        ok_c = false;
@@ -397,7 +397,7 @@ main(int argc, char **argv)
     TEST_STEP("(b) Run the example with GUESS_ENDPOINT on the chosen port");
     {
         char        ep[120];
-        char        cmd[400];
+        char        cmd[1024];
         const char *env[2] = { ep, NULL };
         int         a0 = ts_peer_count(&pa);
         int         b0 = ts_peer_count(&pb);
@@ -444,7 +444,7 @@ main(int argc, char **argv)
     TEST_STEP("(c) Run the example against a listener that never answers");
     {
         char        ep[120];
-        char        cmd[400];
+        char        cmd[1024];
         const char *env[2] = { ep, NULL };
         char        t[200];
         int         c0 = ts_peer_count(&pa);
@@ -515,7 +515,7 @@ main(int argc, char **argv)
         char        ep[120];
         char        a1[BIG_ARG + 32];
         const char *env[3] = { ep, a1, NULL };
-        char        cmd[400];
+        char        cmd[1024];
         char        t[200];
         bool        trace;
         bool        problem;
@@ -552,10 +552,10 @@ main(int argc, char **argv)
                  LIMIT_S);
     else
     {
-        char tmp[sizeof(msg_d)];
+        char tmp[2048];
 
         snprintf(tmp, sizeof(tmp), "%s", msg_d);
-        snprintf(msg_d, sizeof(msg_d), "(d) FAIL: %s", tmp);
+        snprintf(msg_d, sizeof(msg_d), "(d) FAIL: %.2000s", tmp);
     }
     RING("H3 %s", msg_d);
     T_FINDING(ok_d ? TAPI_CYBERSEC_SEV_INFO : TAPI_CYBERSEC_SEV_HIGH,
