@@ -120,7 +120,8 @@ scan_text(const char *file, const char *s, size_t n, char *hits,
                     state = S_CODE;
                     break;
                 }
-                /* fall through: a literal inside a string is code */
+                /* A literal inside a string is code for the scan below. */
+                /* fall through */
             default:
                 if (state == S_CODE)
                 {
