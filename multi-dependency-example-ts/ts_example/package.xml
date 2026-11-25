@@ -1,0 +1,90 @@
+<?xml version="1.0" ?>
+<package version="1.0">
+    <description>TypeScript example tests</description>
+
+    <!-- @page mde-ts_example TypeScript Example Tests
+          @objective Settle H1, H2 and H3 about the TypeScript example, one
+                     test per step, each logging its command, exit code,
+                     elapsed time and the last 40 lines of stdout and stderr.
+
+          @par Test Groups:
+          - @ref mde-ts_example-ts_build - Build from the project root (H1)
+          - @ref mde-ts_example-ts_run_guess - Start with guess (H1)
+          - @ref mde-ts_example-ts_contract - Same output as Go, Rust and C++ (H2)
+          - @ref mde-ts_example-ts_robust - Bad input and a silent peer (H3)
+    -->
+
+    <author mailto="midair@localhost" />
+
+    <session track_conf="silent">
+        <!-- @page mde-ts_example-prologue TypeScript Example Group Prologue
+              @objective Check the tools of the group.
+
+              @par Scenario:
+              -# Report TE_TS_MDE_SRC.
+              -# Check bash, node, npm, npx, gcc and curl; name what is missing.
+        -->
+        <prologue>
+            <script name="prologue">
+                <objective>Check that the tools the group needs are on the agent and name the missing ones. Installs nothing: scripts/midair-setup.sh does that.</objective>
+            </script>
+        </prologue>
+
+        <!-- @page mde-ts_example-ts_build Build (H1)
+              @objective Run ./build.sh in the project root within 300 s.
+
+              @par Scenario:
+              -# Check the runner against a planted hang and signal.
+              -# Run ./build.sh; log command, exit code, time, output tails.
+              -# On a failure name the step (npm install, tsc, an earlier
+                 stage, a missing file) and run npm install and tsc alone.
+              -# Check the TypeScript output and that ./scripts/run.sh is executable.
+        -->
+        <run name="ts_build">
+            <script name="ts_build">
+                <objective>[H1] Run ./build.sh with a 300 s limit. H1 PASS when it exits 0, the TypeScript output exists and ./scripts/run.sh is executable; H1 FAIL naming npm install, tsc, the earlier stage or the missing file.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-ts_example-ts_run_guess Start with guess (H1)
+              @objective Run ./scripts/run.sh guess within 30 s.
+
+              @par Scenario:
+              -# Start the web services that exist.
+              -# Run the example; log command, exit code, time, output tails.
+        -->
+        <run name="ts_run_guess">
+            <script name="ts_run_guess">
+                <objective>[H1] Run ./scripts/run.sh guess with a 30 s limit against the local web tier. H1 PASS on exit code 0 and a non-empty stdout; H1 FAIL on a non-zero exit, a timeout or an empty stdout, naming the services that were not up.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-ts_example-ts_contract Contract (H2)
+              @objective Compare guess of the TypeScript example with Go, Rust and C++.
+
+              @par Scenario:
+              -# Check the comparison against planted differences.
+              -# Run the four with the same input.
+              -# Compare stdout and exit code; log both side by side on a difference.
+        -->
+        <run name="ts_contract">
+            <script name="ts_contract">
+                <objective>[H2] Run guess for the TypeScript, Go, Rust and C++ examples with the same input and compare stdout and exit code. H2 PASS when they are equal (or, when the references differ among themselves, exit code and result number); H2 FAIL when the TypeScript output differs, with both outputs side by side.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-ts_example-ts_robust Bad Input and a Silent Peer (H3)
+              @objective Bounded time on malformed input and on a peer that never answers.
+
+              @par Scenario:
+              -# Check the trace detector and the runner against planted defects.
+              -# Run empty, non-numeric, oversize (argument, 1 MiB stdin) input and the silent peer, at most 10 s each.
+              -# Fail on a timeout kill, a signal or a stack trace.
+        -->
+        <run name="ts_robust">
+            <script name="ts_robust">
+                <objective>[H3] Run the TypeScript example with an empty, a non-numeric and an oversize input and against a local peer that accepts and never replies. H3 PASS when each run ends within 10 s with no signal and no stack trace; H3 FAIL on a timeout kill or a trace; H3 NOT SETTLED when the example never connects to the peer.</objective>
+            </script>
+        </run>
+    </session>
+</package>

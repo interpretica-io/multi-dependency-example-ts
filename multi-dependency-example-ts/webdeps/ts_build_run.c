@@ -59,9 +59,9 @@ main(int argc, char **argv)
                 "shim in %s", workdir);
         goto verdict;
     }
-    snprintf(tsdir, sizeof(tsdir), "%s/src/ts", src_root);
-    if (access(tsdir, F_OK) != 0)
+    if (!ts_find_dir(src_root, tsdir, sizeof(tsdir)))
     {
+        snprintf(tsdir, sizeof(tsdir), "%s/typescript", src_root);
         build_log_tail(pro, sizeof(pro));
         RING("webdeps H1: prologue build log: %s", pro);
         res_set(&res, R_FAIL, "H1 FAIL: the TypeScript directory %s is "

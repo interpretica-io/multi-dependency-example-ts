@@ -3,10 +3,10 @@
  *
  * webdeps group prologue: install what the group needs on the agent (the
  * C, Go, Rust, .NET and Python toolchains, the socket viewer and the
- * binary tools), then run ./build.sh and check that its TypeScript step
- * produced src/ts/dist/main.js, building the example when
- * it is not. Fails with what went wrong when a tool cannot be installed
- * or the build does not produce the web tier.
+ * binary tools), then build the example when it is not built. Fails with
+ * what went wrong when a tool cannot be installed or the build does not
+ * produce the web tier. The TypeScript step is judged by the ts_example
+ * group, not here.
  *
  * Copyright (C) 2026 midair <midair@localhost>
  *

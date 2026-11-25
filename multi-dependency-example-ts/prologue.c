@@ -74,8 +74,21 @@ main(int argc, char **argv)
     CHECK_RC(tsapi_mde_session_init(&session, "prologue"));
     session_up = true;
 
-    TEST_STEP("Install what the group needs on the agent and check it");
-    TSAPI_MDE_ENSURE(session, "base build soft");
+    /* Tools are installed by scripts/midair-setup.sh before the build; the
+     * example is built by the ts_example group, which logs every step.
+     * Nothing is installed or built here. */
+    TEST_STEP("Check that the toolchains the groups need are on the agent");
+    {
+        static const char * const need[] = { "node", "npm", "gcc", "bash" };
+        unsigned int k;
+
+        for (k = 0; k < TE_ARRAY_LEN(need); k++)
+        {
+            if (!tsapi_mde_have(&session, need[k]))
+                ERROR("%s is not on the agent: scripts/midair-setup.sh did "
+                      "not install it", need[k]);
+        }
+    }
 
     TEST_STEP("Report the example under test");
     rc = tsapi_mde_dut_open(&session, &dut);

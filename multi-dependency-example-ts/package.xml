@@ -7,6 +7,7 @@
                      of each dependency cycle of the multi-dependency-example.
 
           @par Test Groups:
+          - @ref mde-ts_example - the TypeScript example: build, start, contract and robustness (H1-H3)
           - @ref mde-smoke - one fixed verdict, no service: the run reports a verdict (H0)
           - @ref mde-ring - the native FFI ring (C++/Rust/Go/C#/Python), checked step by step against a model
           - @ref mde-web - the HTTP web tier (gateway-rs/service-go/service-cs)
@@ -69,6 +70,13 @@
                 </objective>
             </script>
         </epilogue>
+
+        <!-- @page mde-ts_example TypeScript Example Tests
+              @objective Build, start, compare and stress the TypeScript example (H1-H3). Runs first.
+        -->
+        <run>
+            <package name="ts_example" />
+        </run>
 
         <!-- @page mde-smoke Smoke Test of the Run
               @objective One test with a fixed verdict and no service (H0).

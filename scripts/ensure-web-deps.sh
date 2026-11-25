@@ -9,7 +9,7 @@
 # Usage: ensure-web-deps.sh <example root> [component...]
 # Components: base (toolchains and inspection tools, the default), build (the
 # example itself), exposure (tcpdump, sudo, frida), fuzz (clang with the
-# fuzzer runtime), docker (the docker CLI and a daemon that answers), browser (node, playwright, chromium), ts (node, npm, typescript, ts-node), all.
+# fuzzer runtime), docker (the docker CLI and a daemon that answers), browser (node, playwright, chromium), ts (node, npm, typescript, ts-node; no build), all.
 # The component soft turns a failed .NET install or a failed build of the
 # example into a "WARNING" line on stdout (exit status 0), so the tests that
 # depend on the failed part report the cause themselves instead of the whole
@@ -216,27 +216,28 @@ if want ts ; then
     if ! command -v tsc >/dev/null 2>&1 || ! command -v ts-node >/dev/null 2>&1 ; then
         echo "ensure-web-deps: installing typescript and ts-node with npm"
         ${SUDO} npm install -g typescript ts-node @types/node >&2 ||
-            die "npm install -g typescript ts-node @types/node failed"
+            soft_die "npm install -g typescript ts-node @types/node failed"
         hash -r
     fi
-    command -v tsc >/dev/null 2>&1 || die "tsc is still missing after the install"
-    command -v ts-node >/dev/null 2>&1 || die "ts-node is still missing after the install"
+    command -v tsc >/dev/null 2>&1 || soft_die "tsc is still missing after the install"
+    command -v ts-node >/dev/null 2>&1 || soft_die "ts-node is still missing after the install"
     TT="$(mktemp -d /tmp/mde-ts.XXXXXX)"
     echo 'const n: number = 41; console.log(n + 1);' > "${TT}/t.ts"
     [ "$(cd "${TT}" && ts-node t.ts 2>&1)" = "42" ] ||
-        { rm -rf "${TT}"; die "ts-node cannot run a trivial TypeScript file (node $(node --version 2>&1))"; }
+        { rm -rf "${TT}"; soft_die "ts-node cannot run a trivial TypeScript file (node $(node --version 2>&1))"; }
     rm -rf "${TT}"
 fi
 
-want build || want ts || { echo "ensure-web-deps: ${COMPONENTS} ready"; exit 0; }
+want build || { echo "ensure-web-deps: ${COMPONENTS} ready"; exit 0; }
 
 built() {
     [ -x "${ROOT}/dist/bin/$1" ]
 }
 
-# The ts component always runs ./build.sh: the TypeScript step is its last
-# stage and only a run of the script shows that it works.
-if ! want ts && built cpp-demo && built gateway-rs && built service-go &&
+# The ts component only installs node, npm and the TypeScript tools: the
+# build of the TypeScript example is a step of the ts_example tests, which
+# log its exit code and output themselves.
+if built cpp-demo && built gateway-rs && built service-go &&
    built service-cs ; then
     echo "ensure-web-deps: the example is built in ${ROOT}"
     exit 0
@@ -267,25 +268,7 @@ esac
 echo "ensure-web-deps: building the example in ${ROOT}"
 BUILD_RC=0
 ( cd "${ROOT}" && PATH="${SHIM}:${PATH}" ./build.sh ) > /tmp/mde-ensure-build.log 2>&1 || BUILD_RC=$?
-TS_MARK="TypeScript: ts example"
-if want ts ; then
-    # A failure here is never softened: the TypeScript example is what the
-    # group tests, so a run without it would read green and prove nothing.
-    if ! grep -q "${TS_MARK}" /tmp/mde-ensure-build.log ; then
-        if [ "${BUILD_RC}" != 0 ] ; then
-            tail -n 25 /tmp/mde-ensure-build.log >&2
-            die "./build.sh exited ${BUILD_RC} before the TypeScript step was reached, so it was not built (full log /tmp/mde-ensure-build.log)"
-        fi
-        die "./build.sh exited 0 but has no TypeScript step: no '${TS_MARK}' line in /tmp/mde-ensure-build.log"
-    fi
-    if [ "${BUILD_RC}" != 0 ] ; then
-        tail -n 25 /tmp/mde-ensure-build.log >&2
-        die "the TypeScript step of ./build.sh failed (exit ${BUILD_RC}); last lines: $(tail -n 5 /tmp/mde-ensure-build.log | tr '\n' ' ')"
-    fi
-    [ -f "${ROOT}/src/ts/dist/main.js" ] ||
-        die "./build.sh exited 0 but src/ts/dist/main.js was not produced by the TypeScript step"
-    echo "ensure-web-deps: the TypeScript example is built (src/ts/dist/main.js)"
-elif [ "${BUILD_RC}" != 0 ] ; then
+if [ "${BUILD_RC}" != 0 ] ; then
     tail -n 25 /tmp/mde-ensure-build.log >&2
     want soft && tail -n 25 /tmp/mde-ensure-build.log
     soft_die "build.sh failed (full log /tmp/mde-ensure-build.log)"

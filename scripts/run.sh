@@ -7,7 +7,7 @@ export TE_TS_MULTIDEP=${TS_TOPDIR}/multi-dependency-example-ts
 # sibling checkout; override to point the suite at another build. The
 # tests read it, locate dist/bin and dist/lib under it, and skip when
 # it is absent or was not built yet (run ./build.sh in that tree).
-export TE_TS_MDE_SRC=${TE_TS_MDE_SRC:-${TS_TOPDIR}/../multi-dependency-example}
+export TE_TS_MDE_SRC=${TE_TS_MDE_SRC:-${MIDAIR_PROJECT_DIR:-${TS_TOPDIR}/../multi-dependency-example}}
 
 function show_usage() {
     echo "Usage:"

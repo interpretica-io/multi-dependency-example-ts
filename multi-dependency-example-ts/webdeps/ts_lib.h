@@ -374,4 +374,30 @@ ts_cc_shim(const char *workdir_, char *dir, size_t size)
     return chmod(path, 0755) == 0;
 }
 
+/**
+ * Find the directory of the TypeScript example under @p root: the first of
+ * the places the project has used that holds a package.json.
+ */
+static bool
+ts_find_dir(const char *root, char *dir, size_t size)
+{
+    static const char * const cand[] = {
+        "typescript", "src/typescript", "src/ts", "ts",
+    };
+    size_t i;
+
+    for (i = 0; i < sizeof(cand) / sizeof(cand[0]); i++)
+    {
+        char p[1200];
+
+        snprintf(p, sizeof(p), "%.500s/%s/package.json", root, cand[i]);
+        if (access(p, R_OK) == 0)
+        {
+            snprintf(dir, size, "%.500s/%s", root, cand[i]);
+            return true;
+        }
+    }
+    return false;
+}
+
 #endif /* MDE_TS_LIB_H */

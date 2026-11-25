@@ -89,6 +89,10 @@ install_data([ 'mainpage.dox', 'package.xml' ],
 
 mydir = package_dir
 
+package_dir = join_paths(mydir, 'ts_example')
+package_tests_c = []
+subdir('ts_example')
+
 package_dir = join_paths(mydir, 'smoke')
 package_tests_c = []
 subdir('smoke')

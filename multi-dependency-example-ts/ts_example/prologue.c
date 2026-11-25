@@ -1,0 +1,65 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright (C) 2026 midair <midair@localhost> */
+/** @file
+ * @brief ts_example Group
+ *
+ * ts_example group prologue: check that the tools the four tests need are on
+ * the agent (they are installed by scripts/midair-setup.sh, never here) and
+ * report the project root. It builds nothing and installs nothing: the build
+ * is the first test of the group, which logs it step by step. When a tool is
+ * missing the prologue fails and names it.
+ *
+ * @author midair <midair@localhost>
+ */
+
+#define TE_TEST_NAME    "ts_example/prologue"
+
+#include "te_config.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "tapi_test.h"
+
+int
+main(int argc, char **argv)
+{
+    static const char * const need[] = {
+        "bash", "node", "npm", "npx", "gcc", "curl",
+    };
+    const char *root;
+    char        missing[256] = "";
+    size_t      i;
+
+    TEST_START;
+
+    TEST_STEP("Report the project under test");
+    root = getenv("TE_TS_MDE_SRC");
+    if (root == NULL || root[0] == '\0')
+        TEST_VERDICT("H1 NOT SETTLED: TE_TS_MDE_SRC is not set, so the "
+                     "ts_example group has no project root");
+    RING("ts_example: project root %s", root);
+
+    TEST_STEP("Check the tools of the group");
+    for (i = 0; i < sizeof(need) / sizeof(need[0]); i++)
+    {
+        char cmd[128];
+
+        snprintf(cmd, sizeof(cmd), "command -v %s >/dev/null 2>&1", need[i]);
+        if (system(cmd) != 0)
+        {
+            ERROR("%s is not on the agent", need[i]);
+            strncat(missing, need[i], sizeof(missing) - strlen(missing) - 2);
+            strncat(missing, " ", sizeof(missing) - strlen(missing) - 1);
+        }
+    }
+    if (missing[0] != '\0')
+        TEST_VERDICT("H1 NOT SETTLED: %sis missing on the agent: "
+                     "scripts/midair-setup.sh did not install it", missing);
+
+    TEST_SUCCESS;
+
+cleanup:
+    TEST_END;
+}
