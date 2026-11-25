@@ -122,6 +122,68 @@ main(int argc, char **argv)
         goto verdict;
     }
 
+    TEST_STEP("Scan the TypeScript source for literal endpoints");
+    {
+        /* Literal http:// URLs and dotted IPv4 strings in .ts files, not in
+         * tests, type files or dependencies, and not on the line of a
+         * DEFAULT_ constant. */
+        static const char scan_cmd[] =
+            "find \"$TSX_ROOT\" \\( -name node_modules -o -name dist -o "
+            "-name test -o -name tests -o -name __tests__ -o -name .git \\) "
+            "-prune -o -type f -name '*.ts' ! -name '*.test.ts' "
+            "! -name '*.spec.ts' ! -name '*.d.ts' -print0 | "
+            "xargs -0 -r grep -nE "
+            "'https?://|[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}' "
+            "| grep -vE 'DEFAULT_|[Dd]efault[A-Z_]'; true";
+        char        ctl_dir[400];
+        char        ctl_env[500];
+        char        mk[1000];
+        const char *cenv[2] = { ctl_env, NULL };
+        const char *senv[2];
+        char        root_env[800];
+        char        hits[500];
+
+        /* Known-bad control: a planted literal must be reported. */
+        snprintf(ctl_dir, sizeof(ctl_dir), "%s/scan-ctl", workdir);
+        snprintf(mk, sizeof(mk), "mkdir -p '%s' && printf "
+                 "'const u = \"http://10.1.2.3:80\";\\n' > '%s/bad.ts'",
+                 ctl_dir, ctl_dir);
+        if (system(mk) != 0)
+        {
+            res_set(&res, R_FAIL, "H3 NOT SETTLED: cannot plant the scan "
+                    "control");
+            goto verdict;
+        }
+        snprintf(ctl_env, sizeof(ctl_env), "TSX_ROOT=%s", ctl_dir);
+        if (!ts_run(r, workdir, scan_cmd, in_none, cenv, NULL, LIMIT_S,
+                    "scan-ctl") || strstr(r->out, "10.1.2.3") == NULL)
+        {
+            res_set(&res, R_FAIL, "H3 NOT SETTLED: control failed: the "
+                    "source scan did not report a planted http:// literal");
+            goto verdict;
+        }
+        snprintf(root_env, sizeof(root_env), "TSX_ROOT=%s", src_root);
+        senv[0] = root_env;
+        senv[1] = NULL;
+        if (!ts_run(r, workdir, scan_cmd, in_none, senv, NULL, 30,
+                    "scan-src"))
+        {
+            res_set(&res, R_FAIL, "H3 NOT SETTLED: cannot run the source "
+                    "scan");
+            goto verdict;
+        }
+        ts_flat(r->out, 400, hits, sizeof(hits));
+        T_FINDING(r->out_len > 0 ? TAPI_CYBERSEC_SEV_MEDIUM :
+                  TAPI_CYBERSEC_SEV_INFO, "ts.hardcoded-endpoint",
+                  "typescript source", "%s",
+                  r->out_len > 0 ? hits : "no literal http:// or IP string");
+        if (r->out_len > 0)
+            append(bad, sizeof(bad), "hardcoded endpoint literal in the "
+                   "TypeScript source: [%s]; ", hits);
+        else
+            append(ok, sizeof(ok), "no literal endpoint in the source; ");
+    }
+
     TEST_STEP("Start the silent peer on 127.0.0.1");
     if (!ts_peer_start(&peer, workdir))
     {
