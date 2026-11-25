@@ -91,7 +91,7 @@ main(int argc, char **argv)
     wd_init(&res);
     if (res.kind == R_SETUP)
     {
-        snprintf(why, sizeof(why), "%s", res.msg);
+        snprintf(why, sizeof(why), "%.1199s", res.msg);
         skipped = true;
         goto verdict;
     }
@@ -108,7 +108,7 @@ main(int argc, char **argv)
     go = svc_start_exposed(&res, &session, GO);
     if (go == NULL)
     {
-        snprintf(why, sizeof(why), "%s", res.msg);
+        snprintf(why, sizeof(why), "%.1199s", res.msg);
         skipped = true;
         goto verdict;
     }

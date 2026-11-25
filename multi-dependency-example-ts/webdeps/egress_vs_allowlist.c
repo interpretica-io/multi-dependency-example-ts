@@ -118,7 +118,7 @@ read_source(int idx)
                 snprintf(where, sizeof(where), "%s:%u",
                          strrchr(src_files[idx], '/') + 1, ln);
                 snprintf(evid[idx][k][0], 160, "%s", where);
-                snprintf(evid[idx][k][1], 160, "%s", line);
+                snprintf(evid[idx][k][1], 160, "%.159s", line);
                 scan_literals(line, where);
             }
         }
@@ -421,9 +421,9 @@ verdict:
     tsapi_mde_session_fini(&session);
     for (k = 0; k < n_lits; k++)
     {
-        char one[120];
+        char one[128];
 
-        snprintf(one, sizeof(one), "%s (%s)", lits[k].addr, lits[k].where);
+        snprintf(one, sizeof(one), "%.47s (%.47s)", lits[k].addr, lits[k].where);
         add_once(lits[k].reached ? reached_s : notreached, one);
     }
     if (not_run)
