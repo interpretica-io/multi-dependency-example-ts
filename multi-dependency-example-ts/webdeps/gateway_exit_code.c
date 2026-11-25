@@ -259,8 +259,8 @@ main(int argc, char **argv)
             char tmp[2200];
 
             snprintf(tmp, sizeof(tmp), "step run %s broke or binary does "
-                     "not start: %s", runs[i].name, why);
-            snprintf(why, sizeof(why), "%s", tmp);
+                     "not start: %.1500s", runs[i].name, why);
+            snprintf(why, sizeof(why), "%.*s", (int)sizeof(why) - 1, tmp);
             skipped = true;
             goto verdict;
         }
@@ -278,7 +278,8 @@ main(int argc, char **argv)
             if (hit[0] == '\0')
             {
                 first_run = runs[i].name;
-                snprintf(first_line, sizeof(first_line), "%s", runs[i].err);
+                snprintf(first_line, sizeof(first_line), "%.*s",
+                         (int)sizeof(first_line) - 1, runs[i].err);
                 bar = strchr(first_line, '|');
                 if (bar != NULL)
                     *bar = '\0';
