@@ -161,7 +161,7 @@ main(int argc, char **argv)
                  i == 3 ? "\"$TS_INPUT\" \"127.0.0.1:$PORT\"" :
                  "\"$TS_INPUT\"");
         TEST_STEP("Case %s", names_[i]);
-        if (!ts_run(r, src_root, cmd, in_path[i], env_all, NULL, LIMIT_S,
+        if (!ts_run(r, src_root, cmd, in_path[i], env_all, NULL, i == 3 ? 15 : LIMIT_S,
                     names_[i]))
         {
             res_set(&res, R_FAIL, "H3 NOT SETTLED: cannot start the example "
@@ -171,7 +171,7 @@ main(int argc, char **argv)
         ts_end_text(r, t, sizeof(t));
         ts_flat(r->err_len > 0 ? r->err : r->out, 200, e, sizeof(e));
         trace = ts_has_trace(r->err) || ts_has_trace(r->out);
-        RING("webdeps H3: %s: %s; stderr [%s]", names_[i], t, e);
+        RING("webdeps H3: command [%s]; %s: %s; stderr(200 B) [%s]", cmd, names_[i], t, e);
 
         if (r->hung)
             problem = true;
