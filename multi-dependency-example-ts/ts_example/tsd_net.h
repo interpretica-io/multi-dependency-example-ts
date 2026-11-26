@@ -30,7 +30,7 @@ static pid_t tsd_child2 = 0;
 static tsapi_mde_session tsd_session = { .ta = NULL };
 static bool tsd_have_session = false;
 
-static void
+static inline void
 tsd_cleanup(void)
 {
     if (tsd_child > 0)
@@ -44,7 +44,7 @@ tsd_cleanup(void)
 }
 
 /** Inode numbers of the sockets a process holds. */
-static size_t
+static inline size_t
 tsd_inodes(pid_t pid, unsigned long *out, size_t max)
 {
     char           dir[64];
@@ -79,7 +79,7 @@ tsd_inodes(pid_t pid, unsigned long *out, size_t max)
  * Listening TCP sockets of @p pid as tapi_netexpose reports them.
  * Returns the count (at most TSD_MAXL), -1 when the tables cannot be read.
  */
-static int
+static inline int
 tsd_listeners(pid_t pid, char addr[][48], unsigned *port)
 {
     unsigned long                ino[256];
@@ -130,7 +130,7 @@ tsd_listeners(pid_t pid, char addr[][48], unsigned *port)
 }
 
 /** Text "a:p a:p" of the listeners, for a message. */
-static void
+static inline void
 tsd_listeners_text(char addr[][48], unsigned *port, int n, char *buf,
                    size_t size)
 {
@@ -148,7 +148,7 @@ tsd_listeners_text(char addr[][48], unsigned *port, int n, char *buf,
  * Known-bad control for the listener check: this process listens on
  * 127.0.0.1 and on 0.0.0.0, and tapi_netexpose must report both.
  */
-static void
+static inline void
 tsd_listener_control(void)
 {
     struct sockaddr_in a = { .sin_family = AF_INET };
@@ -192,7 +192,7 @@ tsd_listener_control(void)
 }
 
 /** One request with value=<v> hops=0. */
-static ssize_t
+static inline ssize_t
 tsd_ring(unsigned port, const char *value, char *out, size_t size)
 {
     size_t vl = strlen(value);
@@ -214,7 +214,7 @@ tsd_ring(unsigned port, const char *value, char *out, size_t size)
  * stop it with @p sig and require exit code 0. @p hostile adds raw garbage,
  * a bad method, a path walk and a silent peer.
  */
-static void
+static inline void
 tsd_h4_run(const char *id, bool set, unsigned port, int sig, bool hostile)
 {
     char        ts[PATH_MAX];
@@ -371,7 +371,7 @@ tsd_h4_run(const char *id, bool set, unsigned port, int sig, bool hostile)
 }
 
 /** Full H4 scenario: four runs (set/unset, SIGTERM/SIGINT). */
-static void
+static inline void
 tsd_h4_scenario(const char *id, bool hostile)
 {
     TEST_STEP("Open a tapi_netexpose session");
@@ -395,7 +395,7 @@ tsd_h4_scenario(const char *id, bool hostile)
  * save status and body of each reply to files and compare them byte for
  * byte. @p structure also checks the shape of the TypeScript reply.
  */
-static void
+static inline void
 tsd_h3_scenario(const char *id, bool structure)
 {
     static const char *const inputs[] = {

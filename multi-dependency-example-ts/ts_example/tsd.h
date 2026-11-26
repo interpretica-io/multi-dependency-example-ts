@@ -41,7 +41,7 @@
 #define TSD_BUILD_MARK  "/tmp/mde-ts-build.passed"
 
 /** Root of the project under test. */
-static const char *
+static inline const char *
 tsd_src(void)
 {
     static char root[PATH_MAX];
@@ -54,7 +54,7 @@ tsd_src(void)
 }
 
 /** Monotonic time in milliseconds. */
-static long long
+static inline long long
 tsd_ms(void)
 {
     struct timespec ts;
@@ -64,7 +64,7 @@ tsd_ms(void)
 }
 
 /** Read at most size - 1 bytes of the start of a file; returns the count. */
-static size_t
+static inline size_t
 tsd_head(const char *path, char *buf, size_t size)
 {
     FILE   *f = fopen(path, "r");
@@ -83,7 +83,7 @@ tsd_head(const char *path, char *buf, size_t size)
 }
 
 /** Read the last at most size - 1 bytes of a file. */
-static size_t
+static inline size_t
 tsd_tail(const char *path, char *buf, size_t size)
 {
     FILE   *f = fopen(path, "r");
@@ -109,7 +109,7 @@ tsd_tail(const char *path, char *buf, size_t size)
 }
 
 /** Exit code of a wait status: the code, or 128 + the signal. */
-static int
+static inline int
 tsd_code(int st)
 {
     if (st == -1)
@@ -124,7 +124,7 @@ tsd_code(int st)
  * stdout and stderr in @p log. Returns the exit code (124 when the limit
  * was reached).
  */
-static int
+static inline int
 tsd_sh(const char *cwd, const char *cmd, int tmo, const char *log)
 {
     char full[1024];
@@ -137,7 +137,7 @@ tsd_sh(const char *cwd, const char *cmd, int tmo, const char *log)
 }
 
 /** Start @p cmd in the background, output in @p log; returns its pid. */
-static pid_t
+static inline pid_t
 tsd_spawn(const char *cwd, const char *cmd, const char *log)
 {
     pid_t pid = fork();
@@ -165,7 +165,7 @@ tsd_spawn(const char *cwd, const char *cmd, const char *log)
 }
 
 /** True while @p pid has not exited (the exit status is kept in @p st). */
-static bool
+static inline bool
 tsd_alive(pid_t pid, int *st)
 {
     int s = 0;
@@ -182,7 +182,7 @@ tsd_alive(pid_t pid, int *st)
  * Send @p sig to @p pid and wait up to @p secs for it to end. Returns the
  * exit code, 128 + signal, or -2 when it was still there (then killed).
  */
-static int
+static inline int
 tsd_stop(pid_t pid, int sig, int secs)
 {
     long long end = tsd_ms() + secs * 1000LL;
@@ -202,7 +202,7 @@ tsd_stop(pid_t pid, int sig, int secs)
 }
 
 /** Connect to 127.0.0.1:port; the descriptor, or -1. */
-static int
+static inline int
 tsd_connect(unsigned port)
 {
     struct sockaddr_in sa = { .sin_family = AF_INET,
@@ -221,7 +221,7 @@ tsd_connect(unsigned port)
 }
 
 /** Wait up to @p secs for something to accept connections on the port. */
-static bool
+static inline bool
 tsd_wait_port(unsigned port, int secs)
 {
     long long end = tsd_ms() + secs * 1000LL;
@@ -245,7 +245,7 @@ tsd_wait_port(unsigned port, int secs)
  * the peer closes or @p tmo_ms passes. Returns the reply length, -1 when
  * the connect failed, 0 when nothing came back.
  */
-static ssize_t
+static inline ssize_t
 tsd_exchange(unsigned port, const char *req, size_t reqlen, int tmo_ms,
              char *out, size_t size)
 {
@@ -284,14 +284,14 @@ tsd_exchange(unsigned port, const char *req, size_t reqlen, int tmo_ms,
 }
 
 /** Status code of an HTTP reply, or 0. */
-static int
+static inline int
 tsd_status(const char *reply)
 {
     return strncmp(reply, "HTTP/1.", 7) == 0 ? atoi(reply + 9) : 0;
 }
 
 /** Body of an HTTP reply (after the blank line), or the whole text. */
-static const char *
+static inline const char *
 tsd_body(const char *reply)
 {
     const char *p = strstr(reply, "\r\n\r\n");
