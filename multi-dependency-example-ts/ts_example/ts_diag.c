@@ -72,7 +72,7 @@ main(int argc, char **argv)
             fclose(f);
             head[got] = '\0';
         }
-        RING_VERDICT("H5 ts_diag command %u [%s] exit code %d, %s, first "
+        RING("H5 ts_diag command %u [%s] exit code %d, %s, first "
                      "%zu bytes of %s: [%s]", i + 1, cmds[i], code,
                      f != NULL ? "log read" : "log NOT readable", got, path,
                      head);
@@ -108,6 +108,7 @@ main(int argc, char **argv)
             tsd_say("H5 versions: all commands ran; %s", all);
     }
 
+    RING_VERDICT("H4 PASS: ts_diag ran its commands");
     TEST_SUCCESS;
 
 cleanup:

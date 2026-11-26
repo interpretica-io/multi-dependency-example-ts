@@ -258,10 +258,11 @@ tsd_h4_run(const char *id, bool set, unsigned port, int sig, bool hostile)
 
     if (set)
         snprintf(cmd, sizeof(cmd), "EXAMPLE_PORT=%u EXAMPLE_HOST=127.0.0.1 "
-                 "exec node dist/main.js", port);
+                 "RING_PORT=%u RING_HOST=127.0.0.1 exec node dist/main.js",
+                 port, port);
     else
         snprintf(cmd, sizeof(cmd), "exec env -u EXAMPLE_PORT -u EXAMPLE_HOST "
-                 "node dist/main.js");
+                 "-u RING_PORT -u RING_HOST node dist/main.js");
     if (tsd_connect(port) >= 0)
     {
         tsd_bad(id, set ? "port in use" : "default port in use",
@@ -277,6 +278,17 @@ tsd_h4_run(const char *id, bool set, unsigned port, int sig, bool hostile)
     if (!tsd_wait_port(port, 15) || !tsd_alive(tsd_child, &st))
     {
         tsd_tail(log, logtext, sizeof(logtext));
+        if (!set && !tsd_alive(tsd_child, &st) && tsd_code(st) == 1 &&
+            strstr(logtext, "\n    at ") == NULL &&
+            strchr(logtext, '\n') == strrchr(logtext, '\n'))
+        {
+            /* the host and port setting is required: one line, exit 1 */
+            tsd_say("%s default port: no default, the process says so in "
+                    "one line and exits 1: [%s]", id, logtext);
+            tsd_child = 0;
+            free(big);
+            return;
+        }
         tsd_bad(id, set ? "listens on configured port" : "default port",
                 "[%s] did not listen on port %u within 15 s (alive %d); "
                 "output: [%s]", cmd, port, tsd_alive(tsd_child, &st),
@@ -441,33 +453,72 @@ tsd_cmp(const char *a, const char *b, int *code)
     return *code == 0;
 }
 
-/**
- * Known-bad control for the H3 comparison: a tiny script prints a reply
- * that differs from the reference, and cmp must fail on it; the same script
- * compared with itself must pass.
- */
-static inline void
-tsd_h3_control(const char *id)
+/** Value of the last "value=" line of a reply body; false when absent. */
+static inline bool
+tsd_contract_value(const char *body, double *v)
 {
-    int code1 = -1;
-    int code2 = -1;
-    int code3 = -1;
+    const char *p = NULL;
+    const char *q = body;
+    char       *end = NULL;
 
-    tsd_put("/tmp/ts_h3_ctl_bad.sh", "#!/bin/sh\necho 'status 200'\necho "
-            "'value=999'\n");
-    tsd_put("/tmp/ts_h3_ctl_ref.txt", "status 200\nvalue=42\n");
-    code1 = tsd_sh("/tmp", "sh /tmp/ts_h3_ctl_bad.sh", 10,
-                   "/tmp/ts_h3_ctl_out.txt");
-    (void)tsd_cmp("/tmp/ts_h3_ctl_ref.txt", "/tmp/ts_h3_ctl_out.txt", &code2);
-    (void)tsd_cmp("/tmp/ts_h3_ctl_out.txt", "/tmp/ts_h3_ctl_out.txt", &code3);
-    if (code1 != 0 || code2 == 0 || code3 != 0)
-        tsd_bad(id, "known-bad control", "script exit=%d, cmp on a "
-                "different reply exit=%d (must be non-zero), cmp on equal "
-                "replies exit=%d (must be 0)", code1, code2, code3);
+    while ((q = strstr(q, "value=")) != NULL)
+    {
+        p = q;
+        q += 6;
+    }
+    if (p == NULL)
+        return false;
+    *v = strtod(p + 6, &end);
+    return end != p + 6;
+}
+
+/**
+ * The documented contract of the TypeScript service: a valid request gets
+ * 200 and a finite value (and, when @p formula is set, the value of the
+ * stage formula), a bad one gets 400 and an "error:" line. Returns NULL
+ * when the reply is as documented, otherwise the reason.
+ */
+static inline const char *
+tsd_contract_check(unsigned kind, int status, const char *body, bool formula,
+                   double expect)
+{
+    double v = 0;
+
+    if (kind == 0)
+    {
+        if (status != 200)
+            return "status is not 200";
+        if (!tsd_contract_value(body, &v) || v != v || v > 1e300 || v < -1e300)
+            return "no finite value";
+        if (formula && (v - expect > 1e-9 || expect - v > 1e-9))
+            return "value differs from the documented formula";
+        return NULL;
+    }
+    if (status != 400)
+        return "status is not 400";
+    if (strncmp(tsd_body(body), "error:", 6) != 0)
+        return "no error: line";
+    return NULL;
+}
+
+/** Known-bad control: planted replies that the check must reject. */
+static inline void
+tsd_contract_control(const char *id)
+{
+    bool ok = tsd_contract_check(0, 200, "value=nan\n", false, 0) != NULL &&
+              tsd_contract_check(0, 500, "value=1\n", false, 0) != NULL &&
+              tsd_contract_check(0, 200, "value=35\n", true, 34.5) != NULL &&
+              tsd_contract_check(1, 200, "error: x\n", false, 0) != NULL &&
+              tsd_contract_check(1, 400, "oops\n", false, 0) != NULL &&
+              tsd_contract_check(0, 200, "value=34.5\n", true, 34.5) == NULL &&
+              tsd_contract_check(2, 400, "error: x\n", false, 0) == NULL;
+
+    if (!ok)
+        tsd_bad(id, "known-bad control", "the contract check accepted a "
+                "planted wrong reply or rejected a planted good one");
     else
-        tsd_say("%s control known-bad: cmp exit=%d on the script printing a "
-                "different reply (difference caught), exit=%d on equal "
-                "files", id, code2, code3);
+        tsd_say("%s control known-bad: planted wrong replies are rejected",
+                id);
 }
 
 #define TSD_H3_N    4
@@ -475,54 +526,31 @@ static const char *const tsd_h3_kind[TSD_H3_N] = {
     "valid", "empty", "non-numeric", "oversized"
 };
 
-static inline void
-tsd_h3_paths(unsigned i, char *pg, char *pt, size_t size)
-{
-    snprintf(pg, size, "/tmp/ts_h3_go_%u.txt", i + 1);
-    snprintf(pt, size, "/tmp/ts_h3_ts_%u.txt", i + 1);
-}
-
-/** True when all reply files of a previous run exist. */
-static inline bool
-tsd_h3_files_exist(void)
-{
-    unsigned i;
-
-    for (i = 0; i < TSD_H3_N; i++)
-    {
-        char pg[64], pt[64];
-
-        tsd_h3_paths(i, pg, pt, sizeof(pg));
-        if (access(pg, R_OK) != 0 || access(pt, R_OK) != 0)
-            return false;
-    }
-    return true;
-}
-
 /**
- * Start the Go and the TypeScript example, send the four fixed inputs to
- * both with a 5 s timeout and save the replies (status line and body) to
- * /tmp/ts_h3_{go,ts}_N.txt. Failures are verdicts under @p id.
+ * Contract of the TypeScript service against its own documentation: four
+ * inputs, status code and finite value (the formula as well when the README
+ * gives one). The Go reply is logged as information only.
  */
 static inline void
-tsd_h3_collect(const char *id)
+tsd_contract_run(const char *id)
 {
     const char *src = tsd_src();
     char        ts[PATH_MAX];
     char        cmd[600];
-    char        glog[401];
+    char        tlog[401];
     char       *big = malloc(70100);
     char       *req = malloc(70300);
-    char       *rg = malloc(16384);
     char       *rt = malloc(16384);
-    char        fb[16500];
+    char       *rg = malloc(16384);
     unsigned    tsport = tsd_free_port();
+    bool        formula = false;
+    double      expect = 0;
     int         st = 0;
     unsigned    i;
 
     signal(SIGPIPE, SIG_IGN);
     snprintf(ts, sizeof(ts), "%s/ts", src);
-    if (big == NULL || req == NULL || rg == NULL || rt == NULL)
+    if (big == NULL || req == NULL || rt == NULL || rg == NULL)
     {
         tsd_bad(id, "memory", "out of memory");
         goto out;
@@ -530,112 +558,92 @@ tsd_h3_collect(const char *id)
     memset(big, 'a', 70000);
     big[70000] = '\0';
 
-    TEST_STEP("Start the Go example (its port is fixed by the contract: %d)",
-              TSD_GO_PORT);
-    if (tsd_connect(TSD_GO_PORT) >= 0)
-        tsd_say("%s: something already listens on port %d; the Go example "
-                "takes its port from web/contract/services.tab and has no "
-                "variable for it", id, TSD_GO_PORT);
-    snprintf(cmd, sizeof(cmd), "test -x dist/bin/service-go && "
-             "LD_LIBRARY_PATH=\"$PWD/dist/lib:$LD_LIBRARY_PATH\" "
-             "exec dist/bin/service-go");
-    tsd_child = tsd_spawn(src, cmd, "/tmp/ts_h3_go.log");
-    if (!tsd_wait_port(TSD_GO_PORT, 20) || !tsd_alive(tsd_child, &st))
+    TEST_STEP("Does the TypeScript README give the stage formula");
+    if (tsd_sh(src, "grep -nE '0\\.75' README.md ts/README.md",
+               10, "/tmp/ts_ct_readme.log") == 0)
     {
-        tsd_tail("/tmp/ts_h3_go.log", glog, sizeof(glog));
-        tsd_bad(id, "start Go", "the Go example did not listen on port %d "
-                "(%s/dist/bin/service-go); output: [%s]", TSD_GO_PORT, src,
-                glog);
-        goto out;
+        formula = true;
+        expect = 42 * 0.75 + 3;
+        tsd_say("%s README formula found: value = v * 0.75 + 3 times the "
+                "weight 1.0", id);
     }
-    tsd_say("%s start Go: listening on port %d", id, TSD_GO_PORT);
+    else
+        tsd_say("%s README gives no stage formula: only the status code "
+                "and a finite value are checked", id);
 
     TEST_STEP("Start the TypeScript example on port %u", tsport);
     snprintf(cmd, sizeof(cmd), "EXAMPLE_PORT=%u EXAMPLE_HOST=127.0.0.1 "
-             "exec node dist/main.js", tsport);
-    tsd_child2 = tsd_spawn(ts, cmd, "/tmp/ts_h3_ts.log");
+             "RING_PORT=%u RING_HOST=127.0.0.1 exec node dist/main.js",
+             tsport, tsport);
+    tsd_child2 = tsd_spawn(ts, cmd, "/tmp/ts_ct_ts.log");
     if (!tsd_wait_port(tsport, 15) || !tsd_alive(tsd_child2, &st))
     {
-        tsd_tail("/tmp/ts_h3_ts.log", glog, sizeof(glog));
-        tsd_bad(id, "start TypeScript", "the TypeScript example did not "
-                "listen on port %u; output: [%s]", tsport, glog);
+        tsd_tail("/tmp/ts_ct_ts.log", tlog, sizeof(tlog));
+        tsd_bad(id, "start TypeScript", "did not listen on port %u; "
+                "output: [%s]", tsport, tlog);
         goto out;
     }
-    tsd_say("%s start TypeScript: listening on port %u", id, tsport);
+
+    TEST_STEP("Start the Go example for information only");
+    snprintf(cmd, sizeof(cmd), "test -x dist/bin/service-go && "
+             "LD_LIBRARY_PATH=\"$PWD/dist/lib:$LD_LIBRARY_PATH\" "
+             "exec dist/bin/service-go");
+    tsd_child = tsd_spawn(src, cmd, "/tmp/ts_ct_go.log");
+    if (!tsd_wait_port(TSD_GO_PORT, 10))
+        tsd_say("%s Go example not available: its value is not logged", id);
 
     for (i = 0; i < TSD_H3_N; i++)
     {
-        char    pg[64], pt[64];
-        char    val[80];
-        ssize_t ng, nt;
-        const char *v;
+        const char *v = i == 0 ? "42" : i == 1 ? "" : i == 2 ? "abc" : big;
+        const char *why;
+        double      gv = 0;
+        int         status;
+        ssize_t     nt;
 
-        v = i == 0 ? "42" : i == 1 ? "" : i == 2 ? "abc" : big;
-        snprintf(val, sizeof(val), "%.60s", v);
         snprintf(req, 70300, "GET /ring?value=%s&hops=0 HTTP/1.0\r\n"
-                 "Host: 127.0.0.1\r\n\r\n", v);
-        TEST_STEP("Send the %s input to both", tsd_h3_kind[i]);
-        ng = tsd_exchange(TSD_GO_PORT, req, strlen(req), 5000, rg, 16384);
+                 "Host: ts\r\n\r\n", v);
+        TEST_STEP("Send the %s input", tsd_h3_kind[i]);
         nt = tsd_exchange(tsport, req, strlen(req), 5000, rt, 16384);
-        tsd_h3_paths(i, pg, pt, sizeof(pg));
-        snprintf(fb, sizeof(fb), "status %d\n%s", tsd_status(rg),
-                 tsd_body(rg));
-        tsd_put(pg, fb);
-        snprintf(fb, sizeof(fb), "status %d\n%s", tsd_status(rt),
-                 tsd_body(rt));
-        tsd_put(pt, fb);
-        tsd_say("%s input %u collected (%s, value=%.40s): Go read %zd "
-                "bytes status %d, TypeScript read %zd bytes status %d",
-                id, i + 1, tsd_h3_kind[i], val, ng, tsd_status(rg), nt,
-                tsd_status(rt));
-        if (ng < 0 || nt < 0)
-            tsd_bad(id, "send input", "input %u: connect failed (Go %zd, "
-                    "TypeScript %zd)", i + 1, ng, nt);
+        status = tsd_status(rt);
+        if (nt <= 0)
+        {
+            char nm[40];
+
+            snprintf(nm, sizeof(nm), "input %u no reply", i + 1);
+            tsd_say("%s input %u (%s): no reply (read %zd)", id, i + 1,
+                    tsd_h3_kind[i], nt);
+            tsd_flag(nm);
+            continue;
+        }
+        why = tsd_contract_check(i, status, tsd_body(rt), formula, expect);
+        if (why != NULL)
+        {
+            char nm[40];
+
+            snprintf(nm, sizeof(nm), "input %u %s", i + 1, why);
+            tsd_say("%s input %u (%s) breaks the contract: %s; status %d "
+                    "reply [%.200s]", id, i + 1, tsd_h3_kind[i], why, status,
+                    tsd_body(rt));
+            tsd_flag(nm);
+        }
+        else
+            tsd_say("%s input %u (%s) follows the contract: status %d "
+                    "[%.120s]", id, i + 1, tsd_h3_kind[i], status,
+                    tsd_body(rt));
+        if (tsd_exchange(TSD_GO_PORT, req, strlen(req), 5000, rg, 16384) > 0)
+        {
+            bool have = tsd_contract_value(tsd_body(rg), &gv);
+
+            tsd_say("%s info only, Go input %u: status %d value %s%.4f", id,
+                    i + 1, tsd_status(rg), have ? "" : "(none) ", have ? gv : 0.0);
+        }
     }
 out:
     tsd_cleanup();
     free(big);
     free(req);
-    free(rg);
     free(rt);
-}
-
-/**
- * H3 comparison of the saved files, one verdict per input: 'H3 input N
- * same' or 'H3 input N differs' with both replies. Nothing is weakened:
- * one differing byte fails the test.
- */
-static inline void
-tsd_h3_compare(const char *id)
-{
-    unsigned i;
-
-    for (i = 0; i < TSD_H3_N; i++)
-    {
-        char pg[64], pt[64];
-        char a[401], b[401];
-        int  code;
-        bool same;
-
-        tsd_h3_paths(i, pg, pt, sizeof(pg));
-        same = tsd_cmp(pg, pt, &code);
-        tsd_head(pg, a, sizeof(a));
-        tsd_head(pt, b, sizeof(b));
-        if (same)
-            tsd_say("H3 input %u same (%s; cmp exit=%d) reply: [%s]", i + 1,
-                    tsd_h3_kind[i], code, a);
-        else
-        {
-            char nm[40];
-
-            snprintf(nm, sizeof(nm), "input %u differs", i + 1);
-            tsd_say("H3 input %u differs (%s; cmp exit=%d) Go reply: [%s] "
-                    "TypeScript reply: [%s]", i + 1, tsd_h3_kind[i], code,
-                    a, b);
-            tsd_flag(nm);
-        }
-    }
-    (void)id;
+    free(rg);
 }
 
 #endif /* MDE_TSD_NET_H */

@@ -318,7 +318,7 @@ tsd_clean(const char *in, char *out, size_t size)
     out[i] = '\0';
 }
 
-/** Write a verdict that does not end the test. */
+/** Write a progress line to the log at RING level; not a verdict. */
 static inline void
 tsd_say(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 static inline void
@@ -332,7 +332,7 @@ tsd_say(const char *fmt, ...)
     vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
     tsd_clean(buf, cl, sizeof(cl));
-    RING_VERDICT("%s", cl);
+    RING("%s", cl);
 }
 
 /** Record a failed step (name only; the verdict is written by the caller). */
@@ -449,6 +449,18 @@ tsd_build_gate(const char *id)
         if (tsd_nfail > 0)                                              \
             TEST_FAIL("%s: %d step(s) failed: %s", _id, tsd_nfail,      \
                       tsd_fails);                                       \
+    } while (0)
+
+/**
+ * End of a passing test: fail with the failed steps, if any; otherwise one
+ * fixed RING verdict (it does not stop the test and is listed in conf/trc.xml)
+ * and the caller ends with TEST_SUCCESS. Never TEST_VERDICT: that one is an
+ * error verdict and marks the test failed.
+ */
+#define TSD_PASS(_id, _text) \
+    do {                                                                \
+        TSD_FINISH(_id);                                                \
+        RING_VERDICT("%s PASS: %s", _id, _text);                        \
     } while (0)
 
 #endif /* MDE_TSD_H */

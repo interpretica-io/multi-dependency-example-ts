@@ -104,6 +104,8 @@ main(int argc, char **argv)
             "killed on the time limit; the log capture works", vtext);
     T_FINDING(TAPI_CYBERSEC_SEV_INFO, "ts.control", "shell helper", "%s",
               res.msg);
+    RING("%s", res.msg);
+    res_set(&res, R_PASS, IDS " PASS: the shell helper control tripped");
 
 verdict:
     free(bad);

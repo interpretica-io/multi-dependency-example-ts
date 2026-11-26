@@ -1,12 +1,14 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief ts_example: ts_contract, same reply as the Go example (settles H3)
+ * @brief ts_example: ts_contract, the TypeScript service against its own
+ *        documented contract (V5 of round 1)
  *
- * Runs only after ts_build passed; when it did not, logs "blocked by H2"
- * and fails. Starts the Go and the TypeScript example, sends a valid, a
- * low, a high and a repeated guess, saves both replies to files and
- * compares them byte for byte; both replies are in the error on a mismatch.
+ * Starts the TypeScript example and sends a valid, an empty, a non-numeric
+ * and a 70000-byte input. A valid request must get 200 and a finite value
+ * (and the stage formula when the README gives one); the others 400 with an
+ * "error:" line. The Go value is logged as information only: the two
+ * services are different ring stages and are not compared.
  *
  * @author midair <midair@localhost>
  */
@@ -21,17 +23,12 @@ int
 main(int argc, char **argv)
 {
     TEST_START;
-    tsd_say("H5 start");
+    tsd_say("H3 start");
+    TEST_STEP("Control: the contract check rejects planted wrong replies");
+    tsd_contract_control("H3");
     if (tsd_build_gate("H3"))
-    {
-        tsd_h3_control("H3");
-        tsd_h3_collect("H3");
-        if (tsd_h3_files_exist())
-            tsd_h3_compare("H3");
-        else
-            tsd_flag("no reply files");
-    }
-    TSD_FINISH("H3");
+        tsd_contract_run("H3");
+    TSD_PASS("H3", "the four inputs follow the documented contract");
     TEST_SUCCESS;
 
 cleanup:

@@ -1271,6 +1271,149 @@
           </test>
         </iter>
       </test>
+      <test name="ts_example" type="package">
+        <objective/>
+        <notes>Each passing test ends with one fixed RING verdict; a verdict that is not listed here, or a failed result, is reported as unexpected.</notes>
+        <iter result="PASSED">
+          <notes/>
+          <test name="prologue" type="script">
+            <objective/>
+            <notes/>
+          </test>
+          <test name="ts_diag" type="script">
+            <objective/>
+            <notes/>
+            <iter result="PASSED">
+              <notes/>
+              <results>
+                <result value="PASSED">
+                  <verdict>H4 PASS: ts_diag ran its commands</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="ts_control_known_bad" type="script">
+            <objective/>
+            <notes/>
+            <iter result="PASSED">
+              <notes/>
+              <results>
+                <result value="PASSED">
+                  <verdict>H2 H3 H4 PASS: the shell helper control tripped</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="ts_build" type="script">
+            <objective/>
+            <notes/>
+            <iter result="PASSED">
+              <notes/>
+              <results>
+                <result value="PASSED">
+                  <verdict>H1 H4 PASS: build ok and reported as passed</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="ts_run_guess" type="script">
+            <objective/>
+            <notes/>
+            <iter result="PASSED">
+              <notes/>
+              <results>
+                <result value="PASSED">
+                  <verdict>H1 PASS: the TypeScript output equals a full-ring reference</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="ts_bad_input" type="script">
+            <objective/>
+            <notes/>
+            <iter result="PASSED">
+              <notes/>
+              <results>
+                <result value="PASSED">
+                  <verdict>H2 H3 PASS: no literal address in ts/src; bad input gives a short error and a non-zero exit</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="ts_contract" type="script">
+            <objective/>
+            <notes/>
+            <iter result="PASSED">
+              <notes/>
+              <results>
+                <result value="PASSED">
+                  <verdict>H3 PASS: the four inputs follow the documented contract</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="ts_slow_peer" type="script">
+            <objective/>
+            <notes/>
+            <iter result="PASSED">
+              <notes/>
+              <results>
+                <result value="PASSED">
+                  <verdict>H3 PASS: a silent or refusing peer gives an answer or a clean exit, no trace and no leftover process</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="ts_robust" type="script">
+            <objective/>
+            <notes/>
+            <iter result="PASSED">
+              <notes/>
+              <results>
+                <result value="PASSED">
+                  <verdict>H4 PASS: listen address, bad input and signal exit as designed</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="ts_h1_listing" type="script">
+            <objective/>
+            <notes/>
+            <iter result="PASSED">
+              <notes/>
+              <results>
+                <result value="PASSED">
+                  <verdict>H1 PASS: ts/package.json, ts/tsconfig.json and a .ts file exist</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="ts_h2_build_guess" type="script">
+            <objective/>
+            <notes/>
+            <iter result="PASSED">
+              <notes/>
+              <results>
+                <result value="PASSED">
+                  <verdict>H2 PASS: run.sh guess ended cleanly or was still running</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="ts_h4_port_badinput" type="script">
+            <objective/>
+            <notes/>
+            <iter result="PASSED">
+              <notes/>
+              <results>
+                <result value="PASSED">
+                  <verdict>H4 PASS: listen address, bad input and signal exit as designed</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+        </iter>
+      </test>
       <test name="graph" type="package">
         <objective/>
         <notes/>

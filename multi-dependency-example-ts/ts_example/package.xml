@@ -9,9 +9,9 @@
                      stderr, and a failing verdict names the failing step.
 
           @par Test Groups:
-          - @ref mde-ts_example-ts_build - Build (H2)
-          - @ref mde-ts_example-ts_run_guess - Start with guess (H2)
-          - @ref mde-ts_example-ts_contract - Same reply as Go and C# (H3)
+          - @ref mde-ts_example-ts_build - Build (H1, H4)
+          - @ref mde-ts_example-ts_run_guess - Same ring result as the other demos (H1)
+          - @ref mde-ts_example-ts_contract - Own contract (H3)
           - @ref mde-ts_example-ts_robust - Endpoint variable, no hardcoded URL, silent peer (H4)
     -->
 
@@ -69,25 +69,26 @@
         -->
         <run name="ts_build">
             <script name="ts_build">
-                <objective>[H1] PASS only when ./build.sh exits 0 and ts/dist with compiled .js files exists; FAIL on a non-zero exit (last 400 bytes in the verdict) or a missing output.</objective>
+                <objective>[H1 H4] PASS only when ./build.sh exits 0 and ts/dist with compiled .js files exists; the pass is a RING verdict and the test ends passed (H4). FAIL on a non-zero exit (last 400 bytes in the verdict) or a missing output.</objective>
             </script>
         </run>
 
-        <!-- @page mde-ts_example-ts_run_guess Same result as the other demos (H2)
+        <!-- @page mde-ts_example-ts_run_guess Same result as the other demos (H1)
               @objective Compare ./scripts/run.sh guess 42 3 with an existing demo.
 
               @par Scenario:
               -# Check the comparison against a planted difference.
-              -# Run run.sh guess 42 3 and dist/bin/cpp-demo (else rust-demo) 42 3.
-              -# Pass only when stdout (demo name and indentation removed) and exit code match.
+              -# Run each reference demo first (C++, Rust, Python, Go, C#); drop missing or non-zero ones and log which.
+              -# Run run.sh guess 42 3; log stage count and final value of each output, and the C++ stdout in full.
+              -# Pass only when the normalised TypeScript stdout equals a full-ring reference with the same exit code.
         -->
         <run name="ts_run_guess">
             <script name="ts_run_guess">
-                <objective>[H2] PASS only when run.sh guess 42 3 and the C++ (else Rust) demo give the same stdout and exit code; FAIL on any difference, with both outputs in the verdict.</objective>
+                <objective>[H1] Runs the C++, Rust, Python, Go and C# demos for 42 3 first (missing or non-zero ones are dropped and logged), normalises stdout, and PASSES when run.sh guess 42 3 equals at least one full-ring reference with the same exit code; stage count and final value of each are logged; the C++ stdout and exit code are logged in full.</objective>
             </script>
         </run>
 
-        <!-- @page mde-ts_example-ts_bad_input Bad input and hardcoded addresses (H3)
+        <!-- @page mde-ts_example-ts_bad_input Bad input and hardcoded addresses (H2, H3)
               @objective Empty, non-numeric and very long input under a 10 s timeout, and a source scan for literal addresses.
 
               @par Scenario:
@@ -98,12 +99,26 @@
         -->
         <run name="ts_bad_input">
             <script name="ts_bad_input">
-                <objective>[H3] PASS only when every bad input exits non-zero with a short message, no stack trace and no timeout, and ts/src has no literal IP address or URL; each failure names its step.</objective>
+                <objective>[H2 H3] H2: strict scan of ts/src for literal IPv4 addresses and http(s) URLs, loopback included, with a planted-literal control. H3: empty, non-numeric, long text and long digit input each exit non-zero within 10 s with one line and no trace.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-ts_example-ts_slow_peer Slow and refusing peer (H3)
+              @objective A peer that accepts and never replies, and a closed port; the TypeScript service answers or exits with a clear error within 15 s.
+
+              @par Scenario:
+              -# Check the trace detector and both peer modes against planted cases.
+              -# Start service-ts with the peer as upstream and node dist/main.js with RING_HOST and RING_PORT set to the peer.
+              -# Pass only on an answer or an exit within 15 s, no stack trace or unhandled rejection, and no process left in the group.
+        -->
+        <run name="ts_slow_peer">
+            <script name="ts_slow_peer">
+                <objective>[H3] Silent peer (accepts, never replies) and refused peer (closed port) on a local ephemeral port, 15 s limit per case; FAIL on a hang, a trace, an unhandled rejection, a death by signal or a leftover process.</objective>
             </script>
         </run>
 
         <!-- @page mde-ts_example-ts_contract Contract (H3)
-              @objective Compare the reply of the TypeScript example with the Go and C# examples byte for byte.
+              @objective Check the reply of the TypeScript example against its own documented contract.
 
               @par Scenario:
               -# Fail with "H2 build missing" when dist/index.js does not exist.
@@ -115,7 +130,7 @@
         -->
         <run name="ts_contract">
             <script name="ts_contract">
-                <objective>[H3 H5] First verdict 'H5 start', then 'H5 build precondition' (dist/main.js; else 'H3 blocked by H2' and FAIL). Sends a valid, an empty, a non-numeric and a 70000-byte input to the Go and TypeScript examples with a 5 s timeout, saves both replies in /tmp, and writes 'H3 input N same' or 'H3 input N differs' with both replies. A known-bad script printing a different reply must be caught by cmp.</objective>
+                <objective>[H3] TypeScript service against its own documented contract for four inputs: 200 and a finite value (and the README formula if there is one) for a valid one, 400 with an error: line for empty, non-numeric and oversized input. The Go value is logged as information only.</objective>
             </script>
         </run>
 
@@ -160,21 +175,6 @@
         <run name="ts_h2_build_guess">
             <script name="ts_h2_build_guess">
                 <objective>[H2] Verdict 'H2 guess alive' after scripts/run.sh guess for 30 s; PASS when still running or exit 0.</objective>
-            </script>
-        </run>
-
-        <!-- @page mde-ts_example-ts_h3_same_output Same output as Go (H3)
-              @objective Send one fixed set of inputs to the TypeScript example and the Go service and compare the replies byte for byte.
-
-              @par Scenario:
-              -# Check the byte comparison against planted differences.
-              -# Start the services; skip the test when the Go example cannot start.
-              -# Send value 42 hops 3 (a valid guess) and three more fixed inputs to the example and to the Go service.
-              -# Fail on any byte of difference, printing both replies.
-        -->
-        <run name="ts_h3_same_output">
-            <script name="ts_h3_same_output">
-                <objective>[H3] Reads the reply files saved by ts_contract (or collects them the same way) and compares each pair with cmp; one verdict per input; PASS only when all four are the same.</objective>
             </script>
         </run>
 

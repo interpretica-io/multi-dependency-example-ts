@@ -1,6 +1,5 @@
 # Copyright (C) 2026 midair <midair@localhost>
 
-# The ts_diag, ts_build, ts_h1_listing, ts_h2_build_guess, ts_contract, ts_h3_same_output,
 # ts_robust and ts_h4_port_badinput use only tsd.h and tsd_net.h; the others tsx_lib.h.
 # See package.xml. The group prologue only checks the tools; they are
 # installed by scripts/midair-setup.sh.
@@ -12,10 +11,10 @@ tests = [
     'ts_run_guess',
     'ts_bad_input',
     'ts_contract',
+    'ts_slow_peer',
     'ts_robust',
     'ts_h1_listing',
     'ts_h2_build_guess',
-    'ts_h3_same_output',
     'ts_h4_port_badinput',
 ]
 

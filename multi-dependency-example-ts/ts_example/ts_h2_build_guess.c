@@ -47,7 +47,7 @@ main(int argc, char **argv)
         tsd_say("H2 guess alive: exit=%d after %lld ms (124: still running "
                 "at the 30 s limit; 0: ended cleanly): [%.400s]", code,
                 tsd_ms() - t0, text);
-    TSD_FINISH("H2");
+    TSD_PASS("H2", "run.sh guess ended cleanly or was still running");
     TEST_SUCCESS;
 
 cleanup:

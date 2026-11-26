@@ -121,7 +121,7 @@ main(int argc, char **argv)
         tsd_say("H1 TypeScript example found");
     else
         tsd_say("H1 no TypeScript example found: missing %s", tsd_fails);
-    TSD_FINISH("H1");
+    TSD_PASS("H1", "ts/package.json, ts/tsconfig.json and a .ts file exist");
     TEST_SUCCESS;
 
 cleanup:

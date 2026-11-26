@@ -25,7 +25,7 @@ main(int argc, char **argv)
     tsd_say("H4 start");
     if (tsd_build_gate("H4"))
         tsd_h4_scenario("H4", false);
-    TSD_FINISH("H4");
+    TSD_PASS("H4", "listen address, bad input and signal exit as designed");
     TEST_SUCCESS;
 
 cleanup:

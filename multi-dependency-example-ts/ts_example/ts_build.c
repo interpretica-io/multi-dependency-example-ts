@@ -76,8 +76,8 @@ main(int argc, char **argv)
 
     if (tsd_nfail == 0)
         tsd_put(TSD_BUILD_MARK, "built\n");
-    TSD_FINISH("H1");
-    TEST_VERDICT("H1 PASS: ./build.sh exited 0 and %s exists", path);
+    tsd_say("H1 PASS: ./build.sh exited 0 and %s exists", path);
+    TSD_PASS("H1 H4", "build ok and reported as passed");
     TEST_SUCCESS;
 
 cleanup:
