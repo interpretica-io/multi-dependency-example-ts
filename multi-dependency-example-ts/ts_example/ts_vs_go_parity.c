@@ -182,13 +182,12 @@ main(int argc, char **argv)
 
     for (i = 0; i < TE_ARRAY_LEN(reqs); i++)
     {
-        int         cg;
         int         ct;
         const char *why = NULL;
         char        one[200];
 
         TEST_STEP("Send %s to both services", reqs[i].name);
-        cg = probe(&session, TSJ_GO_PORT, reqs[i].target, &rg);
+        (void)probe(&session, TSJ_GO_PORT, reqs[i].target, &rg);
         ct = probe(&session, tsport, reqs[i].target, &rt);
         TEST_ARTIFACT("H7 go %s: status %d value [%s] (recorded only)",
                       reqs[i].name, rg.code,
