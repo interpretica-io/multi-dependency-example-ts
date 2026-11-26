@@ -6,6 +6,8 @@ project('multi-dependency-example-ts', 'c',
 te_path = get_option('te_path')
 te_libdir = get_option('te_libdir')
 add_project_arguments(get_option('te_cflags').split(), language: 'c')
+# Fixed-size message buffers are cut on purpose; truncation is not an error.
+add_project_arguments('-Wno-format-truncation', language: 'c')
 add_project_link_arguments(get_option('te_ldflags').split(), language: 'c')
 
 cc = meson.get_compiler('c')
