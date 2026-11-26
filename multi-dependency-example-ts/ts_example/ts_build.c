@@ -80,6 +80,8 @@ main(int argc, char **argv)
 {
     res_t       res = { .kind = R_PASS };
     ts_run_t   *b = calloc(1, sizeof(*b));
+    tsx_sh_t   *sh = calloc(1, sizeof(*sh));
+    char        vtext[4200];
     ts_run_t   *d = calloc(1, sizeof(*d));
     char        shim[300];
     char        script[700];
@@ -87,20 +89,18 @@ main(int argc, char **argv)
     char        tsdir[700] = "";
     char        found[900];
     char        tail[16384];
-    char        errtail[4096];
     char        step[300] = "";
     char        diag[600] = "";
     char        why[400];
     char        cmd[900];
-    char        path[400];
-    const char *env[] = { "RuntimeIdentifier=linux-x64", NULL };
     struct stat st;
     time_t      since;
     int         njs;
 
     TEST_START;
     t_report_begin();
-    if (b == NULL || d == NULL)
+    unlink(TSX_BUILD_MARK);
+    if (b == NULL || d == NULL || sh == NULL)
     {
         res_set(&res, R_FAIL, "H2 NOT SETTLED: out of memory");
         goto verdict;
@@ -109,6 +109,25 @@ main(int argc, char **argv)
         goto verdict;
     snprintf(script, sizeof(script), "%s/build.sh", src_root);
     snprintf(runsh, sizeof(runsh), "%s/scripts/run.sh", src_root);
+
+    TSX_STEP("List the project root %s to confirm that build.sh exists",
+             src_root);
+    snprintf(cmd, sizeof(cmd), "ls -la '%s'", src_root);
+    if (!tsx_sh(sh, "H2", "ls-root", src_root, cmd, 60, NULL) ||
+        !tsx_sh_ok(sh))
+    {
+        tsx_sh_text(sh, vtext, sizeof(vtext));
+        res_set(&res, R_FAIL, "H2 FAIL: step ls of the project root %s: "
+                "%s", src_root, vtext);
+        goto verdict;
+    }
+    if (strstr(sh->text, "build.sh") == NULL)
+    {
+        res_set(&res, R_FAIL, "H2 FAIL: step ls of the project root %s: "
+                "build.sh is not in the listing; last %d lines [%s]",
+                src_root, TSX_TAIL, sh->tail);
+        goto verdict;
+    }
 
     TSX_STEP("Known-bad control: the runner reports a hang and a signal");
     if (!ts_runner_control_ok(workdir, why, sizeof(why)))
@@ -133,18 +152,19 @@ main(int argc, char **argv)
 
     TSX_STEP("Run %s in %s, at most %d s", script, src_root, BUILD_LIMIT_S);
     since = time(NULL);
-    snprintf(cmd, sizeof(cmd), "'%s'", script);
-    if (!ts_run(b, src_root, cmd, NULL, env, shim, BUILD_LIMIT_S, "build"))
+    snprintf(cmd, sizeof(cmd), "RuntimeIdentifier=linux-x64 PATH='%s':\"$PATH\" "
+             "'%s'", shim, script);
+    if (!tsx_sh(sh, "H2", "build", src_root, cmd, BUILD_LIMIT_S, NULL))
     {
-        res_set(&res, R_FAIL, "H2 NOT SETTLED: cannot start %s", script);
+        res_set(&res, R_FAIL, "H2 NOT SETTLED: cannot start %s through the "
+                "shell helper", script);
         goto verdict;
     }
-    tsx_log_step("H2", "build", cmd, b);
-    snprintf(path, sizeof(path), "%s/build.stdout", workdir);
-    file_tail(path, tail, sizeof(tail));
-    snprintf(path, sizeof(path), "%s/build.stderr", workdir);
-    file_tail(path, errtail, sizeof(errtail));
-    strncat(tail, errtail, sizeof(tail) - strlen(tail) - 1);
+    snprintf(tail, sizeof(tail), "%s", sh->text);
+    b->code = sh->code;
+    b->sig = sh->sig;
+    b->hung = sh->hung;
+    b->secs = sh->secs;
     ts_find_dir(src_root, tsdir, sizeof(tsdir));
 
     if (b->hung || b->sig != 0 || b->code != 0)
@@ -178,11 +198,9 @@ main(int argc, char **argv)
                 }
             }
         }
-        ts_flat(tail + (strlen(tail) > 600 ? strlen(tail) - 600 : 0), 600,
-                why, sizeof(why));
-        res_set(&res, R_FAIL, "H2 FAIL: step %s: %s exit code %d signal %d%s;"
-                " %send of the output [%s]", step, script, b->code, b->sig,
-                b->hung ? " (killed on the time limit)" : "", diag, why);
+        tsx_sh_text(sh, vtext, sizeof(vtext));
+        res_set(&res, R_FAIL, "H2 FAIL: step %s: %s: %s%s", step, script,
+                vtext, diag[0] != '\0' ? diag : "");
         goto verdict;
     }
 
@@ -204,9 +222,18 @@ main(int argc, char **argv)
                 "is not executable (mode %o)", runsh,
                 (unsigned)(st.st_mode & 0777));
     else
+    {
+        FILE *mk = fopen(TSX_BUILD_MARK, "w");
+
+        if (mk != NULL)
+        {
+            fputs("passed\n", mk);
+            fclose(mk);
+        }
         res_set(&res, R_PASS, "H2 PASS: %s exited 0 in %.1f s, %d compiled "
                 "JavaScript file(s) written in %s/dist (first %s) and %s is "
                 "executable", script, b->secs, njs, tsdir, found, runsh);
+    }
     RING("H2 ts_build: %s", res.msg);
     T_FINDING(res.kind == R_PASS ? TAPI_CYBERSEC_SEV_INFO :
               TAPI_CYBERSEC_SEV_HIGH, "ts.build", "build.sh", "%s",
@@ -215,6 +242,7 @@ main(int argc, char **argv)
 verdict:
     free(b);
     free(d);
+    free(sh);
     TSX_VERDICT(&res, "H2");
 
 cleanup:

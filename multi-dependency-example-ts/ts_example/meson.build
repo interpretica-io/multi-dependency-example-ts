@@ -5,6 +5,7 @@
 # installed by scripts/midair-setup.sh.
 tests = [
     'prologue',
+    'ts_control_known_bad',
     'ts_build',
     'ts_run_guess',
     'ts_contract',

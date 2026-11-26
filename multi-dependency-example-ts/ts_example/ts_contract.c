@@ -125,6 +125,8 @@ main(int argc, char **argv)
     }
     if (!tsx_init(&res, "H3"))
         goto verdict;
+    if (!tsx_need_build(&res, "H3"))
+        goto verdict;
 
     TSX_STEP("Check that the TypeScript build exists (dist/index.js)");
     tsx_index_js(src_root, tsdir, sizeof(tsdir), index, sizeof(index));

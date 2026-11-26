@@ -32,6 +32,8 @@ main(int argc, char **argv)
     res_t       res = { .kind = R_PASS };
     ts_run_t   *b = calloc(1, sizeof(*b));
     ts_run_t   *g = calloc(1, sizeof(*g));
+    tsx_sh_t   *sh = calloc(1, sizeof(*sh));
+    char        vtext[4200];
     char        shim[300];
     char        why[400];
     char        note[900];
@@ -44,13 +46,12 @@ main(int argc, char **argv)
     time_t      since;
     int         njs = 0;
     bool        crash;
-    const char *benv[] = { "RuntimeIdentifier=linux-x64", NULL };
     const char *genv[3];
     int         up;
 
     TEST_START;
     t_report_begin();
-    if (b == NULL || g == NULL)
+    if (b == NULL || g == NULL || sh == NULL)
     {
         res_set(&res, R_FAIL, "H2 NOT SETTLED: out of memory");
         goto verdict;
@@ -81,31 +82,24 @@ main(int argc, char **argv)
 
     TSX_STEP("Run %s/build.sh, at most %d s", src_root, BUILD_LIMIT_S);
     since = time(NULL);
-    snprintf(bcmd, sizeof(bcmd), "'%s/build.sh'", src_root);
-    if (!ts_run(b, src_root, bcmd, NULL, benv, shim, BUILD_LIMIT_S, "build"))
+    snprintf(bcmd, sizeof(bcmd), "ls -la '%s' && RuntimeIdentifier=linux-x64 "
+             "PATH='%s':\"$PATH\" '%s/build.sh'", src_root, shim, src_root);
+    if (!tsx_sh(sh, "H2", "build", src_root, bcmd, BUILD_LIMIT_S, NULL))
     {
-        res_set(&res, R_FAIL, "H2 NOT SETTLED: cannot start %s", bcmd);
+        res_set(&res, R_FAIL, "H2 NOT SETTLED: cannot start the build "
+                "through the shell helper");
         goto verdict;
     }
-    tsx_log_step("H2", "build", bcmd, b);
-    T_FINDING(b->code == 0 && !b->hung ? TAPI_CYBERSEC_SEV_INFO :
+    b->secs = sh->secs;
+    T_FINDING(tsx_sh_ok(sh) ? TAPI_CYBERSEC_SEV_INFO :
               TAPI_CYBERSEC_SEV_HIGH, "ts.build", "build.sh",
-              "exit code %d, signal %d, hung %d", b->code, b->sig, b->hung);
-    if (b->hung || b->sig != 0 || b->code != 0)
+              "exit code %d, signal %d, hung %d", sh->code, sh->sig,
+              sh->hung);
+    if (!tsx_sh_ok(sh))
     {
-        char t50[3000];
-        char p[300];
-
-        snprintf(p, sizeof(p), "%s/build.stderr", workdir);
-        file_tail(p, t50, sizeof(t50));
-        ts_flat(t50 + (strlen(t50) > 1200 ? strlen(t50) - 1200 : 0), 1200,
-                e, sizeof(e));
-        res_set(&res, R_FAIL, "H2 FAIL: step build: %s %s, exit code %d, "
-                "signal %d, required 0; end of the build output (stderr) "
-                "[%s]; the last %d lines of stdout and stderr are in the "
-                "log; scripts/run.sh guess was not run", bcmd, b->hung ?
-                "did not finish within the limit" : "failed", b->code,
-                b->sig, e, TSX_TAIL);
+        tsx_sh_text(sh, vtext, sizeof(vtext));
+        res_set(&res, R_FAIL, "H2 FAIL: step build: build.sh in %s: %s; "
+                "scripts/run.sh guess was not run", src_root, vtext);
         goto verdict;
     }
     TSX_STEP("Check that the build produced compiled JavaScript");
@@ -130,14 +124,19 @@ main(int argc, char **argv)
     TSX_STEP("Run %s/scripts/run.sh guess, at most %d s", src_root,
              GUESS_LIMIT_S);
     snprintf(gcmd, sizeof(gcmd), "'%s/scripts/run.sh' guess", src_root);
-    if (!ts_run(g, src_root, gcmd, NULL, genv, NULL, GUESS_LIMIT_S, "guess"))
+    if (!tsx_sh(sh, "H2", "guess", src_root, gcmd, GUESS_LIMIT_S, genv))
     {
-        res_set(&res, R_FAIL, "H2 NOT SETTLED: cannot start guess");
+        res_set(&res, R_FAIL, "H2 NOT SETTLED: cannot start guess through "
+                "the shell helper");
         goto verdict;
     }
-    tsx_log_step("H2", "guess", gcmd, g);
-    ts_flat(g->err, 200, e, sizeof(e));
-    crash = g->sig != 0 || ts_has_trace(g->err) || ts_has_trace(g->out);
+    g->code = sh->code;
+    g->sig = sh->sig;
+    g->hung = sh->hung;
+    g->secs = sh->secs;
+    ts_flat(sh->tail + (strlen(sh->tail) > 300 ? strlen(sh->tail) - 300 : 0),
+            300, e, sizeof(e));
+    crash = g->sig != 0 || ts_has_trace(sh->text);
     T_FINDING(!crash && (g->hung || g->code == 0) ? TAPI_CYBERSEC_SEV_INFO :
               TAPI_CYBERSEC_SEV_HIGH, "ts.run", "run.sh guess",
               "exit code %d, signal %d, still running at the limit %d, "
@@ -164,6 +163,7 @@ main(int argc, char **argv)
 verdict:
     free(b);
     free(g);
+    free(sh);
     TSX_VERDICT(&res, "H2");
 
 cleanup:

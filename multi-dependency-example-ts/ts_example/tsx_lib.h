@@ -22,6 +22,7 @@
 #define TSX_TAIL    50      /**< Lines of the tail logged when a step fails. */
 
 static void tsx_log_full(const char *label, const char *text);
+static void tsx_crash(int sig);
 
 /** Text of the TEST_STEP that is running, for the verdict of a failure. */
 static char tsx_step[200] = "(before the first step)";
@@ -52,6 +53,8 @@ static bool
 tsx_init(res_t *res, const char *id)
 {
     signal(SIGPIPE, SIG_IGN);
+    signal(SIGSEGV, tsx_crash);
+    signal(SIGABRT, tsx_crash);
     src_root = getenv("TE_TS_MDE_SRC");
     if (src_root == NULL || src_root[0] == '\0')
     {
@@ -194,6 +197,197 @@ tsx_log_step(const char *id, const char *tag, const char *cmd,
             tsx_last.out, sizeof(tsx_last.out));
     ts_flat(r->err + (r->err_len > 300 ? r->err_len - 300 : 0), 300,
             tsx_last.err, sizeof(tsx_last.err));
+}
+
+/** Result of tsx_sh(): how a shell command ended and the end of its output. */
+typedef struct tsx_sh_t {
+    bool    started;        /**< The shell could be started at all. */
+    int     code;           /**< Exit code, -1 when not exited. */
+    int     sig;
+    bool    hung;
+    double  secs;
+    size_t  len;            /**< Bytes of combined output. */
+    char    tail[3600];     /**< Last TSX_TAIL lines, " | " between lines. */
+    char    text[8192];     /**< The last bytes of the combined output. */
+} tsx_sh_t;
+
+/** Last @p n lines of @p s joined with " | " into @p dst. */
+static void
+tsx_last_lines(const char *s, int n, char *dst, size_t size)
+{
+    const char *e = s + strlen(s);
+    const char *p;
+    int         lines = 0;
+    size_t      o = 0;
+
+    while (e > s && (e[-1] == '\n' || e[-1] == '\r'))
+        e--;
+    p = e;
+    while (p > s)
+    {
+        if (p[-1] == '\n' && ++lines >= n)
+            break;
+        p--;
+    }
+    if ((size_t)(e - p) >= size)
+        p = e - (size - 1);
+    for (; p < e && o + 4 < size; p++)
+    {
+        if (*p == '\n')
+        {
+            dst[o++] = ' ';
+            dst[o++] = '|';
+            dst[o++] = ' ';
+        }
+        else if (*p != '\r')
+            dst[o++] = *p;
+    }
+    dst[o] = '\0';
+}
+
+/**
+ * Step 0 helper of every test: run @p cmd through `sh -c` in @p cwd with
+ * stdout and stderr captured together, write the whole text to the test log
+ * and keep the exit code and the last TSX_TAIL lines for the verdict (see
+ * tsx_sh_text()). Returns false only when the shell could not be started;
+ * the reason is then in the log and the caller must still give a verdict.
+ * @p env is a NULL-terminated list of NAME=value strings, may be NULL.
+ */
+static bool
+tsx_sh(tsx_sh_t *o, const char *id, const char *tag, const char *cwd,
+       const char *cmd, int limit_s, const char * const *env)
+{
+    ts_run_t *r = calloc(1, sizeof(*r));
+    char     *wrapped = malloc(strlen(cmd) + 32);
+    char      label[160];
+    size_t    tl;
+
+    memset(o, 0, sizeof(*o));
+    o->code = -1;
+    if (workdir[0] == '\0')
+    {
+        snprintf(workdir, sizeof(workdir), "/tmp/mde-wd-XXXXXX");
+        if (mkdtemp(workdir) == NULL)
+            workdir[0] = '\0';
+    }
+    if (r == NULL || wrapped == NULL || workdir[0] == '\0')
+    {
+        free(r);
+        free(wrapped);
+        ERROR("%s step %s: cannot allocate or create a work directory for "
+              "[%s]", id, tag, cmd);
+        return false;
+    }
+    sprintf(wrapped, "( %s\n) 2>&1", cmd);
+    if (!ts_run(r, cwd, wrapped, NULL, env, NULL, limit_s, tag))
+    {
+        ERROR("%s step %s: cannot start sh for [%s] in [%s]", id, tag, cmd,
+              cwd);
+        free(r);
+        free(wrapped);
+        return false;
+    }
+    {
+        /* ts_run keeps the first bytes; a long build needs its end. */
+        char  path[300];
+        FILE *f;
+
+        snprintf(path, sizeof(path), "%s/%s.stdout", workdir, tag);
+        f = fopen(path, "r");
+        if (f != NULL)
+        {
+            long len;
+
+            fseek(f, 0, SEEK_END);
+            len = ftell(f);
+            fseek(f, len > (long)(TS_CAP - 1) ? len - (TS_CAP - 1) : 0,
+                  SEEK_SET);
+            r->out_len = fread(r->out, 1, TS_CAP - 1, f);
+            r->out[r->out_len] = '\0';
+            fclose(f);
+        }
+    }
+    o->started = true;
+    o->code = r->code;
+    o->sig = r->sig;
+    o->hung = r->hung;
+    o->secs = r->secs;
+    o->len = r->out_len;
+    RING("%s step %s: command [%s]; working directory [%s]; exit code %d; "
+         "signal %d%s; elapsed %.2f s; %zu byte(s) of stdout and stderr "
+         "together", id, tag, cmd, cwd, r->code, r->sig,
+         r->hung ? "; killed on the time limit" : "", r->secs, r->out_len);
+    snprintf(label, sizeof(label), "%s %s output", id, tag);
+    tsx_log_full(label, r->out);
+    tsx_last_lines(r->out, TSX_TAIL, o->tail, sizeof(o->tail));
+    snprintf(o->text, sizeof(o->text), "%s", r->out_len > sizeof(o->text) - 1 ?
+             r->out + r->out_len - (sizeof(o->text) - 1) : r->out);
+    memset(&tsx_last, 0, sizeof(tsx_last));
+    tsx_last.set = true;
+    snprintf(tsx_last.id, sizeof(tsx_last.id), "%s", id);
+    snprintf(tsx_last.tag, sizeof(tsx_last.tag), "%s", tag);
+    snprintf(tsx_last.cmd, sizeof(tsx_last.cmd), "%s", cmd);
+    snprintf(tsx_last.cwd, sizeof(tsx_last.cwd), "%s", cwd);
+    tsx_last.code = r->code;
+    tsx_last.sig = r->sig;
+    tsx_last.hung = r->hung;
+    tl = strlen(o->tail);
+    ts_flat(o->tail + (tl > 300 ? tl - 300 : 0), 300, tsx_last.out,
+            sizeof(tsx_last.out));
+    free(r);
+    free(wrapped);
+    return true;
+}
+
+/** The verdict text of a tsx_sh() run: exit code and the last 50 lines. */
+static void
+tsx_sh_text(const tsx_sh_t *o, char *dst, size_t size)
+{
+    if (!o->started)
+        snprintf(dst, size, "the shell could not be started");
+    else
+        snprintf(dst, size, "exit code %d%s%s; last %d lines of stdout and "
+                 "stderr [%s]", o->code, o->sig != 0 ? ", killed by a "
+                 "signal" : "", o->hung ? ", killed on the time limit" : "",
+                 TSX_TAIL, o->tail[0] != '\0' ? o->tail : "(no output)");
+}
+
+/** True when the shell ran and exited 0 on its own. */
+static bool
+tsx_sh_ok(const tsx_sh_t *o)
+{
+    return o->started && !o->hung && o->sig == 0 && o->code == 0;
+}
+
+/** Marker a passing ts_build leaves for the tests that need the build. */
+#define TSX_BUILD_MARK  "/tmp/mde-ts-build.passed"
+
+/**
+ * For the tests that run after ts_build: when the build did not pass, set
+ * the result to a skip that names the reason and return false.
+ */
+static bool
+tsx_need_build(res_t *res, const char *id)
+{
+    if (access(TSX_BUILD_MARK, R_OK) == 0)
+        return true;
+    res_set(res, R_SKIP, "%s SKIPPED: ts_build did not pass in this run "
+            "(no %s), so there is no built TypeScript example to run; "
+            "%s is not settled by this test", id, TSX_BUILD_MARK, id);
+    return false;
+}
+
+/** After a crash of the test itself, say so before dying. */
+static void
+tsx_crash(int sig)
+{
+    static const char m[] = "ts_example: the test process itself received "
+        "a fatal signal; it has no verdict because of it\n";
+
+    if (write(2, m, sizeof(m) - 1) < 0)
+        _exit(2);
+    signal(sig, SIG_DFL);
+    raise(sig);
 }
 
 /**
@@ -708,6 +902,207 @@ tsx_ts_probe(const char *id, tsapi_mde_session *session, const char *index,
     kill(pid, SIGKILL);
     waitpid(pid, NULL, 0);
     return rc;
+}
+
+/** What tapi_netexpose says about the listeners of one started example. */
+typedef struct tsx_lp_t {
+    bool        started;        /**< The process could be started. */
+    bool        exited;         /**< It ended before it was observed. */
+    int         n;              /**< Listening TCP sockets. */
+    unsigned    port[8];
+    char        addr[8][64];
+    bool        wild;           /**< Some listener is on 0.0.0.0 or ::. */
+} tsx_lp_t;
+
+/** True when the textual address is the wildcard address. */
+static bool
+tsx_addr_is_wild(const char *a)
+{
+    return strcmp(a, "0.0.0.0") == 0 || strcmp(a, "::") == 0 ||
+           a[0] == '\0';
+}
+
+/** Known-bad control of the address check: a wildcard is told from loopback. */
+static bool
+tsx_addr_control_ok(char *why, size_t size)
+{
+    if (!tsx_addr_is_wild("0.0.0.0") || !tsx_addr_is_wild("::") ||
+        tsx_addr_is_wild("127.0.0.1") || tsx_addr_is_wild("::1"))
+    {
+        snprintf(why, size, "the wildcard address check did not tell "
+                 "0.0.0.0 and :: from 127.0.0.1 and ::1");
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Start `node <index>` with the address and port variables set to
+ * 127.0.0.1 and @p port (@p port != 0), or with none of them set
+ * (@p port == 0), wait up to @p wait_s for it to listen, record with
+ * tapi_netexpose the local address and port of every listening socket of
+ * the process, then stop it. Stdout and stderr of the example go to the
+ * test log. Returns false when the process could not be started.
+ */
+static bool
+tsx_listen_probe(const char *id, tsapi_mde_session *session,
+                 const char *index, unsigned port, const char *tag,
+                 double wait_s, tsx_lp_t *lp)
+{
+    static const char * const vars[] = {
+        "PORT", "GUESS_PORT", "LISTEN_PORT", "GUESS_LISTEN", "GUESS_ADDR",
+        "GUESS_ADDRESS", "GUESS_HOST", "LISTEN_ADDR", "LISTEN_HOST", "HOST",
+        "GUESS_ENDPOINT",
+    };
+    char    outp[300];
+    char    errp[300];
+    char    cmd[600];
+    pid_t   pid;
+    double  end;
+    int     st = 0;
+    size_t  v;
+
+    memset(lp, 0, sizeof(*lp));
+    snprintf(outp, sizeof(outp), "%s/%s.stdout", workdir, tag);
+    snprintf(errp, sizeof(errp), "%s/%s.stderr", workdir, tag);
+    snprintf(cmd, sizeof(cmd), "node '%s' (%s)", index, port != 0 ?
+             "address variables 127.0.0.1, port variables set" :
+             "no address or port variable set");
+    pid = fork();
+    if (pid < 0)
+        return false;
+    if (pid == 0)
+    {
+        int z = open("/dev/null", O_RDONLY);
+        int o = open(outp, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+        int e = open(errp, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+
+        setpgid(0, 0);
+        dup2(z, 0);
+        dup2(o, 1);
+        dup2(e, 2);
+        for (v = 0; v < sizeof(vars) / sizeof(vars[0]); v++)
+            unsetenv(vars[v]);
+        if (port != 0)
+        {
+            char val[32];
+            char ep[64];
+
+            snprintf(val, sizeof(val), "%u", port);
+            snprintf(ep, sizeof(ep), "127.0.0.1:%u", port);
+            setenv("PORT", val, 1);
+            setenv("GUESS_PORT", val, 1);
+            setenv("LISTEN_PORT", val, 1);
+            setenv("GUESS_LISTEN", ep, 1);
+            setenv("GUESS_ADDR", "127.0.0.1", 1);
+            setenv("GUESS_ADDRESS", "127.0.0.1", 1);
+            setenv("GUESS_HOST", "127.0.0.1", 1);
+            setenv("LISTEN_ADDR", "127.0.0.1", 1);
+            setenv("LISTEN_HOST", "127.0.0.1", 1);
+            setenv("HOST", "127.0.0.1", 1);
+        }
+        execlp("node", "node", index, (char *)NULL);
+        _exit(127);
+    }
+    setpgid(pid, pid);
+    lp->started = true;
+    end = now_s() + wait_s;
+    while (now_s() < end)
+    {
+        unsigned long                ino[MAX_INO];
+        tapi_netexpose_opt           opt = tapi_netexpose_default_opt;
+        te_vec                       socks = TE_VEC_INIT(tapi_netexpose_socket);
+        const tapi_netexpose_socket *s;
+        size_t                       ni;
+        size_t                       k;
+
+        if (waitpid(pid, &st, WNOHANG) == pid)
+        {
+            lp->exited = true;
+            pid = 0;
+            break;
+        }
+        ni = pid_inodes(pid, ino, MAX_INO);
+        opt.udp = false;
+        opt.tcp = true;
+        lp->n = 0;
+        lp->wild = false;
+        if (tapi_netexpose_sockets(session->factory, &opt, &socks) == 0)
+        {
+            TE_VEC_FOREACH(&socks, s)
+            {
+                for (k = 0; k < ni; k++)
+                {
+                    if (ino[k] != s->inode ||
+                        !tapi_netexpose_socket_is_listening(s) || lp->n >= 8)
+                        continue;
+                    sock_addr(&s->local, lp->addr[lp->n], sizeof(lp->addr[0]));
+                    lp->port[lp->n] = sock_port(&s->local);
+                    if (tsx_addr_is_wild(lp->addr[lp->n]))
+                        lp->wild = true;
+                    RING("%s: %s: pid %d listens on %s:%u (tapi_netexpose)",
+                         id, tag, (int)pid, lp->addr[lp->n], lp->port[lp->n]);
+                    lp->n++;
+                }
+            }
+        }
+        te_vec_free(&socks);
+        if (lp->n > 0)
+            break;
+        usleep(250000);
+    }
+    if (pid > 0)
+    {
+        kill(-pid, SIGKILL);
+        kill(pid, SIGKILL);
+        waitpid(pid, NULL, 0);
+    }
+    tsx_note_proc(id, tag, cmd, lp->exited ? (WIFEXITED(st) ?
+                  WEXITSTATUS(st) : -1) : -1, lp->exited &&
+                  WIFSIGNALED(st) ? WTERMSIG(st) : 0, outp, errp);
+    return true;
+}
+
+/**
+ * Judge a tsx_lp_t: empty when the example listens, on 127.0.0.1 only and
+ * not on a wildcard address (and on @p port when it is not 0); otherwise a
+ * sentence naming the fault in @p why.
+ */
+static bool
+tsx_lp_loopback_only(const tsx_lp_t *lp, unsigned port, char *why,
+                     size_t size)
+{
+    int i;
+
+    if (!lp->started)
+        snprintf(why, size, "the example could not be started");
+    else if (lp->exited && lp->n == 0)
+        snprintf(why, size, "the example exited before it listened");
+    else if (lp->n == 0)
+        snprintf(why, size, "the example listened on no TCP socket");
+    else if (lp->wild)
+        snprintf(why, size, "the example listens on a wildcard address "
+                 "(0.0.0.0 or ::), not on 127.0.0.1 only");
+    else
+    {
+        for (i = 0; i < lp->n; i++)
+        {
+            if (strcmp(lp->addr[i], "127.0.0.1") != 0)
+            {
+                snprintf(why, size, "the example listens on %s, not on "
+                         "127.0.0.1", lp->addr[i]);
+                return false;
+            }
+            if (port != 0 && lp->port[i] != port)
+            {
+                snprintf(why, size, "the example listens on port %u, "
+                         "not on the configured port %u", lp->port[i], port);
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
 }
 
 #endif /* MDE_TSX_LIB_H */

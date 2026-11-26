@@ -31,6 +31,20 @@
             </script>
         </prologue>
 
+        <!-- @page mde-ts_example-ts_control_known_bad Control: known-bad command (H2, H3, H4)
+              @objective Check the shell helper of the group against a planted failing command.
+
+              @par Scenario:
+              -# Run sh -c 'echo bad &gt;&amp;2; exit 3' through the helper.
+              -# Require exit code 3 and the text bad in the verdict text; an empty verdict text means the log capture does not work.
+              -# Check a good command and a hang the same way.
+        -->
+        <run name="ts_control_known_bad">
+            <script name="ts_control_known_bad">
+                <objective>[H2 H3 H4] Run sh -c 'echo bad &gt;&amp;2; exit 3' through the shell helper; PASS only when the verdict text carries exit code 3 and the text bad; FAIL when it is empty (the log capture does not work), has another exit code or lacks the text.</objective>
+            </script>
+        </run>
+
         <!-- @page mde-ts_example-ts_build Build (H2)
               @objective Run build.sh in the project root within 540 s.
 
@@ -72,7 +86,7 @@
         -->
         <run name="ts_contract">
             <script name="ts_contract">
-                <objective>[H3] Send the fixed contract inputs (one valid guess first) to the TypeScript, Go and C# examples and compare the replies byte for byte. H3 PASS when the TypeScript reply equals the Go reply; H3 FAIL mismatch prints both replies; SKIPPED with a message when the Go example cannot start; "H2 build missing" when dist/index.js is absent; "H3 start-up fault" when the gateway is not up.</objective>
+                <objective>[H3] Send the fixed contract inputs (one valid guess first) to the TypeScript, Go and C# examples and compare the replies byte for byte. H3 PASS when the TypeScript reply equals the Go reply; H3 FAIL mismatch prints both replies; SKIPPED with a message when the Go example cannot start; SKIPPED with the reason when ts_build did not pass; "H3 start-up fault" when the gateway is not up.</objective>
             </script>
         </run>
 
@@ -87,7 +101,7 @@
         -->
         <run name="ts_robust">
             <script name="ts_robust">
-                <objective>[H4] (a) no literal URL or IP in the TypeScript source outside comments; (b) the example connects to the port in GUESS_ENDPOINT and no other; (c) against a listener that never answers it exits non-zero within 10 s, elapsed time and exit code logged; (d) bad input ends cleanly. The verdict names the failing check and the failing step with the last command, exit code, stdout and stderr; "H2 build missing" when dist/index.js is absent.</objective>
+                <objective>[H4] (a) no literal URL or IP in the TypeScript source outside comments; (b) the example connects to the port in GUESS_ENDPOINT and no other; (c) against a listener that never answers it exits non-zero within 10 s, elapsed time and exit code logged; (d) bad input ends cleanly. The verdict names the failing check and the failing step with the last command, exit code, stdout and stderr; SKIPPED with the reason when ts_build did not pass.</objective>
             </script>
         </run>
 
@@ -131,7 +145,7 @@
         -->
         <run name="ts_h3_same_output">
             <script name="ts_h3_same_output">
-                <objective>[H3] Same fixed inputs to the TypeScript example and the Go service; H3 PASS when the TypeScript reply equals the Go reply byte for byte; H3 FAIL prints both replies; SKIPPED when the Go example cannot start; "H2 build missing" when dist/index.js is absent.</objective>
+                <objective>[H3] Same fixed inputs to the TypeScript example and the Go service; H3 PASS when the TypeScript reply equals the Go reply byte for byte; H3 FAIL prints both replies; SKIPPED when the Go example cannot start; SKIPPED with the reason when ts_build did not pass.</objective>
             </script>
         </run>
 

@@ -62,6 +62,8 @@ main(int argc, char **argv)
     }
     if (!tsx_init(&res, "H3"))
         goto verdict;
+    if (!tsx_need_build(&res, "H3"))
+        goto verdict;
 
     TSX_STEP("Known-bad control: the byte comparison tells replies apart");
     if (!tsx_bytes_control_ok(why, sizeof(why)))

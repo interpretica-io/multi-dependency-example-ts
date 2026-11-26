@@ -71,4 +71,13 @@ echo "midair-setup: node -v: $(node -v)" || fail "node -v failed"
 echo "midair-setup: npm -v: $(npm -v)" || fail "npm -v failed"
 echo "midair-setup: tsc -v: $(tsc -v)" || fail "tsc -v failed"
 echo "midair-setup: $(go version 2>&1)"
+# Leave a marker so that the ts_example prologue can tell whether this script
+# ran on the machine where the tests run, before them.
+{
+    echo "node $(node --version)"
+    echo "npm $(npm --version)"
+    echo "tsc $(tsc --version)"
+    date -u +%Y-%m-%dT%H:%M:%SZ
+} > /var/tmp/midair-setup.done 2>/dev/null ||
+    echo "midair-setup: WARNING: cannot write /var/tmp/midair-setup.done"
 echo "midair-setup: done"

@@ -89,11 +89,16 @@ main(int argc, char **argv)
 {
     res_t       res = { .kind = R_PASS };
     ts_run_t   *f = calloc(1, sizeof(*f));
+    tsx_sh_t   *sh = calloc(1, sizeof(*sh));
+    tsx_sh_t   *fi = calloc(1, sizeof(*fi));
+    tsx_sh_t   *fd = calloc(1, sizeof(*fd));
+    const char *ls_lines = "";
+    bool        ts_dir_ok = false;
+    char        vtext[4200];
     char        why[400];
     char        base[200];
     char        hits[TSH_MAX_HITS][700];
     char        list[1500] = "";
-    char        e[400];
     char        cmd[400];
     char        finding[1700];
     int         n = 0;
@@ -103,7 +108,7 @@ main(int argc, char **argv)
 
     TEST_START;
     t_report_begin();
-    if (f == NULL)
+    if (f == NULL || sh == NULL || fi == NULL || fd == NULL)
     {
         res_set(&res, R_FAIL, "H1 NOT SETTLED: out of memory");
         goto verdict;
@@ -133,54 +138,112 @@ main(int argc, char **argv)
         goto verdict;
     }
 
-    TSX_STEP("Run find over " WORK_SRC " for TypeScript files, tsconfig.json "
-             "and package.json");
-    snprintf(cmd, sizeof(cmd), "find " WORK_SRC " -iname '*.ts' -o -iname "
-             "'tsconfig.json' -o -iname 'package.json'");
-    if (!ts_run(f, src_root, cmd, NULL, NULL, NULL, 120, "find"))
+    TSX_STEP("Run ls -la " WORK_SRC);
+    if (!tsx_sh(sh, "H1", "ls", src_root, "ls -la " WORK_SRC, 60, NULL))
     {
-        res_set(&res, R_FAIL, "H1 NOT SETTLED: cannot start find");
+        res_set(&res, R_FAIL, "H1 NOT SETTLED: cannot start the shell for "
+                "ls -la " WORK_SRC);
         goto verdict;
     }
-    tsx_log_step("H1", "find", cmd, f);
-    if (f->hung || f->sig != 0 || f->code != 0)
+    if (!tsx_sh_ok(sh))
     {
-        ts_flat(f->err, 300, e, sizeof(e));
-        res_set(&res, R_FAIL, "H1 FAIL: step find: find itself failed: %s, "
-                "exit code %d, signal %d; stderr [%s]; stdout [%.150s]",
-                f->hung ? "killed on the time limit" : "ended", f->code,
-                f->sig, e, f->out);
+        tsx_sh_text(sh, vtext, sizeof(vtext));
+        res_set(&res, R_FAIL, "H1 FAIL: " WORK_SRC " is missing or cannot "
+                "be listed: ls -la " WORK_SRC ": %s", vtext);
         goto verdict;
     }
-    for (p = f->out; *p != '\0'; p++)
+    ls_lines = sh->tail;
+
+    TSX_STEP("Run find over " WORK_SRC " for .ts files");
+    snprintf(cmd, sizeof(cmd), "find " WORK_SRC " -name '*.ts' -not -path "
+             "'*/node_modules/*'");
+    if (!tsx_sh(fi, "H1", "find-ts", src_root, cmd, 120, NULL) ||
+        !tsx_sh_ok(fi))
+    {
+        tsx_sh_text(fi, vtext, sizeof(vtext));
+        res_set(&res, R_FAIL, "H1 FAIL: step find of .ts files: find itself "
+                "failed: %s", vtext);
+        goto verdict;
+    }
+    for (p = fi->text; *p != '\0'; p++)
     {
         if (*p == '\n')
             lines++;
     }
-    RING("H1: find printed %d path(s) under " WORK_SRC, lines);
 
-    TSX_STEP("Record whether a TypeScript example exists (a finding, not a "
-             "failure)");
+    TSX_STEP("Run find /work/src/ts -maxdepth 1");
+    if (!tsx_sh(fd, "H1", "find-ts-dir", src_root,
+                "find " WORK_SRC "/ts -maxdepth 1", 60, NULL))
+    {
+        res_set(&res, R_FAIL, "H1 NOT SETTLED: cannot start the shell for "
+                "find " WORK_SRC "/ts");
+        goto verdict;
+    }
+    ts_dir_ok = tsx_sh_ok(fd);
+    RING("H1: ls exit code %d, find .ts exit code %d (%d path(s)), find "
+         WORK_SRC "/ts exit code %d", sh->code, fi->code, lines, fd->code);
+
+    TSX_STEP("Record whether a TypeScript example exists");
     n = tsh_find("H1", WORK_SRC, 0, hits, 0);
     for (i = 0; i < n; i++)
         append(list, sizeof(list), "%s; ", hits[i]);
-    if (n == 0)
+    if (n == 0 && lines == 0)
         snprintf(finding, sizeof(finding), "FINDING: no TypeScript example "
-                 "exists under " WORK_SRC " (no directory with a .ts file "
-                 "and a package.json or tsconfig.json); the project has no "
-                 "TypeScript example");
+                 "exists under " WORK_SRC " (no .ts file outside "
+                 "node_modules, no directory with a .ts file and a "
+                 "package.json or tsconfig.json)");
     else
-        snprintf(finding, sizeof(finding), "FINDING: %d TypeScript example "
-                 "director%s exist%s: %s", n, n == 1 ? "y" : "ies",
-                 n == 1 ? "s" : "", list);
+        snprintf(finding, sizeof(finding), "FINDING: a TypeScript example "
+                 "exists: %d .ts file(s), %d director%s with package.json "
+                 "or tsconfig.json: %s", lines, n, n == 1 ? "y" : "ies",
+                 list);
     RING("H1: %s", finding);
-    res_set(&res, R_PASS, "H1 PASS: find ran (exit code 0, %d path(s) "
-            "listed); %s", lines, finding);
-    T_FINDING(TAPI_CYBERSEC_SEV_INFO, "ts.listing", "typescript example",
+
+    TSX_STEP("Require " WORK_SRC "/ts/package.json, tsconfig.json and a .ts "
+             "source file");
+    {
+        const char *need[2] = { "package.json", "tsconfig.json" };
+        char        pth[400];
+        char        miss[300] = "";
+        int         ts_src = 0;
+        size_t      k;
+
+        for (k = 0; k < 2; k++)
+        {
+            snprintf(pth, sizeof(pth), WORK_SRC "/ts/%s", need[k]);
+            if (access(pth, R_OK) != 0)
+                append(miss, sizeof(miss), "%s ", pth);
+        }
+        for (p = fi->text; *p != '\0'; p += strcspn(p, "\n") +
+             (p[strcspn(p, "\n")] == '\n' ? 1 : 0))
+        {
+            if (strncmp(p, WORK_SRC "/ts/", sizeof(WORK_SRC "/ts/") - 1) == 0)
+                ts_src++;
+        }
+        if (ts_src == 0)
+            append(miss, sizeof(miss), "(no .ts file under " WORK_SRC
+                   "/ts) ");
+        if (!ts_dir_ok)
+            append(miss, sizeof(miss), "(" WORK_SRC "/ts cannot be listed) ");
+        if (miss[0] != '\0')
+            res_set(&res, R_FAIL, "H1 FAIL: the TypeScript example is "
+                    "incomplete, missing: %s; %s; ls -la " WORK_SRC ": exit "
+                    "code 0, last %d lines [%s]", miss, finding, TSX_TAIL,
+                    ls_lines);
+        else
+            res_set(&res, R_PASS, "H1 PASS: ls -la " WORK_SRC " exit code 0, "
+                    "find exit code 0; %s; " WORK_SRC "/ts has package.json, "
+                    "tsconfig.json and %d .ts file(s)", finding, ts_src);
+    }
+    T_FINDING(res.kind == R_PASS ? TAPI_CYBERSEC_SEV_INFO :
+              TAPI_CYBERSEC_SEV_HIGH, "ts.listing", "typescript example",
               "%s", res.msg);
 
 verdict:
     free(f);
+    free(sh);
+    free(fi);
+    free(fd);
     TSX_VERDICT(&res, "H1");
 
 cleanup:

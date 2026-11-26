@@ -54,8 +54,21 @@ main(int argc, char **argv)
             strncat(missing, " ", sizeof(missing) - strlen(missing) - 1);
         }
     }
+    TEST_STEP("Check that scripts/midair-setup.sh ran on this machine");
+    if (access("/var/tmp/midair-setup.done", R_OK) != 0)
+    {
+        ERROR("/var/tmp/midair-setup.done is missing: scripts/midair-setup.sh "
+              "was not copied to this agent or did not run before the tests");
+        if (missing[0] != '\0')
+            TEST_VERDICT("H2 NOT SETTLED: %sis missing on the agent and "
+                         "/var/tmp/midair-setup.done is absent: "
+                         "scripts/midair-setup.sh did not run here before the "
+                         "tests", missing);
+    }
+    else
+        system("cat /var/tmp/midair-setup.done");
     if (missing[0] != '\0')
-        TEST_VERDICT("H1 NOT SETTLED: %sis missing on the agent: "
+        TEST_VERDICT("H2 NOT SETTLED: %sis missing on the agent: "
                      "scripts/midair-setup.sh did not install it", missing);
 
     TEST_SUCCESS;

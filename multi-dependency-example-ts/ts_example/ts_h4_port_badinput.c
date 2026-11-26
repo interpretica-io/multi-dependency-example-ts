@@ -80,6 +80,8 @@ main(int argc, char **argv)
     char              index[800];
     char              why[400];
     char              cmd[400] = "";
+    char              addr_bad[900] = "";
+    tsx_lp_t          lp;
     char              bd[1000] = "";
     char             *big = NULL;
     int               stop_st = 0;
@@ -96,6 +98,8 @@ main(int argc, char **argv)
     memset(&pa, 0, sizeof(pa));
     pa.lfd = -1;
     if (!tsx_init(&res, "H4"))
+        goto verdict;
+    if (!tsx_need_build(&res, "H4"))
         goto verdict;
 
     TSX_STEP("Known-bad control: the reply classifier");
@@ -149,6 +153,40 @@ main(int argc, char **argv)
                 index);
         goto verdict;
     }
+
+    TSX_STEP("Known-bad control: the wildcard address check");
+    if (!tsx_addr_control_ok(why, sizeof(why)))
+    {
+        res_set(&res, R_FAIL, "H4 NOT SETTLED: control failed: %s", why);
+        goto verdict;
+    }
+
+    TSX_STEP("tapi_netexpose: with the address and port variables set to "
+             "127.0.0.1 and a non-default port it listens there only, not "
+             "on 0.0.0.0");
+    port = tsh_free_port();
+    if (port == 0)
+    {
+        res_set(&res, R_FAIL, "H4 NOT SETTLED: no free port");
+        goto verdict;
+    }
+    if (!tsx_listen_probe("H4", &session, index, port, "h4-addr", START_S,
+                          &lp))
+        append(addr_bad, sizeof(addr_bad), "configured address: cannot "
+               "start the example; ");
+    else if (!tsx_lp_loopback_only(&lp, port, why, sizeof(why)))
+        append(addr_bad, sizeof(addr_bad), "configured address and port "
+               "%u: %s; ", port, why);
+
+    TSX_STEP("tapi_netexpose: with no variables set the default address is "
+             "127.0.0.1");
+    if (!tsx_listen_probe("H4", &session, index, 0, "h4-default", START_S,
+                          &lp))
+        append(addr_bad, sizeof(addr_bad), "default address: cannot start "
+               "the example; ");
+    else if (!tsx_lp_loopback_only(&lp, 0, why, sizeof(why)))
+        append(addr_bad, sizeof(addr_bad), "default address (no variable "
+               "set): %s; ", why);
 
     TSX_STEP("Start the example with another port in its configuration");
     port = tsh_free_port();
@@ -395,6 +433,14 @@ main(int argc, char **argv)
               "requests", "%s", res.msg);
 
 verdict:
+    if (addr_bad[0] != '\0')
+    {
+        char prev[1400];
+
+        snprintf(prev, sizeof(prev), "%s", res.kind == R_PASS ? "" : res.msg);
+        res_set(&res, R_FAIL, "H4 FAIL: listen address: %s%s%s", addr_bad,
+                prev[0] != '\0' ? "; also: " : "", prev);
+    }
     free(big);
     if (pid > 0)
     {

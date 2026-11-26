@@ -33,7 +33,7 @@
 
 #include <dirent.h>
 
-#include "tsx_lib.h"
+#include "tsh_lib.h"
 
 #define LIMIT_S     10
 #define BIG_ARG     120000
@@ -266,6 +266,12 @@ main(int argc, char **argv)
     bool        ok_b = false;
     bool        ok_c = false;
     bool        ok_d = false;
+    bool        ok_e = false;
+    char        msg_e[900] = "";
+    tsapi_mde_session session = { .ta = NULL };
+    bool        have_session = false;
+    tsx_lp_t    lp;
+    unsigned    eport;
     bool        built;
     char       *big = NULL;
     char        in_big[300];
@@ -285,6 +291,8 @@ main(int argc, char **argv)
         goto verdict;
     }
     if (!tsx_init(&res, "H4"))
+        goto verdict;
+    if (!tsx_need_build(&res, "H4"))
         goto verdict;
     built = false;
     tsx_index_js(src_root, tsdir, sizeof(tsdir), index, sizeof(index));
@@ -562,21 +570,63 @@ main(int argc, char **argv)
     T_FINDING(ok_d ? TAPI_CYBERSEC_SEV_INFO : TAPI_CYBERSEC_SEV_HIGH,
               "ts.robust", "bad input", "%s", msg_d);
 
+    /* ---- (e) listen address ---- */
+    TSX_STEP("(e) tapi_netexpose: the example listens on 127.0.0.1 only, on "
+             "the configured port and by default");
+    ok_e = false;
+    if (!tsx_addr_control_ok(why, sizeof(why)))
+        snprintf(msg_e, sizeof(msg_e), "(e) NOT SETTLED: control failed: %s",
+                 why);
+    else if (tsapi_mde_session_init(&session, "ts_robust") != 0)
+        snprintf(msg_e, sizeof(msg_e), "(e) FAIL: no tapi_netexpose session "
+                 "on the agent, so the listen address cannot be checked");
+    else
+    {
+        char w1[300] = "";
+        char w2[300] = "";
+
+        have_session = true;
+        eport = tsh_free_port();
+        if (!tsx_listen_probe("H4", &session, index, eport, "robust-addr",
+                              5.0, &lp))
+            snprintf(w1, sizeof(w1), "cannot start the example");
+        else if (tsx_lp_loopback_only(&lp, eport, w1, sizeof(w1)))
+            w1[0] = '\0';
+        if (!tsx_listen_probe("H4", &session, index, 0, "robust-default", 5.0,
+                              &lp))
+            snprintf(w2, sizeof(w2), "cannot start the example");
+        else if (tsx_lp_loopback_only(&lp, 0, w2, sizeof(w2)))
+            w2[0] = '\0';
+        ok_e = w1[0] == '\0' && w2[0] == '\0';
+        if (ok_e)
+            snprintf(msg_e, sizeof(msg_e), "(e) ok: with the variables set "
+                     "it listens on 127.0.0.1:%u only and with none set on "
+                     "127.0.0.1 only, never on 0.0.0.0", eport);
+        else
+            snprintf(msg_e, sizeof(msg_e), "(e) FAIL: configured: [%s]; "
+                     "default: [%s]", w1[0] ? w1 : "ok", w2[0] ? w2 : "ok");
+    }
+    RING("H4 %s", msg_e);
+    T_FINDING(ok_e ? TAPI_CYBERSEC_SEV_INFO : TAPI_CYBERSEC_SEV_HIGH,
+              "ts.listen-address", "listen address", "%s", msg_e);
+
 verdict:
+    if (have_session)
+        tsapi_mde_session_fini(&session);
     if (pa_up)
         ts_peer_stop(&pa);
     if (pb_up)
         ts_peer_stop(&pb);
     free(big);
     free(r);
-    if (res.kind == R_FAIL)
-        ; /* a harness fault or a missing build, already worded */
-    else if (ok_a && ok_b && ok_c && ok_d)
-        res_set(&res, R_PASS, "H4 PASS: %s; %s; %s; %s", msg_a, msg_b,
-                msg_c, msg_d);
+    if (res.kind == R_FAIL || res.kind == R_SKIP)
+        ; /* a skip, a harness fault or a missing build, already worded */
+    else if (ok_a && ok_b && ok_c && ok_d && ok_e)
+        res_set(&res, R_PASS, "H4 PASS: %s; %s; %s; %s; %s", msg_a, msg_b,
+                msg_c, msg_d, msg_e);
     else
-        res_set(&res, R_FAIL, "H4 FAIL: %s; %s; %s; %s", msg_a, msg_b,
-                msg_c, msg_d);
+        res_set(&res, R_FAIL, "H4 FAIL: %s; %s; %s; %s; %s", msg_a, msg_b,
+                msg_c, msg_d, msg_e);
     TSX_VERDICT(&res, "H4");
 
 cleanup:
