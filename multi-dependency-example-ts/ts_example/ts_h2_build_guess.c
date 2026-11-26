@@ -1,25 +1,24 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief ts_example: ts_h2_build_guess, scripts/run.sh guess starts and
- *        prints the right ring value (settles H1)
+ * @brief ts_example: ts_h2_build_guess, the final ring value of a finished
+ *        reference run is 38.9640 within 1e-4, and run.sh guess prints it
+ *        (settles H2)
  *
- * Runs `scripts/run.sh guess` for 30 seconds with output in a file. It
- * fails when the command exits non-zero before the limit (exit code 124 is
- * the limit) or when no final ring value can be parsed from its output.
- * Then runs `scripts/run.sh guess 42 3` and every reference demo with the
- * same arguments; the final ring value of the TypeScript run must equal the
- * final value of the first reference that ran all 4 stages. An exit code
- * of 0 or a running process alone does not pass. Planted outputs check the
- * parser and the comparison, and a planted exit 2 checks that an early
- * non-zero exit is seen.
+ * Runs `scripts/run.sh guess` for 30 seconds with output in a file, then
+ * `scripts/run.sh guess 42 3`, then every reference demo alone with 42 3.
+ * The final ring value of the first reference that exited 0 with 4 stage
+ * lines is parsed and compared with 38.9640 within 1e-4; the TypeScript
+ * value is compared with it too. When no reference finished, H1 failed and
+ * nothing is compared. Planted outputs check the parser and the comparison,
+ * and a planted exit 2 checks that an early non-zero exit is seen.
  *
  * @author midair <midair@localhost>
  */
 
 #define TE_TEST_NAME    "ts_example/ts_h2_build_guess"
 
-#include "tsd.h"
+#include "tsr.h"
 
 /** Shell text that prints the final ring value of the file $1 or nothing. */
 #define FINAL_OF    "grep -E 'result *=' '%s' | tail -n 1 | sed -E 's/.*= *//; s/[[:space:]]+$//'"
@@ -50,13 +49,21 @@ stage_count(const char *file)
     return atoi(buf);
 }
 
-static const char *const refs[5][3] = {
-    { "go-demo", "dist/bin/go-demo", "./dist/bin/go-demo" },
-    { "cs-demo", "dist/bin/cs-demo", "./dist/bin/cs-demo" },
-    { "cpp-demo", "dist/bin/cpp-demo", "./dist/bin/cpp-demo" },
-    { "rust-demo", "dist/bin/rust-demo", "./dist/bin/rust-demo" },
-    { "python-demo", "python/demo.py", "python3 python/demo.py" },
-};
+/** True when @p a and @p b differ by at most 1e-4 (both must parse). */
+static bool
+close_enough(const char *a, const char *b)
+{
+    char  *ea;
+    char  *eb;
+    double x = strtod(a, &ea);
+    double y = strtod(b, &eb);
+
+    if (ea == a || eb == b || *ea != '\0' || *eb != '\0')
+        return false;
+    return (x > y ? x - y : y - x) <= 1e-4;
+}
+
+#define EXPECTED_VALUE  "38.9640"
 
 int
 main(int argc, char **argv)
@@ -67,15 +74,13 @@ main(int argc, char **argv)
     char        rv[64];
     char        ref[64] = "";
     char        refname[32] = "";
-    char        cmd[600];
-    int         rcode;
     int         i;
     const char *src = tsd_src();
     int         code;
     long long   t0;
 
     TEST_START;
-    tsd_say("H1 start");
+    tsd_say("H2 start");
 
     TEST_STEP("Control: an early non-zero exit is not taken for a server");
     code = tsd_sh("/", "echo planted >&2; exit 2", 30, "/tmp/ts_h2_ctl.log");
@@ -129,41 +134,62 @@ main(int argc, char **argv)
     if (code != 0 || tsv[0] == '\0')
         tsd_bad("H1", "typescript guess 42 3", "exit %d, final value [%s]",
                 code, tsv);
-    for (i = 0; i < 5; i++)
+    for (i = 0; i < TSR_NREF; i++)
     {
-        char out[64];
-        char l5[401];
+        struct tsr_res r;
+        char           tag[48];
+        char           what[400];
+        char           errf[64];
 
-        snprintf(out, sizeof(out), "/tmp/ts_h2_%s.out", refs[i][0]);
-        snprintf(cmd, sizeof(cmd), "LD_LIBRARY_PATH=dist/lib %s 42 3 > %s "
-                 "2>&1", refs[i][2], out);
-        rcode = tsd_sh(src, cmd, 60, "/tmp/ts_h2_ref.log");
-        final_value(out, rv, sizeof(rv));
-        snprintf(cmd, sizeof(cmd), "tail -n 5 %s", out);
-        tsd_sh("/", cmd, 10, "/tmp/ts_h2_l5.log");
-        tsd_head("/tmp/ts_h2_l5.log", l5, sizeof(l5));
-        tsd_say("H1 reference %s: exit=%d stages=%d final=[%s] last "
-                "lines [%s]", refs[i][0], rcode, stage_count(out), rv, l5);
-        if (ref[0] == '\0' && stage_count(out) == 4 && rv[0] != '\0')
+        snprintf(tag, sizeof(tag), "h2_%s", tsr_refs[i].name);
+        tsr_run(i, "42 3", tag, 40, "dist/lib", &r);
+        tsr_describe(tsr_refs[i].name, &r, what, sizeof(what));
+        tsd_say("H1 reference %s: exit=%d signal=%s(%d) stages=%d last "
+                "stage [%.120s] final=[%s]", tsr_refs[i].name, r.code,
+                tsr_signame(r.sig), r.sig, r.stages, r.last, r.fin);
+        if (!r.ok)
         {
-            snprintf(ref, sizeof(ref), "%s", rv);
-            snprintf(refname, sizeof(refname), "%s", refs[i][0]);
+            snprintf(errf, sizeof(errf), "/tmp/ts_ref_%s.err", tag);
+            tsr_tail("H1 last 40 stderr lines", errf, 40);
+            tsd_say("H1 reference %s did not finish: %s", tsr_refs[i].name,
+                    what);
+            continue;
+        }
+        if (ref[0] == '\0')
+        {
+            snprintf(ref, sizeof(ref), "%s", r.fin);
+            snprintf(refname, sizeof(refname), "%s", tsr_refs[i].name);
         }
     }
 
-    TEST_STEP("Compare the final ring value with the reference");
+    TEST_STEP("Compare the final ring value with %s within 1e-4",
+              EXPECTED_VALUE);
     if (ref[0] == '\0')
-        tsd_bad("H1", "reference", "no reference ran all 4 stages, so the "
-                "ring value has nothing to be compared with (H1 open)");
-    else if (strcmp(ref, tsv) != 0)
-        tsd_bad("H1", "ring value", "TypeScript final value [%s] differs "
-                "from %s [%s]", tsv, refname, ref);
+        tsd_bad("H1", "no reference finished", "H1 failed: no reference "
+                "exited 0 with 4 stage lines, so no value was compared "
+                "with %s", EXPECTED_VALUE);
     else
-        tsd_say("H1 ring value: TypeScript [%s] equals %s [%s]", tsv,
-                refname, ref);
-    
-    TSD_PASS("H1", "run.sh guess printed a final ring value equal to the "
-             "reference ring value");
+    {
+        tsd_say("H2 finished reference %s: final value [%s]", refname, ref);
+        if (!close_enough(ref, EXPECTED_VALUE))
+            tsd_bad("H2", "reference value", "%s final value [%s] is not "
+                    "%s within 1e-4", refname, ref, EXPECTED_VALUE);
+        else
+            tsd_say("H2 %s final value [%s] equals %s within 1e-4", refname,
+                    ref, EXPECTED_VALUE);
+        if (!close_enough(tsv, EXPECTED_VALUE))
+            tsd_bad("H2", "typescript value", "TypeScript final value [%s] "
+                    "is not %s within 1e-4", tsv, EXPECTED_VALUE);
+        if (strcmp(ref, tsv) != 0)
+            tsd_bad("H2", "ring value", "TypeScript final value [%s] differs "
+                    "from %s [%s]", tsv, refname, ref);
+        else
+            tsd_say("H2 ring value: TypeScript [%s] equals %s [%s]", tsv,
+                    refname, ref);
+    }
+
+    TSD_PASS("H2", "a finished reference printed the ring value 38.9640 "
+             "within 1e-4 and run.sh guess printed an equal value");
     TEST_SUCCESS;
 
 cleanup:

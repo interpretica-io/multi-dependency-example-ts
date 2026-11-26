@@ -9,6 +9,7 @@ tests = [
     'ts_control_known_bad',
     'ts_build',
     'ts_run_guess',
+    'ts_ref_each_alone',
     'ts_bad_input',
     'ts_contract',
     'ts_slow_peer',

@@ -1,51 +1,34 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief ts_example: ts_run_guess, the TypeScript demo prints the same ring
- *        result as a reference demo that runs all stages (settles H1)
+ * @brief ts_example: ts_run_guess, each reference demo run alone with 42 3
+ *        exits 0 with 4 stages (settles H1) and prints the TypeScript values
+ *        (settles H2)
  *
- * First checks that dist/bin/go-demo and dist/bin/cs-demo exist; a missing
- * one is named and the test fails with "reference not built". Then runs the
- * TypeScript demo and every reference for "guess 42 3" (the arguments of the
- * full ring: hops + 1 stages). Program names are removed from the outputs
- * and only the stage lines and the final value are compared. A reference
- * with fewer stages than the TypeScript demo, or one that fails, is
- * inconclusive, never passed. The test passes only when at least one
- * full-ring reference exists and the TypeScript stage lines and final value
- * equal it. Full-ring references that disagree with each other are logged
- * as a finding on the references and do not fail the TypeScript demo.
+ * Every reference (C++, Rust, Python, Go, C#) is started alone with the input
+ * 42 3. Stdout, stderr, the exit code and the signal are saved. On any
+ * failure the last 40 lines of stderr and the last stage line are logged.
+ * H1 passes only when the exit code is 0 and 4 stage lines appear; a crash
+ * is named with the language, the signal and the last stage reached, and a
+ * libSystem, dlopen or wrong ELF class text in the output is named too.
+ * After that the stage lines and the final value of each reference that
+ * passed H1 are compared with the TypeScript demo; the H2 verdict names the
+ * first stage that differs. ./scripts/run.sh guess without arguments is run
+ * too, to log its stage count and final value against the defaults of the
+ * demo.
  *
  * @author midair <midair@localhost>
  */
 
 #define TE_TEST_NAME    "ts_example/ts_run_guess"
 
-#include "tsd.h"
-
-#define HOPS    3
-#define NREF    5
+#include "tsr.h"
 
 /** Drop a leading program name, then indentation, trailing spaces and ends. */
 #define NORM(_in, _out) \
     "sed -E 's/^[[:space:]]*[A-Za-z0-9_]+-demo: //; s/^[[:space:]]+//; " \
     "s/[[:space:]]+$//' " _in " | sed -e :a -e '/^[[:space:]]*$/{$d;N;ba}' " \
     "> " _out
-
-static const struct {
-    const char *name;
-    const char *file;   /**< checked with test -e, relative to the project */
-    const char *cmd;    /**< run from the project root with "42 3" added */
-} refs[NREF] = {
-    { "cpp-demo",  "dist/bin/cpp-demo",
-      "LD_LIBRARY_PATH=dist/lib ./dist/bin/cpp-demo" },
-    { "rust-demo", "dist/bin/rust-demo",
-      "LD_LIBRARY_PATH=dist/lib ./dist/bin/rust-demo" },
-    { "python-demo", "python/demo.py", "python3 python/demo.py" },
-    { "go-demo",   "dist/bin/go-demo",
-      "LD_LIBRARY_PATH=dist/lib ./dist/bin/go-demo" },
-    { "cs-demo",   "dist/bin/cs-demo",
-      "LD_LIBRARY_PATH=dist/lib ./dist/bin/cs-demo" },
-};
 
 /** The stage lines and the final value of a normalised file. */
 #define CMPF(_in, _out) \
@@ -127,23 +110,33 @@ first_diff(const char *a, const char *b, char *out, size_t size)
     }
 }
 
+/** Value of a DEFAULT_ constant of ts/src/core.ts, or "unknown". */
+static void
+default_of(const char *name, char *out, size_t size)
+{
+    char cmd[300];
+
+    snprintf(cmd, sizeof(cmd), "grep -hE 'const %s *=' ts/src/core.ts | head "
+             "-n 1 | sed -E 's/.*= *//; s/[;[:space:]]+$//'", name);
+    tsd_sh(tsd_src(), cmd, 10, "/tmp/ts_rg_def.log");
+    tsd_head("/tmp/ts_rg_def.log", out, size);
+    out[strcspn(out, "\n")] = '\0';
+    if (out[0] == '\0')
+        snprintf(out, size, "unknown");
+}
+
 int
 main(int argc, char **argv)
 {
-    char        a[1201];
-    char        cmd[1024];
-    char        log[96];
-    char        fin[64];
-    char        tsfin[64];
-    const char *src = tsd_src();
-    int         ts_code;
-    int         ts_stages;
-    int         code[NREF];
-    bool        kept[NREF] = { false };
-    int         nfull = 0;
-    int         nmatch = 0;
-    int         i;
-    char        firstfull[64] = "";
+    char             a[1201];
+    char             cmd[1024];
+    char             tsfin[64];
+    const char      *src = tsd_src();
+    int              ts_code;
+    int              ts_stages;
+    struct tsr_res   r[TSR_NREF];
+    int              nok = 0;
+    int              i;
 
     TEST_START;
 
@@ -161,6 +154,51 @@ main(int argc, char **argv)
                "/tmp/ts_rg_c.log") != 0)
         TEST_FAIL("H1 NOT SETTLED: the normaliser keeps a program name or "
                   "trailing space");
+
+    TEST_STEP("Control: the runner reports a planted crash, a planted exit "
+              "and a planted library error");
+    {
+        struct tsr_res c;
+
+        tsr_install();
+        tsd_sh("/", "python3 -I /tmp/ts_refrun.py 20 /tmp/ts_ref_c1.out "
+               "/tmp/ts_ref_c1.err /tmp/ts_ref_c1.res -- python3 -I -c "
+               "'import os,signal;print(\"[a] hops=1 v=2\",flush=True);"
+               "os.kill(os.getpid(),signal.SIGSEGV)'", 30,
+               "/tmp/ts_rg_c.log");
+        tsr_read("c1", &c);
+        if (!c.ran || c.sig != 11 || c.code != -1 || c.stages != 1 || c.ok)
+            TEST_FAIL("H1 NOT SETTLED: the runner read a planted SIGSEGV as "
+                      "exit %d signal %d stages %d", c.code, c.sig, c.stages);
+        tsr_describe("planted", &c, a, sizeof(a));
+        if (strstr(a, "SIGSEGV") == NULL || strstr(a, "after 1 stage") == NULL)
+            TEST_FAIL("H1 NOT SETTLED: planted crash verdict is [%s]", a);
+        tsd_say("H1 control: planted crash read as [%s]", a);
+
+        tsd_sh("/", "python3 -I /tmp/ts_refrun.py 20 /tmp/ts_ref_c2.out "
+               "/tmp/ts_ref_c2.err /tmp/ts_ref_c2.res -- python3 -I -c "
+               "'import sys;print(\"[a] hops=1 v=2\");print(\"[b] hops=2 v=3\");"
+               "print(\"[c] hops=3 v=3\");print(\"[d] hops=4 v=3\");"
+               "print(\"ts-demo: result = 1.5000\")'", 30, "/tmp/ts_rg_c.log");
+        tsr_read("c2", &c);
+        if (!c.ok || strcmp(c.fin, "1.5000") != 0)
+            TEST_FAIL("H1 NOT SETTLED: a planted good run was read as "
+                      "exit %d stages %d final [%s]", c.code, c.stages, c.fin);
+        tsd_sh("/", "python3 -I /tmp/ts_refrun.py 20 /tmp/ts_ref_c3.out "
+               "/tmp/ts_ref_c3.err /tmp/ts_ref_c3.res -- python3 -I -c "
+               "'import sys;print(\"dlopen failed: libSystem.dylib: wrong "
+               "ELF class\",file=sys.stderr);sys.exit(3)'", 30,
+               "/tmp/ts_rg_c.log");
+        tsr_read("c3", &c);
+        if (c.ok || c.code != 3 || c.sig != 0 ||
+            strstr(c.tags, "libSystem") == NULL ||
+            strstr(c.tags, "dlopen") == NULL ||
+            strstr(c.tags, "wrong-ELF-class") == NULL)
+            TEST_FAIL("H1 NOT SETTLED: planted library error read as exit "
+                      "%d signal %d tags [%s]", c.code, c.sig, c.tags);
+        tsd_say("H1 control: planted exit 3 and library error read as "
+                "exit %d, tags [%s]", c.code, c.tags);
+    }
 
     TEST_STEP("The project root");
     if (src[0] == '\0' || access(src, X_OK) != 0)
@@ -187,153 +225,143 @@ main(int argc, char **argv)
                 tsd_say("H1 reference %s exists: %s", must[k], path);
         }
         if (miss[0] != '\0')
-            TEST_FAIL("H1 FAIL: reference not built: %s(dist/bin of the "
-                      "project has no such file; build.sh did not make it)",
-                      miss);
+            tsd_bad("H1", "reference not built", "reference not built: %s"
+                    "(dist/bin of the project has no such file; build.sh "
+                    "did not make it)", miss);
     }
 
-    TEST_STEP("Run ./scripts/run.sh guess 42 %d", HOPS);
-    snprintf(cmd, sizeof(cmd), "./scripts/run.sh guess 42 %d 2>/tmp/ts_rg_ts.err "
-             "> /tmp/ts_rg_ts.out", HOPS);
+    TEST_STEP("Run ./scripts/run.sh guess 42 3");
+    snprintf(cmd, sizeof(cmd), "./scripts/run.sh guess 42 3 2>/tmp/ts_rg_ts.err "
+             "> /tmp/ts_rg_ts.out");
     ts_code = tsd_sh(src, cmd, 60, "/tmp/ts_rg_ts.log");
     tsd_sh("/", NORM("/tmp/ts_rg_ts.out", "/tmp/ts_rg_ts.norm") "; "
            CMPF("/tmp/ts_rg_ts.norm", "/tmp/ts_rg_ts.cmp"), 10,
            "/tmp/ts_rg_n.log");
     facts("/tmp/ts_rg_ts.norm", &ts_stages, tsfin, sizeof(tsfin));
-    tsd_say("H1 TypeScript: exit=%d stages=%d final=%s", ts_code, ts_stages,
+    tsd_say("H2 TypeScript: exit=%d stages=%d final=%s", ts_code, ts_stages,
             tsfin);
     if (ts_code != 0)
     {
         tsd_head("/tmp/ts_rg_ts.err", a, 401);
-        tsd_bad("H1", "typescript run", "exit %d, stderr [%s]", ts_code, a);
+        tsd_bad("H2", "typescript run", "exit %d, stderr [%s]", ts_code, a);
     }
-    if (ts_stages != HOPS + 1)
-        tsd_bad("H1", "typescript stages", "%d stage line(s), want %d",
-                ts_stages, HOPS + 1);
+    if (ts_stages != 4)
+        tsd_bad("H2", "typescript stages", "%d stage line(s), want 4",
+                ts_stages);
 
-    for (i = 0; i < NREF; i++)
+    for (i = 0; i < TSR_NREF; i++)
     {
         char path[PATH_MAX];
-        char all[64];
-        char l5[601];
-        char hit[301];
-        int  st;
+        char tag[40];
+        char what[400];
 
-        TEST_STEP("Run the reference %s with the same input", refs[i].name);
-        snprintf(path, sizeof(path), "%s/%s", src, refs[i].file);
-        code[i] = -1;
+        TEST_STEP("Run the reference %s alone with 42 3", tsr_refs[i].name);
+        memset(&r[i], 0, sizeof(r[i]));
+        r[i].code = -1;
+        snprintf(path, sizeof(path), "%s/%s", src, tsr_refs[i].file);
         if (access(path, R_OK) != 0)
         {
-            tsd_say("H1 reference %s inconclusive: %s is missing",
-                    refs[i].name, refs[i].file);
+            tsd_bad("H1", tsr_refs[i].name, "%s is missing: %s",
+                    tsr_refs[i].name, tsr_refs[i].file);
             continue;
         }
-        snprintf(cmd, sizeof(cmd), "%s 42 %d 2>/tmp/ts_rg_%s.err "
-                 "> /tmp/ts_rg_%s.out", refs[i].cmd, HOPS, refs[i].name,
-                 refs[i].name);
-        snprintf(log, sizeof(log), "/tmp/ts_rg_%s.log", refs[i].name);
-        code[i] = tsd_sh(src, cmd, 60, log);
-        snprintf(cmd, sizeof(cmd), NORM("/tmp/ts_rg_%s.out",
+        snprintf(tag, sizeof(tag), "g_%s", tsr_refs[i].name);
+        tsr_run(i, "42 3", tag, 40, "dist/lib", &r[i]);
+        tsr_describe(tsr_refs[i].name, &r[i], what, sizeof(what));
+        tsd_say("H1 reference %s: exit=%d signal=%s(%d) stages=%d last "
+                "stage [%.120s] final [%s]", tsr_refs[i].name, r[i].code,
+                tsr_signame(r[i].sig), r[i].sig, r[i].stages, r[i].last,
+                r[i].fin);
+        if (r[i].ok)
+        {
+            nok++;
+            tsd_say("H1 PASS for %s: %s", tsr_refs[i].name, what);
+            continue;
+        }
+        snprintf(path, sizeof(path), "/tmp/ts_ref_%s.err", tag);
+        tsr_tail("H1 last 40 stderr lines", path, 40);
+        tsd_say("H1 last stage line of %s: [%s]", tsr_refs[i].name,
+                r[i].last[0] != '\0' ? r[i].last : "(no stage line)");
+        tsd_bad("H1", what, "%s", what);
+    }
+
+    TEST_STEP("H1: every reference exited 0 with 4 stage lines");
+    tsd_say("H1 %d of %d references exited 0 with 4 stage lines", nok,
+            TSR_NREF);
+
+    TEST_STEP("H2: compare each stage line and the final value with the "
+              "TypeScript demo");
+    for (i = 0; i < TSR_NREF; i++)
+    {
+        char tag[40];
+        char d[601];
+
+        if (!r[i].ok)
+        {
+            tsd_say("H2 %s not compared: it did not pass H1", tsr_refs[i].name);
+            continue;
+        }
+        snprintf(tag, sizeof(tag), "g_%s", tsr_refs[i].name);
+        snprintf(cmd, sizeof(cmd), NORM("/tmp/ts_ref_%s.out",
                  "/tmp/ts_rg_%s.norm") "; " CMPF("/tmp/ts_rg_%s.norm",
-                 "/tmp/ts_rg_%s.cmp") "; cat /tmp/ts_rg_%s.out "
-                 "/tmp/ts_rg_%s.err > /tmp/ts_rg_%s.all", refs[i].name,
-                 refs[i].name, refs[i].name, refs[i].name, refs[i].name,
-                 refs[i].name, refs[i].name);
+                 "/tmp/ts_rg_%s.cmp"), tag, tsr_refs[i].name,
+                 tsr_refs[i].name, tsr_refs[i].name);
         tsd_sh("/", cmd, 10, "/tmp/ts_rg_n.log");
-
-        /* exit code and the last 5 log lines of every reference */
-        snprintf(all, sizeof(all), "/tmp/ts_rg_%s.all", refs[i].name);
-        snprintf(cmd, sizeof(cmd), "tail -n 5 %s", all);
-        tsd_sh("/", cmd, 10, "/tmp/ts_rg_l5.log");
-        tsd_head("/tmp/ts_rg_l5.log", l5, sizeof(l5));
-        tsd_say("H1 reference %s: exit=%d, last 5 log lines: [%s]",
-                refs[i].name, code[i], l5);
-
-        snprintf(cmd, sizeof(cmd), "grep -m1 -iE 'libSystem|dlopen' %s",
-                 all);
-        if (tsd_sh("/", cmd, 10, "/tmp/ts_rg_hit.log") == 0)
-        {
-            char step[200];
-
-            tsd_head("/tmp/ts_rg_hit.log", hit, sizeof(hit));
-            hit[strcspn(hit, "\n")] = '\0';
-            snprintf(step, sizeof(step), "%s library load error [%.80s], "
-                     "H1 is open because of the build", refs[i].name, hit);
-            tsd_bad("H1", step, "%s exit %d prints a libSystem or dlopen "
-                    "error: [%s]; H1 is open because of the build, not "
-                    "inconclusive", refs[i].name, code[i], hit);
-            continue;
-        }
-        snprintf(log, sizeof(log), "/tmp/ts_rg_%s.norm", refs[i].name);
-        facts(log, &st, fin, sizeof(fin));
-        if (code[i] != 0)
-            tsd_say("H1 reference %s ended with exit %d", refs[i].name,
-                    code[i]);
-        tsd_say("H1 reference %s: stages=%d final=%s%s", refs[i].name, st,
-                fin, st == HOPS + 1 && strcmp(fin, "none") != 0 ?
-                " (all stages)" : " (inconclusive: stopped short)");
-        if (st == HOPS + 1 && strcmp(fin, "none") != 0)
-        {
-            kept[i] = true;
-            nfull++;
-        }
-        else
-            tsd_say("H1 reference %s inconclusive, not passed: %d stage(s)",
-                    refs[i].name, st);
-    }
-
-    TEST_STEP("At least one reference ran all %d stages", HOPS + 1);
-    if (nfull == 0)
-        tsd_bad("H1", "reference", "no reference ran all %d stages with a "
-                "final value; the TypeScript output has nothing to be "
-                "compared with", HOPS + 1);
-    else
-        tsd_say("H1 %d reference(s) ran all %d stages", nfull, HOPS + 1);
-
-    TEST_STEP("Compare the stage lines and the final value with every "
-              "reference that ran all stages");
-    for (i = 0; i < NREF; i++)
-    {
-        if (!kept[i])
-            continue;
         snprintf(cmd, sizeof(cmd), "test -s /tmp/ts_rg_ts.cmp && cmp "
-                 "/tmp/ts_rg_ts.cmp /tmp/ts_rg_%s.cmp", refs[i].name);
+                 "/tmp/ts_rg_ts.cmp %s", ref_cmp(tsr_refs[i].name));
         if (tsd_sh("/", cmd, 10, "/tmp/ts_rg_cmp.log") == 0)
-        {
-            nmatch++;
-            tsd_say("H1 TypeScript stage lines and final value equal %s",
-                    refs[i].name);
-        }
+            tsd_say("H2 TypeScript stage lines and final value equal %s",
+                    tsr_refs[i].name);
         else
         {
-            char d[601];
-
-            first_diff("/tmp/ts_rg_ts.cmp", ref_cmp(refs[i].name), d,
+            first_diff("/tmp/ts_rg_ts.cmp", ref_cmp(tsr_refs[i].name), d,
                        sizeof(d));
-            tsd_bad("H1", "value differs", "TypeScript and %s print "
-                    "different values: %s", refs[i].name, d);
+            char step[160];
+            char *c = strstr(d, ": typescript");
+
+            snprintf(step, sizeof(step), "%s %.*s", tsr_refs[i].name,
+                     c != NULL ? (int)(c - d) : 80, d);
+            tsd_bad("H2", step, "TypeScript and %s print different "
+                    "values: %s", tsr_refs[i].name, d);
         }
-        if (firstfull[0] == '\0')
-            snprintf(firstfull, sizeof(firstfull), "%s", refs[i].name);
-        else
-        {
-            snprintf(cmd, sizeof(cmd), "cmp -s /tmp/ts_rg_%s.cmp "
-                     "/tmp/ts_rg_%s.cmp", firstfull, refs[i].name);
-            if (tsd_sh("/", cmd, 10, "/tmp/ts_rg_cmp.log") != 0)
-                tsd_say("H1 FINDING on the references: %s and %s run all "
-                        "stages and disagree with each other", firstfull,
-                        refs[i].name);
-        }
-    }
-    if (nfull > 0 && nmatch == 0)
-    {
-        tsd_head("/tmp/ts_rg_ts.cmp", a, 601);
-        tsd_bad("H1", "stdout", "matches none of %d reference(s) that "
-                "ran all stages; TypeScript [%s]", nfull, a);
     }
 
-    TSD_PASS("H1", "the TypeScript stage lines and final value equal a "
-             "reference that ran all stages");
+    TEST_STEP("H2: run ./scripts/run.sh guess with no arguments");
+    {
+        char dv[64];
+        char dh[64];
+        int  code;
+        int  st;
+        char fin[64];
+
+        code = tsd_sh(src, "./scripts/run.sh guess > /tmp/ts_rg_def.out "
+                      "2>&1", 60, "/tmp/ts_rg_d.log");
+        tsd_sh("/", NORM("/tmp/ts_rg_def.out", "/tmp/ts_rg_def.norm"), 10,
+               "/tmp/ts_rg_n.log");
+        facts("/tmp/ts_rg_def.norm", &st, fin, sizeof(fin));
+        default_of("DEFAULT_VALUE", dv, sizeof(dv));
+        default_of("DEFAULT_HOPS", dh, sizeof(dh));
+        tsd_say("H2 default run: exit=%d, %d stage line(s), final value %s; "
+                "ts/src/core.ts has DEFAULT_VALUE=%s DEFAULT_HOPS=%s", code,
+                st, fin, dv, dh);
+        if (code != 0)
+        {
+            tsd_head("/tmp/ts_rg_def.out", a, 401);
+            tsd_bad("H2", "default run", "exit %d: [%s]", code, a);
+        }
+        else if (atoi(dh) > 0 && st == atoi(dh) + 1)
+            tsd_say("H2 explained: the default run is another input (value "
+                    "%s, hops %s), so it has hops + 1 = %d stage lines and "
+                    "the final value %s; the input 42 3 has 4 stages and "
+                    "the value %s; the two runs are not comparable", dv, dh,
+                    st, fin, tsfin);
+        else
+            tsd_say("H2 NOT explained: the default run has %d stage lines "
+                    "while DEFAULT_HOPS is %s", st, dh);
+    }
+
+    TSD_PASS("H1 H2", "every reference exited 0 with 4 stage lines (H1) and its "
+             "stage lines and final value equal the TypeScript demo");
     TEST_SUCCESS;
 
 cleanup:

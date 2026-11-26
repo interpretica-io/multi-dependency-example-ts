@@ -109,7 +109,7 @@ fi
 have_dotnet9 || fail "no .NET 9 SDK (dotnet --list-sdks: $(dotnet --list-sdks 2>&1 | tr '\n' ' '))"
 echo "midair-setup: dotnet $(dotnet --version)"
 
-# The 22 tools the suite prologue counts, each with its Debian package. Any
+# The 26 tools the suite prologue counts, each with its Debian package. Any
 # that is still missing after the install is named and fails the setup.
 declare -A TOOLPKG=(
     [python3]=python3 [python3-config]=python3-dev [curl]=curl
@@ -118,6 +118,7 @@ declare -A TOOLPKG=(
     [gcc]=build-essential [tcc]=tcc [make]=build-essential
     [llvm-symbolizer]=llvm [docker]=docker.io [node]=nodejs [npx]=npm
     [lsof]=lsof [ss]=iproute2 [tcpdump]=tcpdump
+    [file]=file [g++]=build-essential [timeout]=coreutils [cmp]=diffutils
 )
 TOOLPKGS=
 for c in "${!TOOLPKG[@]}"; do
@@ -147,11 +148,11 @@ fi
 TOOLMISS=
 for c in python3 python3-config curl readelf nm objdump strings ldd dpkg \
          sha256sum clang gcc tcc make llvm-symbolizer docker node npx lsof \
-         ss tcpdump frida; do
+         ss tcpdump frida file g++ timeout cmp; do
     command -v "$c" >/dev/null 2>&1 || TOOLMISS="${TOOLMISS} $c"
 done
 [ -z "${TOOLMISS}" ] || fail "missing after the install:${TOOLMISS}"
-echo "midair-setup: all 22 tools of the suite prologue are present"
+echo "midair-setup: all 26 tools of the suite prologue are present"
 
 # cmp, pkill and timeout are used by the ts_example tests.
 for c in cmp pkill timeout; do

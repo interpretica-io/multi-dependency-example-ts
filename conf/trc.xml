@@ -1323,7 +1323,19 @@
               <notes/>
               <results>
                 <result value="PASSED">
-                  <verdict>H1 PASS: the TypeScript stage lines and final value equal a reference that ran all stages</verdict>
+                  <verdict>H1 H2 PASS: every reference exited 0 with 4 stage lines (H1) and its stage lines and final value equal the TypeScript demo</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
+          <test name="ts_ref_each_alone" type="script">
+            <objective/>
+            <notes/>
+            <iter result="PASSED">
+              <notes/>
+              <results>
+                <result value="PASSED">
+                  <verdict>H1 PASS: each reference ran in a separate process with a 20 s limit and exited 0 with 4 stage lines, the C++ demo linked and from a clean build too, and the file types match the CPU</verdict>
                 </result>
               </results>
             </iter>
@@ -1395,7 +1407,7 @@
               <notes/>
               <results>
                 <result value="PASSED">
-                  <verdict>H1 PASS: run.sh guess printed a final ring value equal to the reference ring value</verdict>
+                  <verdict>H2 PASS: a finished reference printed the ring value 38.9640 within 1e-4 and run.sh guess printed an equal value</verdict>
                 </result>
               </results>
             </iter>

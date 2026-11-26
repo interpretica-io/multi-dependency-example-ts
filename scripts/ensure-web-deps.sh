@@ -51,7 +51,7 @@ declare -A PKG=(
 
 UPDATED=
 apt_update() {
-    [ -n "${UPDATED}" ] || { ${SUDO} apt-get update >&2 || die "apt-get update failed"; UPDATED=1; }
+    [ -n "${UPDATED}" ] || { ${SUDO} apt-get update >&2 || echo "ensure-web-deps: WARNING: apt-get update failed, going on with the package lists present" >&2; UPDATED=1; }
 }
 
 missing_pkgs() {
@@ -66,11 +66,26 @@ if [ -n "${PKGS}" ] ; then
     echo "ensure-web-deps: installing ${PKGS}"
     export DEBIAN_FRONTEND=noninteractive
     apt_update
-    ${SUDO} apt-get install -y ${PKGS} zlib1g-dev >&2 ||
-        die "apt-get install ${PKGS} failed"
+    if ! ${SUDO} apt-get install -y ${PKGS} zlib1g-dev >&2 ; then
+        # One unavailable package must not stop the others: install each on
+        # its own and judge by the commands that are still missing below.
+        echo "ensure-web-deps: the combined install failed, installing one by one" >&2
+        for pk in ${PKGS} zlib1g-dev ; do
+            ${SUDO} apt-get install -y "${pk}" >&2 ||
+                echo "ensure-web-deps: apt-get install ${pk} failed" >&2
+        done
+    fi
 fi
+# Commands the toolchain stages cannot do without fail the script; the others
+# (cmake, rsync, lsof, ss, strings and the like) only warn, because the tests
+# that use them name them in their own verdicts.
 for c in "${!PKG[@]}" ; do
-    command -v "$c" >/dev/null 2>&1 || die "$c is still missing after the install"
+    command -v "$c" >/dev/null 2>&1 && continue
+    case "$c" in
+        gcc|g++|make|go|cargo|rustc|python3|python3-config|curl)
+            die "$c is still missing after the install" ;;
+        *)  echo "ensure-web-deps: WARNING: $c is still missing after the install" ;;
+    esac
 done
 
 # The Cargo.lock files are lock file version 4: cargo older than 1.78 (the
@@ -128,10 +143,11 @@ if want exposure ; then
     if [ -n "${PK}" ] ; then
         echo "ensure-web-deps: installing${PK}"
         apt_update
-        ${SUDO} apt-get install -y ${PK} >&2 || die "apt-get install${PK} failed"
+        ${SUDO} apt-get install -y ${PK} >&2 ||
+            echo "ensure-web-deps: apt-get install${PK} failed" >&2
     fi
-    command -v tcpdump >/dev/null 2>&1 || die "tcpdump is still missing after the install"
-    command -v sudo >/dev/null 2>&1 || die "sudo is still missing after the install"
+    command -v tcpdump >/dev/null 2>&1 || soft_die "tcpdump is still missing after the install"
+    command -v sudo >/dev/null 2>&1 || soft_die "sudo is still missing after the install"
     if ! command -v frida >/dev/null 2>&1 ; then
         pip3 install frida-tools >&2 ||
             pip3 install --break-system-packages frida-tools >&2 ||

@@ -84,7 +84,22 @@
         -->
         <run name="ts_run_guess">
             <script name="ts_run_guess">
-                <objective>[H1] Fails with "reference not built" when dist/bin/go-demo or dist/bin/cs-demo is missing. Runs every reference for 42 3 and logs each exit code and last 5 log lines. A libSystem or dlopen error fails the test (H1 is open because of the build, not inconclusive). A reference that stops short is inconclusive; a step fails when no reference ran all 4 stages. PASSES only when the TypeScript stage lines and final value equal those of a reference that ran all 4 stages; on a difference both values and the differing stage are printed.</objective>
+                <objective>[H1 H2] Each reference (C++, Rust, Python, Go, C#) is started alone with 42 3; stdout, stderr, the exit code and the signal are saved, and the last 40 stderr lines and the last stage line are logged on a failure. H1 passes only when every reference exits 0 and prints 4 stage lines; a crash is named with the language, the signal and the last stage reached, and libSystem, dlopen or wrong ELF class in the output is named too. For each reference that passed H1 the stage lines and the final value are compared with the TypeScript demo and the H2 verdict names the first stage that differs. ./scripts/run.sh guess with no arguments is run and its stage count and final value are logged against the demo defaults, to explain the 7 stages and 17.6799. Controls: planted crash, planted exit and planted library error.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-ts_example-ts_ref_each_alone Each reference alone (H1)
+              @objective Run each reference in its own process to see whether one language crashes because of the shared native libraries.
+
+              @par Scenario:
+              -# Check the runner against a planted crash, a planted hang and planted file types.
+              -# Log the CPU of the agent and the file type of every .so and demo; a type that does not fit the CPU fails.
+              -# Run each reference alone with 42 3 and a 20 s limit; run the C++ demo linked with libcppcore and from a clean build in /tmp.
+              -# Pass only when every run exits 0 with 4 stage lines.
+        -->
+        <run name="ts_ref_each_alone">
+            <script name="ts_ref_each_alone">
+                <objective>[H1] Each reference (C++, Rust, Python, Go, C#) in a separate process with a 20 s limit and the input 42 3; the C++ demo twice (linked with libcppcore, and from a clean build in /tmp). Logs file(1) of every .so and the CPU of the agent and fails on a CPU or library mismatch. A crash is named with the language, the signal and the last stage reached. PASS only when every run exits 0 with 4 stage lines.</objective>
             </script>
         </run>
 
@@ -99,7 +114,7 @@
         -->
         <run name="ts_bad_input">
             <script name="ts_bad_input">
-                <objective>[H3] Demo started directly (no listener started or awaited) with RING_HOST unset, RING_PORT unset and both bad: exit code 1, one error line, no trace, under 2 s each. The README names RING_HOST and RING_PORT and does not contain 127.0.0.1:9100 (planted-README control). Strict scan of ts/src and web/service-ts/src for literal IPv4 addresses, localhost and http(s):// (comment-only lines excluded and each listed), every hit printed as file:line or "scan: 0 hits", with a planted-literal control. With RING_HOST and RING_PORT unset, one unset, or RING_PORT non-numeric or out of range, the HTTP variant, run.sh guess serve and service-ts exit with code 1 within 2 s with one line, no trace, naming the variable; bad demo arguments exit non-zero in 10 s with one line and no trace.</objective>
+                <objective>[H3] Demo (node dist/demo.js) and the HTTP entry point started directly (no listener started or awaited) with RING_HOST unset, RING_PORT unset and both bad: exit code 1, one error line, no trace, under 2 s each. The README names RING_HOST and RING_PORT as required and does not contain 127.0.0.1:9100 (planted-README controls). The verdict says code 1 and the README matches. Strict scan of ts/src and web/service-ts/src for literal IPv4 addresses, localhost and http(s):// (comment-only lines excluded and each listed), every hit printed as file:line or "scan: 0 hits", with a planted-literal control. With RING_HOST and RING_PORT unset, one unset, or RING_PORT non-numeric or out of range, the HTTP variant, run.sh guess serve and service-ts exit with code 1 within 2 s with one line, no trace, naming the variable; bad demo arguments exit non-zero in 10 s with one line and no trace.</objective>
             </script>
         </run>
 
@@ -174,7 +189,7 @@
         -->
         <run name="ts_h2_build_guess">
             <script name="ts_h2_build_guess">
-                <objective>[H1] scripts/run.sh guess for 30 s must not fail early and must print a final ring value; the final value of guess 42 3 must equal that of the first reference that ran all 4 stages (planted-output control).</objective>
+                <objective>[H2] scripts/run.sh guess for 30 s must not fail early and must print a final ring value; every reference runs alone with 42 3; the final ring value of the first one that exited 0 with 4 stages must equal 38.9640 within 1e-4, and the TypeScript value must equal it. When no reference finished the verdict says H1 failed and nothing is compared (planted-output control).</objective>
             </script>
         </run>
 

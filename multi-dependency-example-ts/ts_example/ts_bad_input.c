@@ -5,10 +5,11 @@
  *        error line when RING_HOST or RING_PORT is unset or bad, the README
  *        matches, and the source holds no literal address (settles H3)
  *
- * The demo is started directly (no listener is started first and none is
- * waited for) with RING_HOST unset, RING_PORT unset and both bad. Each must
+ * The demo (node dist/demo.js) is started directly (no listener is started
+ * first and none is waited for) with RING_HOST unset, RING_PORT unset and
+ * both bad. Each must
  * exit with code 1 in under 2 s with one error line and no stack trace. A
- * text check requires the README to name RING_HOST and RING_PORT and not to
+ * text check requires the README to name RING_HOST and RING_PORT as required and not to
  * contain 127.0.0.1:9100.
  * Scan: searches ts/src and web/service-ts/src for a literal IPv4 address,
  * "localhost" and "http://" or "https://". A line that holds only a comment
@@ -68,7 +69,8 @@ one_case(const char *name, const char *prep, const char *arg_expr)
     long long   t0 = tsd_ms();
 
     snprintf(log, sizeof(log), "/tmp/ts_bi_%s.log", name);
-    snprintf(cmd, sizeof(cmd), "%s timeout -k 2 10 ./scripts/run.sh guess "
+    snprintf(cmd, sizeof(cmd), "export RING_HOST=127.0.0.1 RING_PORT=9; "
+             "%s timeout -k 2 10 ./scripts/run.sh guess "
              "%s", prep, arg_expr);
     code = tsd_sh(tsd_src(), cmd, 20, log);
     n = tsd_head(log, text, sizeof(text));
@@ -197,6 +199,9 @@ readme_ok(const char *root, char *why, size_t size)
         "RING_HOST'; exit 1; }; "
         "grep -q RING_PORT README.md || { echo 'README.md does not name "
         "RING_PORT'; exit 1; }; "
+        "for v in RING_HOST RING_PORT; do grep -A2 -E \"$v\" README.md | "
+        "grep -qi required || { echo \"README.md does not say $v is "
+        "required\"; exit 1; }; done; "
         "f=$(grep -lF '127.0.0.1:9100' README.md ts/README.md "
         "web/service-ts/README.md 2>/dev/null); "
         "[ -z \"$f\" ] || { echo \"default 127.0.0.1:9100 stated in $f\"; "
@@ -303,16 +308,20 @@ main(int argc, char **argv)
         char why[200];
 
         system("rm -rf /tmp/ts_bi_rd; mkdir -p /tmp/ts_bi_rd");
-        tsd_put("/tmp/ts_bi_rd/README.md", "Set RING_HOST and RING_PORT.\n");
+        tsd_put("/tmp/ts_bi_rd/README.md", "RING_HOST and RING_PORT are both required.\n");
         if (!readme_ok("/tmp/ts_bi_rd", why, sizeof(why)))
             TEST_FAIL("H3 NOT SETTLED: a good planted README was rejected: "
                       "[%s]", why);
-        tsd_put("/tmp/ts_bi_rd/README.md", "RING_HOST RING_PORT default "
+        tsd_put("/tmp/ts_bi_rd/README.md", "RING_HOST RING_PORT required, default "
                 "127.0.0.1:9100\n");
         if (readme_ok("/tmp/ts_bi_rd", why, sizeof(why)))
             TEST_FAIL("H3 NOT SETTLED: a README with 127.0.0.1:9100 was "
                       "accepted");
-        tsd_put("/tmp/ts_bi_rd/README.md", "Set RING_HOST only.\n");
+        tsd_put("/tmp/ts_bi_rd/README.md", "Set RING_HOST and RING_PORT.\n");
+        if (readme_ok("/tmp/ts_bi_rd", why, sizeof(why)))
+            TEST_FAIL("H3 NOT SETTLED: a README that does not say the "
+                      "variables are required was accepted");
+        tsd_put("/tmp/ts_bi_rd/README.md", "RING_HOST is required.\n");
         if (readme_ok("/tmp/ts_bi_rd", why, sizeof(why)))
             TEST_FAIL("H3 NOT SETTLED: a README without RING_PORT was "
                       "accepted");
@@ -349,7 +358,21 @@ main(int argc, char **argv)
         tsd_say("H3 README names RING_HOST and RING_PORT and states no "
                 "127.0.0.1:9100 default");
 
-    TEST_STEP("H3: demo started directly, RING_HOST unset, exit time");
+    TEST_STEP("H3: node dist/demo.js started directly, RING_HOST unset and "
+              "RING_PORT unset");
+    env_case("demo_both_unset", ts, "env -u RING_HOST -u RING_PORT",
+             "node dist/demo.js", "RING_");
+    TEST_STEP("H3: node dist/demo.js started directly, RING_HOST unset");
+    env_case("demo_host_unset", ts, "env -u RING_HOST RING_PORT=9",
+             "node dist/demo.js 42 3", "RING_HOST");
+    TEST_STEP("H3: node dist/demo.js started directly, RING_PORT unset");
+    env_case("demo_port_unset", ts, "env -u RING_PORT RING_HOST=127.0.0.1",
+             "node dist/demo.js 42 3", "RING_PORT");
+    TEST_STEP("H3: node dist/demo.js started directly, both bad");
+    env_case("demo_both_bad", ts, "env RING_HOST= RING_PORT=abc",
+             "node dist/demo.js 42 3", "RING_");
+
+    TEST_STEP("H3: dist/main.js started directly, RING_HOST unset, exit time");
     env_case("direct_host_unset", ts, "env -u RING_HOST RING_PORT=9",
              "node dist/main.js", "RING_HOST");
     TEST_STEP("H3: demo started directly, RING_PORT unset, exit time");
@@ -407,11 +430,11 @@ main(int argc, char **argv)
            "/tmp/ts_bi_doc.log");
     tsd_head("/tmp/ts_bi_doc.log", out, 500);
     tsd_say("H3 info: README lines on RING_HOST and port 9100: [%s]", out);
-    tsd_sh(src, "env -u RING_HOST -u RING_PORT ./scripts/run.sh guess 42 3 "
+    tsd_sh(ts, "env -u RING_HOST -u RING_PORT node dist/demo.js 42 3 "
            ">/dev/null 2>&1; echo demo exit $?", 30, "/tmp/ts_bi_demo.log");
     tsd_head("/tmp/ts_bi_demo.log", out, 100);
-    tsd_say("H3 info: the demo itself, with both unset, %s (it does not "
-            "read them)", out);
+    tsd_say("H3 info: node dist/demo.js with both unset: %s (code 1 is the "
+            "documented behaviour)", out);
 
     TEST_STEP("H3: the demo with bad arguments");
     one_case("empty", "", "''");
@@ -422,8 +445,8 @@ main(int argc, char **argv)
              "\"$A\" 3");
 
     TSD_PASS("H3", "scan: 0 hits in the TypeScript source; an unset or "
-             "bad RING_HOST or RING_PORT exits within 2 s with one line and "
-             "no trace");
+             "bad RING_HOST or RING_PORT exits with code 1 within 2 s with "
+             "one line and no trace; the README matches");
     TEST_SUCCESS;
 
 cleanup:
