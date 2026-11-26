@@ -1,6 +1,6 @@
 # Copyright (C) 2026 midair <midair@localhost>
 
-# The four ts_* tests share tsx_lib.h and the runner of webdeps/ts_lib.h.
+# The ts_*  tests share tsx_lib.h (the ts_h* tests also tsh_lib.h) and the runner of webdeps/ts_lib.h.
 # See package.xml. The group prologue only checks the tools; they are
 # installed by scripts/midair-setup.sh.
 tests = [
@@ -9,6 +9,10 @@ tests = [
     'ts_run_guess',
     'ts_contract',
     'ts_robust',
+    'ts_h1_listing',
+    'ts_h2_build_guess',
+    'ts_h3_same_output',
+    'ts_h4_port_badinput',
 ]
 
 foreach test : tests

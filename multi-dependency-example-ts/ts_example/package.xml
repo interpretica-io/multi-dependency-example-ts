@@ -3,7 +3,7 @@
     <description>TypeScript example tests</description>
 
     <!-- @page mde-ts_example TypeScript Example Tests
-          @objective Settle H1, H2 and H3 about the TypeScript example, one
+          @objective Settle H1 to H4 about the TypeScript example, one
                      test per step, each logging its command, exit code,
                      elapsed time and the last 40 lines of stdout and stderr.
 
@@ -88,6 +88,63 @@
         <run name="ts_robust">
             <script name="ts_robust">
                 <objective>[H3] (a) no literal URL or IP in the TypeScript source outside comments; (b) the example connects to the port in GUESS_ENDPOINT and no other; (c) against a listener that never answers it exits non-zero within 10 s, elapsed time and exit code logged; (d) bad input ends cleanly. The verdict names the failing check; "H1 build missing" when dist/index.js is absent.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-ts_example-ts_h1_listing Directory listing (H1)
+              @objective List /work/src and the project root; fail when no directory holds a .ts file and a package.json or tsconfig.json.
+
+              @par Scenario:
+              -# Check the finder against a planted tree with one real example and look-alikes.
+              -# List the roots and log every directory read.
+              -# Fail when no TypeScript example directory is found.
+        -->
+        <run name="ts_h1_listing">
+            <script name="ts_h1_listing">
+                <objective>[H1] List /work/src (when present) and the project root. H1 PASS when a directory holds a .ts source and a package.json or tsconfig.json; H1 FAIL "no TypeScript example directory" otherwise.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-ts_example-ts_h2_build_guess Build and run (H2)
+              @objective ./build.sh exits 0, then ./scripts/run.sh guess exits 0 within 60 s.
+
+              @par Scenario:
+              -# Check the runner against a planted hang, signal and exit code.
+              -# Run ./build.sh; require exit code 0.
+              -# Start the services, run ./scripts/run.sh guess; require exit code 0 within 60 s.
+        -->
+        <run name="ts_h2_build_guess">
+            <script name="ts_h2_build_guess">
+                <objective>[H2] Run ./build.sh and require exit code 0, then ./scripts/run.sh guess and require exit code 0 within 60 s. H2 FAIL names the step (build or guess) with exit code and stderr tail.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-ts_example-ts_h3_same_output Same output as Go (H3)
+              @objective Run the TypeScript example and the Go service with the same input and compare.
+
+              @par Scenario:
+              -# Check the comparison against planted differences.
+              -# Start the services; run the example (value 42, 3 hops) and send the same input to the Go service.
+              -# Fail on any difference of answer line or exit code, printing both.
+        -->
+        <run name="ts_h3_same_output">
+            <script name="ts_h3_same_output">
+                <objective>[H3] Same input to the TypeScript example and the Go service; H3 FAIL on any difference of answer line or exit code with both values printed; "H1 build missing" when dist/index.js is absent.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-ts_example-ts_h4_port_badinput Configured port and bad input (H4)
+              @objective The example listens only on the configured port and answers empty and malformed requests with an error in 5 s.
+
+              @par Scenario:
+              -# Check tapi_netexpose and the reply classifier against planted listeners and replies.
+              -# Start the example with another port in its configuration.
+              -# tapi_netexpose: it listens on that port and on no other.
+              -# Send an empty and malformed requests: a 4xx reply within 5 s, process alive.
+        -->
+        <run name="ts_h4_port_badinput">
+            <script name="ts_h4_port_badinput">
+                <objective>[H4] Start the example on a chosen port; H4 FAIL when it listens elsewhere or not at all, gives no 4xx reply to an empty or malformed request, answers after 5 s or dies.</objective>
             </script>
         </run>
     </session>
