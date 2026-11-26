@@ -13,6 +13,9 @@
           - @ref mde-ts_example-ts_run_guess - Same ring result as the other demos (H1)
           - @ref mde-ts_example-ts_contract - Own contract (H2)
           - @ref mde-ts_example-ts_robust - Endpoint variable, no hardcoded URL, silent peer (H3)
+          - @ref mde-ts_example-ts_build_run - Build and run as jobs (H1)
+          - @ref mde-ts_example-ts_service_contract - Service answers its contract (H2)
+          - @ref mde-ts_example-ts_vs_go_parity - TypeScript against Go (H3)
     -->
 
     <author mailto="midair@localhost" />
@@ -206,6 +209,51 @@
         <run name="ts_h4_port_badinput">
             <script name="ts_h4_port_badinput">
                 <objective>[H3] After ts_build passed (else blocked by H1): start, first output and exit times logged; the configured and default listen address and port checked with tapi_netexpose, error replies to empty, non-numeric and 100000-character input with a live process after each, exit code 0 on SIGTERM and on SIGINT.</objective>
+            </script>
+        </run>
+        <!-- @page mde-ts_example-ts_build_run Build and run through jobs (H1)
+              @objective ./build.sh and ./scripts/run.sh guess exit 0 when run as jobs on the agent.
+
+              @par Scenario:
+              -# Check the job runner against a planted failing command.
+              -# Skip when node is missing.
+              -# Run ./build.sh, then ./scripts/run.sh guess; both must exit 0.
+              -# Record the standard output of the run as an artifact.
+        -->
+        <run name="ts_build_run">
+            <script name="ts_build_run">
+                <objective>[H1] ./build.sh then ./scripts/run.sh guess as tapi_job programs, exit code 0 each; stdout of the run recorded as an artifact; non-zero exit fails; missing node skips.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-ts_example-ts_service_contract Service contract over a port (H2)
+              @objective web/service-ts started as a job answers on its port as the contract says.
+
+              @par Scenario:
+              -# Check the reply checks against planted wrong replies.
+              -# Start the service as a job, wait for the port.
+              -# One valid request: status 200 and the documented body; reply recorded.
+              -# Known-bad control: bad value and malformed target get an error reply and the process survives.
+              -# The listener is on loopback only; stop the job.
+        -->
+        <run name="ts_service_contract">
+            <script name="ts_service_contract">
+                <objective>[H2] web/service-ts as a job: 200 and the stage body for value=42, 400 with an error line for a bad value and for a malformed target, process alive, loopback listener only.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-ts_example-ts_vs_go_parity TypeScript against Go (H3)
+              @objective The two services give byte for byte the same replies to the same requests.
+
+              @par Scenario:
+              -# Skip when the Go service is not built.
+              -# Start service-go on its contract port and service-ts.
+              -# Send six requests to both, record both replies.
+              -# Fail naming every request whose status or body differs.
+        -->
+        <run name="ts_vs_go_parity">
+            <script name="ts_vs_go_parity">
+                <objective>[H3] Same six requests to service-go and service-ts, status and body compared byte for byte, both replies recorded; a difference fails and names the request.</objective>
             </script>
         </run>
     </session>

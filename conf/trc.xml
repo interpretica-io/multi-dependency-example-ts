@@ -1424,6 +1424,38 @@
               </results>
             </iter>
           </test>
+          <test name="ts_build_run" type="script">
+            <objective/>
+            <notes/>
+            <iter result="PASSED">
+              <notes/>
+              <results>
+                <result value="PASSED"/>
+              </results>
+            </iter>
+          </test>
+          <test name="ts_service_contract" type="script">
+            <objective/>
+            <notes/>
+            <iter result="PASSED">
+              <notes/>
+              <results>
+                <result value="PASSED"/>
+              </results>
+            </iter>
+          </test>
+          <test name="ts_vs_go_parity" type="script">
+            <objective/>
+            <notes/>
+            <iter result="FAILED">
+              <notes/>
+              <results>
+                <result value="FAILED">
+                  <verdict>H3 FAILED: the Go and TypeScript services answer differently for: value-42-hops-0, value-1-hops-0, value-neg-hops-0, bad-value, bad-hops, no-query-hops-0</verdict>
+                </result>
+              </results>
+            </iter>
+          </test>
         </iter>
       </test>
       <test name="graph" type="package">
