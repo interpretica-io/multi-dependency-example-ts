@@ -32,12 +32,12 @@ main(int argc, char **argv)
     static const char * const cmds[] = {
         "id",
         "pwd",
-        "ls -la /work /work/src",
+        "ls -la \"$TE_TS_MDE_SRC\"",
         "node -v",
         "npm -v",
         "npx tsc -v",
-        "find /work/src -name \"*.ts\" -not -path \"*/node_modules/*\"",
-        "ls /work/src/ts",
+        "find \"$TE_TS_MDE_SRC\" -name \"*.ts\" -not -path \"*/node_modules/*\"",
+        "ls \"$TE_TS_MDE_SRC/ts\"",
     };
     unsigned i;
 
@@ -81,7 +81,7 @@ main(int argc, char **argv)
     {
         static const char *const vc[] = { "node --version", "npm --version",
                                           "tsc --version",
-                                          "ls /work/src" };
+                                          "ls \"$TE_TS_MDE_SRC\"" };
         char     all[1500] = "";
         char     bad[200] = "";
         char     one[401];

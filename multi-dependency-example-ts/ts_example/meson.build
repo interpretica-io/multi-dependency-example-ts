@@ -10,6 +10,7 @@ tests = [
     'ts_control_known_bad',
     'ts_build',
     'ts_run_guess',
+    'ts_bad_input',
     'ts_contract',
     'ts_robust',
     'ts_h1_listing',

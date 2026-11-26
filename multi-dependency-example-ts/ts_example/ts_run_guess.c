@@ -1,116 +1,97 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief ts_example: ts_run_guess, the TypeScript example starts and prints
- *        something (settles H2)
+ * @brief ts_example: ts_run_guess, the TypeScript example gives the result
+ *        of the C++ demo (settles H2)
  *
- * Starts the web services that exist (the TypeScript example is a client of
- * the gateway), then runs ./scripts/run.sh guess under a 30 s limit with the
- * gateway address in RING_GATEWAY_URL. Passes on exit code 0 and a non-empty
- * stdout. Fails on a non-zero exit code, a timeout kill or an empty stdout.
- * The verdict names which services were not up, since a run that cannot
- * reach the gateway fails for that reason and not in the example itself.
+ * Runs ./scripts/run.sh guess 42 3 and the existing demo for the same input
+ * (dist/bin/cpp-demo, which enters the ring at the same stage; otherwise
+ * dist/bin/rust-demo) and compares stdout and exit code. The name of each
+ * demo in front of its lines and the indentation are removed first, since
+ * they differ by design. Fails on any other difference.
  *
  * @author midair <midair@localhost>
  */
 
 #define TE_TEST_NAME    "ts_example/ts_run_guess"
 
-#include "te_config.h"
+#include "tsd.h"
 
-#include "tsx_lib.h"
-
-#define RUN_LIMIT_S     30
+#define NORM "sed -E 's/^[[:space:]]*[a-z]+-demo: //; s/^[[:space:]]+//'"
 
 int
 main(int argc, char **argv)
 {
-    res_t       res = { .kind = R_PASS };
-    ts_run_t   *r = calloc(1, sizeof(*r));
-    char        why[400];
-    char        note[900];
-    char        what[200];
-    char        e[300];
-    char        o[300];
-    char        url[200];
-    char        runsh[700];
-    char        gcmd[800];
-    const char *env[3];
-    int         up;
+    char        a[401];
+    char        b[401];
+    char        cmd[2048];
+    const char *src = tsd_src();
+    const char *ref = "cpp-demo";
+    int         ts_code;
+    int         ref_code;
 
     TEST_START;
-    t_report_begin();
-    if (r == NULL)
-    {
-        res_set(&res, R_FAIL, "H2 NOT SETTLED: out of memory");
-        goto verdict;
-    }
-    if (!tsx_init(&res, "H2"))
-        goto verdict;
-    snprintf(runsh, sizeof(runsh), "%s/scripts/run.sh", src_root);
 
-    TSX_STEP("Known-bad control: the runner reports a hang and a signal");
-    if (!ts_runner_control_ok(workdir, why, sizeof(why)))
-    {
-        res_set(&res, R_FAIL, "H2 NOT SETTLED: control failed: %s", why);
-        goto verdict;
-    }
-    if (access(runsh, X_OK) != 0)
-    {
-        res_set(&res, R_FAIL, "H2 FAIL: step missing file: %s does not "
-                "exist or is not executable (run ts_build first)", runsh);
-        goto verdict;
-    }
+    TEST_STEP("Control: cmp sees a planted difference");
+    tsd_put("/tmp/ts_rg_c1", "result = 1.0000\n");
+    tsd_put("/tmp/ts_rg_c2", "result = 1.0001\n");
+    if (tsd_sh("/", "cmp -s /tmp/ts_rg_c1 /tmp/ts_rg_c2", 10,
+               "/tmp/ts_rg_c.log") != 1)
+        TEST_FAIL("H2 NOT SETTLED: the comparison does not see a difference");
 
-    TSX_STEP("Start the web services the example talks to");
-    up = tsx_services_up("H2", note, sizeof(note));
-    snprintf(url, sizeof(url), "RING_GATEWAY_URL=%s", tsx_url);
-    env[0] = url;
-    env[1] = "RING_TIMEOUT_MS=20000";
-    env[2] = NULL;
-
-    TSX_STEP("Run ./scripts/run.sh guess, at most %d s", RUN_LIMIT_S);
-    snprintf(gcmd, sizeof(gcmd), "'%s/scripts/run.sh' guess", src_root);
-    if (!ts_run(r, src_root, gcmd, NULL, env, NULL, RUN_LIMIT_S, "guess"))
+    TEST_STEP("The project root and the reference demo exist");
+    if (src[0] == '\0' || access(src, X_OK) != 0)
+        TEST_FAIL("H2 FAIL: TE_TS_MDE_SRC is [%s], not a directory", src);
+    snprintf(cmd, sizeof(cmd), "%s/dist/bin/cpp-demo", src);
+    if (access(cmd, X_OK) != 0)
     {
-        res_set(&res, R_FAIL, "H2 NOT SETTLED: cannot start the example");
-        goto verdict;
+        ref = "rust-demo";
+        snprintf(cmd, sizeof(cmd), "%s/dist/bin/rust-demo", src);
     }
-    tsx_log_step("H2", "guess", gcmd, r);
-    ts_end_text(r, what, sizeof(what));
-    ts_flat(r->err, 200, e, sizeof(e));
-    ts_flat(r->out, 200, o, sizeof(o));
-    T_FINDING(r->code == 0 && !r->hung && r->out_len > 0 ?
-              TAPI_CYBERSEC_SEV_INFO : TAPI_CYBERSEC_SEV_HIGH, "ts.run",
-              "run.sh guess", "%s", what);
-    if (r->hung && (ts_has_trace(r->err) || ts_has_trace(r->out)))
-        res_set(&res, R_FAIL, "H2 FAIL: step start: %s printed a crash "
-                "trace and was still running after %d s; services up: %d of "
-                "3 %s; stderr [%s]", gcmd, RUN_LIMIT_S, up, note, e);
-    else if (r->hung)
-        res_set(&res, R_PASS, "H2 PASS: %s started and was still running "
-                "without a crash after %d s (stopped by the test); services "
-                "up: %d of 3", gcmd, RUN_LIMIT_S, up);
-    else if (r->sig != 0)
-        res_set(&res, R_FAIL, "H2 FAIL: step start: killed by signal %d; "
-                "stderr [%s]", r->sig, e);
-    else if (r->code != 0)
-        res_set(&res, R_FAIL, "H2 FAIL: step start: exit code %d (%s); "
-                "services up: %d of 3 %s; stderr [%s]", r->code, what, up,
-                note, e);
-    else if (r->out_len == 0)
-        res_set(&res, R_FAIL, "H2 FAIL: step start: exit code 0 but stdout "
-                "is empty; stderr [%s]", e);
-    else
-        res_set(&res, R_PASS, "H2 PASS: ./scripts/run.sh guess exited 0 in "
-                "%.1f s with %zu bytes on stdout [%s]; services up: %d of 3",
-                r->secs, r->out_len, o, up);
+    if (access(cmd, X_OK) != 0)
+        TEST_FAIL("H2 NOT SETTLED: neither dist/bin/cpp-demo nor "
+                  "dist/bin/rust-demo exists under %s (run ts_build)", src);
+    tsd_say("H2 reference demo: %s", ref);
 
-verdict:
-    free(r);
-    TSX_VERDICT(&res, "H2");
+    TEST_STEP("Run ./scripts/run.sh guess 42 3");
+    snprintf(cmd, sizeof(cmd), "./scripts/run.sh guess 42 3 2>/tmp/ts_rg_ts.err "
+             "> /tmp/ts_rg_ts.out; echo $? > /tmp/ts_rg_ts.code");
+    ts_code = tsd_sh(src, cmd, 60, "/tmp/ts_rg_ts.log");
+    tsd_head("/tmp/ts_rg_ts.code", a, sizeof(a));
+    ts_code = atoi(a);
+    tsd_head("/tmp/ts_rg_ts.out", a, sizeof(a));
+    tsd_say("H2 run.sh guess exit=%d stdout [%s]", ts_code, a);
+
+    TEST_STEP("Run %s 42 3", ref);
+    snprintf(cmd, sizeof(cmd), "LD_LIBRARY_PATH=dist/lib:$LD_LIBRARY_PATH "
+             "./dist/bin/%s 42 3 2>/tmp/ts_rg_ref.err > /tmp/ts_rg_ref.out; "
+             "echo $? > /tmp/ts_rg_ref.code", ref);
+    tsd_sh(src, cmd, 60, "/tmp/ts_rg_ref.log");
+    tsd_head("/tmp/ts_rg_ref.code", b, sizeof(b));
+    ref_code = atoi(b);
+    tsd_head("/tmp/ts_rg_ref.out", b, sizeof(b));
+    tsd_say("H2 %s exit=%d stdout [%s]", ref, ref_code, b);
+
+    TEST_STEP("Compare exit code and stdout");
+    if (ts_code != ref_code)
+        tsd_bad("H2", "exit code", "run.sh guess %d, %s %d", ts_code, ref,
+                ref_code);
+    tsd_sh("/", NORM " /tmp/ts_rg_ts.out > /tmp/ts_rg_ts.norm; " NORM
+           " /tmp/ts_rg_ref.out > /tmp/ts_rg_ref.norm", 10,
+           "/tmp/ts_rg_n.log");
+    if (tsd_sh("/", "test -s /tmp/ts_rg_ts.norm && cmp /tmp/ts_rg_ts.norm "
+               "/tmp/ts_rg_ref.norm", 10, "/tmp/ts_rg_cmp.log") != 0)
+    {
+        tsd_head("/tmp/ts_rg_ts.norm", a, sizeof(a));
+        tsd_head("/tmp/ts_rg_ref.norm", b, sizeof(b));
+        tsd_bad("H2", "stdout", "differs or is empty; run.sh [%s] %s [%s]",
+                a, ref, b);
+    }
+    TSD_FINISH("H2");
+    TEST_VERDICT("H2 PASS: run.sh guess 42 3 and %s give the same stdout "
+                 "and exit code %d", ref, ts_code);
+    TEST_SUCCESS;
 
 cleanup:
-    cleanup_all();
     TEST_END;
 }

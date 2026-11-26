@@ -41,17 +41,16 @@
 /** Written by ts_build when it passed; read by the tests that need it. */
 #define TSD_BUILD_MARK  "/tmp/mde-ts-build.passed"
 
-/** Root of the project under test. */
+/**
+ * Root of the project under test: the suite's own variable TE_TS_MDE_SRC,
+ * set by scripts/run.sh. Empty when it is not set.
+ */
 static inline const char *
 tsd_src(void)
 {
-    static char root[PATH_MAX];
     const char *e = getenv("TE_TS_MDE_SRC");
 
-    if (access("/work/src", F_OK) == 0 || e == NULL || e[0] == '\0')
-        return "/work/src";
-    snprintf(root, sizeof(root), "%s", e);
-    return root;
+    return (e != NULL && e[0] != '\0') ? e : "";
 }
 
 /** Monotonic time in milliseconds. */

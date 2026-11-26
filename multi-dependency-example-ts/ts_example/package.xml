@@ -59,31 +59,46 @@
             </script>
         </run>
 
-        <!-- @page mde-ts_example-ts_build Build (H2)
-              @objective Run build.sh in the project root within 540 s.
+        <!-- @page mde-ts_example-ts_build Build (H1)
+              @objective Run build.sh in the project and check the compiled output.
 
               @par Scenario:
-              -# Check the runner against a planted hang and signal.
-              -# Run build.sh by absolute path in the project root; log command, exit code, time, stdout and stderr in full.
-              -# On a failure log the last 50 lines and name the step (npm install, tsc, the C build).
-              -# Pass only on exit code 0, compiled .js files written by this build in the TypeScript dist, and an executable scripts/run.sh.
+              -# Check the runner against a planted failing command.
+              -# Run ./build.sh in the project (TE_TS_MDE_SRC) within 540 s.
+              -# Pass only on exit code 0 and an existing ts/dist with .js files.
         -->
         <run name="ts_build">
             <script name="ts_build">
-                <objective>[H2] Run ./build.sh with output in /tmp/ts_build.log. PASS on exit 0 and ts/dist/main.js; FAIL puts the last 2000 bytes of the log and the exit code in the error. Leaves a marker for the later tests.</objective>
+                <objective>[H1] PASS only when ./build.sh exits 0 and ts/dist with compiled .js files exists; FAIL on a non-zero exit (last 400 bytes in the verdict) or a missing output.</objective>
             </script>
         </run>
 
-        <!-- @page mde-ts_example-ts_run_guess Start with guess (H2)
-              @objective Run scripts/run.sh guess with a 30 s limit.
+        <!-- @page mde-ts_example-ts_run_guess Same result as the other demos (H2)
+              @objective Compare ./scripts/run.sh guess 42 3 with an existing demo.
 
               @par Scenario:
-              -# Start the web services that exist.
-              -# Run the example by absolute path; log command, exit code, time, stdout and stderr in full.
+              -# Check the comparison against a planted difference.
+              -# Run run.sh guess 42 3 and dist/bin/cpp-demo (else rust-demo) 42 3.
+              -# Pass only when stdout (demo name and indentation removed) and exit code match.
         -->
         <run name="ts_run_guess">
             <script name="ts_run_guess">
-                <objective>[H2] Run scripts/run.sh guess (absolute path, project root as working directory) with a 30 s limit against the local web tier. H2 PASS when it exits 0 with output, or is still running at the limit without a crash trace; H2 FAIL on a signal, a crash trace, a non-zero exit or an empty stdout, with exit code, stdout and stderr in the verdict.</objective>
+                <objective>[H2] PASS only when run.sh guess 42 3 and the C++ (else Rust) demo give the same stdout and exit code; FAIL on any difference, with both outputs in the verdict.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-ts_example-ts_bad_input Bad input and hardcoded addresses (H3)
+              @objective Empty, non-numeric and very long input under a 10 s timeout, and a source scan for literal addresses.
+
+              @par Scenario:
+              -# Check the stack trace detector against a planted trace.
+              -# Run run.sh guess with empty, non-numeric, 100000-character text and 100000-digit input, each under 10 s.
+              -# Pass only when every run exits non-zero with a short error and no trace.
+              -# Search ts/src for a literal IP address or http(s) URL outside comments; any hit fails.
+        -->
+        <run name="ts_bad_input">
+            <script name="ts_bad_input">
+                <objective>[H3] PASS only when every bad input exits non-zero with a short message, no stack trace and no timeout, and ts/src has no literal IP address or URL; each failure names its step.</objective>
             </script>
         </run>
 
