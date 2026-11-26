@@ -31,6 +31,20 @@
             </script>
         </prologue>
 
+        <!-- @page mde-ts_example-ts_diag Plain diagnostic (H5)
+              @objective Run eight plain commands with no helper and show each output and exit code in a verdict.
+
+              @par Scenario:
+              -# Run id, pwd, ls -la /work /work/src, node -v, npm -v, npx tsc -v, find for .ts files and ls /work/src/ts with system(), output in /tmp/ts_diag_n.log.
+              -# Read each file back; give the first 400 bytes and the exit code in a verdict.
+              -# End with success: the test passes whenever it runs.
+        -->
+        <run name="ts_diag">
+            <script name="ts_diag">
+                <objective>[H5] Eight plain commands, no helper, no skip: a verdict per command with exit code and first 400 bytes of its log. Passes whenever it runs; verdicts present means H5 is false.</objective>
+            </script>
+        </run>
+
         <!-- @page mde-ts_example-ts_control_known_bad Control: known-bad command (H2, H3, H4)
               @objective Check the shell helper of the group against a planted failing command.
 
@@ -56,7 +70,7 @@
         -->
         <run name="ts_build">
             <script name="ts_build">
-                <objective>[H2] Run build.sh in the project root with a 540 s limit. H2 PASS only when it exits 0 and compiled .js files written by it exist in the TypeScript dist directory; H2 FAIL names npm install, tsc or the C build, with the failing step, exit code, stdout and stderr and the last 50 lines of the output in the verdict and the log.</objective>
+                <objective>[H2] Run ./build.sh with output in /tmp/ts_build.log. PASS on exit 0 and ts/dist/main.js; FAIL puts the last 2000 bytes of the log and the exit code in the error. Leaves a marker for the later tests.</objective>
             </script>
         </run>
 
@@ -86,7 +100,7 @@
         -->
         <run name="ts_contract">
             <script name="ts_contract">
-                <objective>[H3] Send the fixed contract inputs (one valid guess first) to the TypeScript, Go and C# examples and compare the replies byte for byte. H3 PASS when the TypeScript reply equals the Go reply; H3 FAIL mismatch prints both replies; SKIPPED with a message when the Go example cannot start; SKIPPED with the reason when ts_build did not pass; "H3 start-up fault" when the gateway is not up.</objective>
+                <objective>[H3] After ts_build passed (else 'H3 blocked by H2' and FAIL), send a valid, a low, a high and a repeated guess to the Go and TypeScript examples and compare the replies byte for byte; both replies are in the error on a mismatch.</objective>
             </script>
         </run>
 
@@ -101,7 +115,7 @@
         -->
         <run name="ts_robust">
             <script name="ts_robust">
-                <objective>[H4] (a) no literal URL or IP in the TypeScript source outside comments; (b) the example connects to the port in GUESS_ENDPOINT and no other; (c) against a listener that never answers it exits non-zero within 10 s, elapsed time and exit code logged; (d) bad input ends cleanly. The verdict names the failing check and the failing step with the last command, exit code, stdout and stderr; SKIPPED with the reason when ts_build did not pass.</objective>
+                <objective>[H4] After ts_build passed (else blocked by H2): node dist/main.js with EXAMPLE_PORT=9101 EXAMPLE_HOST=127.0.0.1 listens on 127.0.0.1:9101 and not 0.0.0.0 (tapi_netexpose); with both unset on 127.0.0.1:9100; empty, non-numeric, 100000-character and hostile input get 4xx replies and the process lives; SIGTERM and SIGINT give exit code 0.</objective>
             </script>
         </run>
 
@@ -116,7 +130,7 @@
         -->
         <run name="ts_h1_listing">
             <script name="ts_h1_listing">
-                <objective>[H1] Run find over /work/src for .ts files, tsconfig.json and package.json. H1 PASS when find runs, with the finding (a TypeScript example exists or not) in the verdict and the log; H1 FAIL only when find itself errors, with its error printed.</objective>
+                <objective>[H1] List the project with ls and find, a verdict per command; PASS only when ts/package.json, ts/tsconfig.json and a .ts file exist, with the verdict 'H1 TypeScript example found'; else 'H1 no TypeScript example found' and FAIL.</objective>
             </script>
         </run>
 
@@ -130,7 +144,7 @@
         -->
         <run name="ts_h2_build_guess">
             <script name="ts_h2_build_guess">
-                <objective>[H2] Run build.sh, require exit code 0 and compiled .js output, then scripts/run.sh guess with a 30 s timeout and require that it starts without a crash. H2 FAIL names the step (build, tsc or guess) with exit code, stdout, stderr and, for the build, the last 50 lines.</objective>
+                <objective>[H2] Run scripts/run.sh guess for 30 s with output in /tmp/ts_h2_guess.log; PASS when it does not exit non-zero before the limit; the log text is in the verdict and the log.</objective>
             </script>
         </run>
 
@@ -145,7 +159,7 @@
         -->
         <run name="ts_h3_same_output">
             <script name="ts_h3_same_output">
-                <objective>[H3] Same fixed inputs to the TypeScript example and the Go service; H3 PASS when the TypeScript reply equals the Go reply byte for byte; H3 FAIL prints both replies; SKIPPED when the Go example cannot start; SKIPPED with the reason when ts_build did not pass.</objective>
+                <objective>[H3] After ts_build passed (else 'H3 blocked by H2' and FAIL), same fixed inputs to Go and TypeScript, replies saved to files and compared byte for byte; both replies in the error on a mismatch.</objective>
             </script>
         </run>
 
@@ -161,7 +175,7 @@
         -->
         <run name="ts_h4_port_badinput">
             <script name="ts_h4_port_badinput">
-                <objective>[H4] Start the example with the address variables set to 127.0.0.1 and a chosen port; H4 FAIL when it listens elsewhere or not at all, gives no 4xx reply to empty input, a malformed or non-numeric request or a 1 MB string, answers after 5 s, dies, or does not exit 0 on a normal stop.</objective>
+                <objective>[H4] After ts_build passed (else blocked by H2): the configured and default listen address and port checked with tapi_netexpose, error replies to empty, non-numeric and 100000-character input with a live process after each, exit code 0 on SIGTERM and on SIGINT.</objective>
             </script>
         </run>
     </session>

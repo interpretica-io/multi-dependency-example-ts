@@ -1,10 +1,12 @@
 # Copyright (C) 2026 midair <midair@localhost>
 
-# The ts_*  tests share tsx_lib.h (the ts_h* tests also tsh_lib.h) and the runner of webdeps/ts_lib.h.
+# The ts_diag, ts_build, ts_h1_listing, ts_h2_build_guess, ts_contract, ts_h3_same_output,
+# ts_robust and ts_h4_port_badinput use only tsd.h and tsd_net.h; the others tsx_lib.h.
 # See package.xml. The group prologue only checks the tools; they are
 # installed by scripts/midair-setup.sh.
 tests = [
     'prologue',
+    'ts_diag',
     'ts_control_known_bad',
     'ts_build',
     'ts_run_guess',
