@@ -4,8 +4,8 @@
  * @brief ts_example: ts_vs_go_parity, each service against its own contract
  *        (settles H6 and H7)
  *
- * Starts service-go and service-ts, polls each port (20 tries, 0.5 s apart),
- * and checks service-ts only against its contract: 200 with value 3.7500 for
+ * Starts service-go and service-ts, polls each port (100 tries, 0.1 s apart),
+ * and checks service-ts only against its contract: 200 with value 3.75 (strtod, 0.0001) for
  * value=1 hops=0, 400 for value=abc, 400 for hops=65 and hops=abc. The Go
  * status and value of each case, and the TS status of the no-query case, are
  * recorded as artifacts only: Go answering 200 on bad input (H7) is a known
@@ -17,6 +17,8 @@
 
 #define TE_TEST_NAME    "ts_example/ts_vs_go_parity"
 
+#include <math.h>
+#include <stdlib.h>
 #include "tsj.h"
 
 static const struct {
@@ -46,7 +48,7 @@ probe(tsapi_mde_session *s, unsigned int port, const char *target,
     return reply->code;
 }
 
-/** Poll the port up to 20 tries, 0.5 s apart; true when it answers. */
+/** Poll the port up to 100 tries, 0.1 s apart; true when it answers. */
 static bool
 poll_port(tsapi_mde_session *s, tsj_svc *svc, unsigned int port)
 {
@@ -54,14 +56,14 @@ poll_port(tsapi_mde_session *s, tsj_svc *svc, unsigned int port)
     int       i;
     bool      up = false;
 
-    for (i = 0; i < 20 && !up; i++)
+    for (i = 0; i < 100 && !up; i++)
     {
         if (!tsj_running(svc))
             break;
         if (probe(s, port, "/ring?value=1&hops=0", &reply) != CONN_FAILED)
             up = true;
         else
-            usleep(500000);
+            usleep(100000);
     }
     te_string_free(&reply.body);
     return up;
@@ -83,15 +85,21 @@ value_of(const char *body, char *out, size_t size)
     return out;
 }
 
-/** Whether a good TS body carries the value 3.7500. */
+/** Whether a good TS body carries a value line that is the number 3.75. */
 static bool
 is_good_value(const char *body)
 {
-    char v[64];
+    char    v[64];
+    char   *end = NULL;
+    double  d;
 
-    return strcmp(value_of(body, v, sizeof(v)), "3.7500") == 0 ||
-           strstr(body, "\"value\":3.7500") != NULL ||
-           strstr(body, "\"value\": 3.7500") != NULL;
+    value_of(body, v, sizeof(v));
+    if (v[0] == '\0')
+        return false;
+    d = strtod(v, &end);
+    if (end == v || *end != '\0')
+        return false;
+    return fabs(d - 3.75) <= 0.0001;
 }
 
 int
@@ -122,6 +130,10 @@ main(int argc, char **argv)
 
     TEST_STEP("Control: the value check rejects planted wrong replies");
     if (!is_good_value("[service-ts] hops=0 x\nvalue=3.7500\n") ||
+        !is_good_value("x\nvalue=3.75\n") ||
+        is_good_value("x\nvalue=3.75abc\n") ||
+        is_good_value("x\nvalue=\n") ||
+        is_good_value("x\nvalue=3.76\n") ||
         is_good_value("[service-ts] hops=0 x\nvalue=6.2400\n") ||
         is_good_value("error: bad\n"))
         TEST_VERDICT("H6 NOT SETTLED: the value check accepted a planted "
@@ -175,7 +187,7 @@ main(int argc, char **argv)
     TEST_STEP("Wait for both ports before the first request");
     if (!poll_port(&session, &ts, tsport))
         TEST_VERDICT("H6 FAILED: service-ts did not open its port within "
-                     "10 s (20 tries)");
+                     "10 s");
     if (!poll_port(&session, &go, TSJ_GO_PORT))
         TEST_VERDICT("H6 NOT SETTLED: service-go did not open port %d "
                      "within 10 s", TSJ_GO_PORT);
@@ -204,8 +216,10 @@ main(int argc, char **argv)
             why = "connection failure";
         else if (ct != reqs[i].want)
             why = "wrong status";
+        else if (ct == 400 && web_str(&rt.body)[0] == '\0')
+            why = "empty error body";
         else if (ct == 200 && !is_good_value(web_str(&rt.body)))
-            why = "value is not 3.7500";
+            why = "value is not 3.75";
         if (why != NULL)
         {
             char item[160];
@@ -222,7 +236,7 @@ main(int argc, char **argv)
     if (diff[0] != '\0')
         TEST_VERDICT("%s", diff);
 
-    TEST_ARTIFACT("H6 service-ts keeps its contract: 200 with 3.7500 for "
+    TEST_ARTIFACT("H6 service-ts keeps its contract: 200 with 3.75 for "
                   "value=1 hops=0, 400 for bad value and bad hops");
     TEST_SUCCESS;
 
