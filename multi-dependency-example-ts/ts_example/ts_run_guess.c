@@ -2,17 +2,18 @@
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
  * @brief ts_example: ts_run_guess, the TypeScript demo prints the same ring
- *        result as the other demos (settles H1)
+ *        result as a reference demo that runs all stages (settles H1)
  *
- * Runs every reference demo that exists (C++, Rust, Python, and Go or C#
- * when the project has them) for "guess 42 3" first and keeps its exit code.
- * A reference that is missing or exits non-zero is dropped and logged. The
- * outputs are normalised (program name and indentation in front of a line,
- * trailing spaces and trailing line ends removed). A reference is "full
- * ring" when it ran hops + 1 stages. The TypeScript output, from
- * ./scripts/run.sh guess 42 3, must equal at least one full-ring reference
- * with the same exit code. A short reference (the C++ demo stops after
- * stage 1) is logged in full and is not read as a TypeScript fault.
+ * First checks that dist/bin/go-demo and dist/bin/cs-demo exist; a missing
+ * one is named and the test fails with "reference not built". Then runs the
+ * TypeScript demo and every reference for "guess 42 3" (the arguments of the
+ * full ring: hops + 1 stages). Program names are removed from the outputs
+ * and only the stage lines and the final value are compared. A reference
+ * with fewer stages than the TypeScript demo, or one that fails, is
+ * inconclusive, never passed. The test passes only when at least one
+ * full-ring reference exists and the TypeScript stage lines and final value
+ * equal it. Full-ring references that disagree with each other are logged
+ * as a finding on the references and do not fail the TypeScript demo.
  *
  * @author midair <midair@localhost>
  */
@@ -40,9 +41,15 @@ static const struct {
     { "rust-demo", "dist/bin/rust-demo",
       "LD_LIBRARY_PATH=dist/lib ./dist/bin/rust-demo" },
     { "python-demo", "python/demo.py", "python3 python/demo.py" },
-    { "go-demo",   "dist/bin/go-demo", "./dist/bin/go-demo" },
-    { "cs-demo",   "dist/bin/cs-demo", "./dist/bin/cs-demo" },
+    { "go-demo",   "dist/bin/go-demo",
+      "LD_LIBRARY_PATH=dist/lib ./dist/bin/go-demo" },
+    { "cs-demo",   "dist/bin/cs-demo",
+      "LD_LIBRARY_PATH=dist/lib ./dist/bin/cs-demo" },
 };
+
+/** The stage lines and the final value of a normalised file. */
+#define CMPF(_in, _out) \
+    "grep -E '^\\[.*\\] +hops=|result *=' " _in " > " _out
 
 /** Print the stage count and final value of a normalised file. */
 static void
@@ -104,65 +111,38 @@ main(int argc, char **argv)
     if (src[0] == '\0' || access(src, X_OK) != 0)
         TEST_FAIL("H1 FAIL: TE_TS_MDE_SRC is [%s], not a directory", src);
 
-    for (i = 0; i < NREF; i++)
+    TEST_STEP("Check that the Go and C# references are built");
     {
-        char path[PATH_MAX];
+        static const char * const must[] = { "go-demo", "cs-demo" };
+        char                      miss[160] = "";
+        size_t                    k;
 
-        TEST_STEP("Run the reference %s first", refs[i].name);
-        snprintf(path, sizeof(path), "%s/%s", src, refs[i].file);
-        code[i] = -1;
-        if (access(path, R_OK) != 0)
+        for (k = 0; k < 2; k++)
         {
-            tsd_say("H1 reference %s dropped: %s is missing", refs[i].name,
-                    refs[i].file);
-            continue;
-        }
-        snprintf(cmd, sizeof(cmd), "%s 42 %d 2>/tmp/ts_rg_%s.err "
-                 "> /tmp/ts_rg_%s.out", refs[i].cmd, HOPS, refs[i].name,
-                 refs[i].name);
-        snprintf(log, sizeof(log), "/tmp/ts_rg_%s.log", refs[i].name);
-        code[i] = tsd_sh(src, cmd, 60, log);
-        snprintf(cmd, sizeof(cmd), NORM("/tmp/ts_rg_%s.out",
-                 "/tmp/ts_rg_%s.norm"), refs[i].name, refs[i].name);
-        tsd_sh("/", cmd, 10, "/tmp/ts_rg_n.log");
-        snprintf(log, sizeof(log), "/tmp/ts_rg_%s.out", refs[i].name);
-        tsd_head(log, a, sizeof(a));
-        if (strcmp(refs[i].name, "cpp-demo") == 0)
-        {
-            char e[301];
+            char path[PATH_MAX];
 
-            snprintf(log, sizeof(log), "/tmp/ts_rg_%s.err", refs[i].name);
-            tsd_head(log, e, sizeof(e));
-            tsd_say("H1 cpp-demo stops early? exit=%d, full stdout [%s], "
-                    "stderr [%s]", code[i], a, e);
-        }
-        if (code[i] != 0)
-        {
-            tsd_say("H1 reference %s dropped: exit code %d", refs[i].name,
-                    code[i]);
-            continue;
-        }
-        kept[i] = true;
-        {
-            int  st;
-
-            snprintf(log, sizeof(log), "/tmp/ts_rg_%s.norm", refs[i].name);
-            facts(log, &st, fin, sizeof(fin));
-            tsd_say("H1 reference %s: exit=0 stages=%d final=%s%s",
-                    refs[i].name, st, fin,
-                    st == HOPS + 1 ? " (full ring)" : " (short: not used)");
-            if (st == HOPS + 1)
-                nfull++;
+            snprintf(path, sizeof(path), "%s/dist/bin/%s", src, must[k]);
+            if (access(path, X_OK) != 0)
+            {
+                tsd_say("H1 reference %s: %s does not exist", must[k], path);
+                strncat(miss, must[k], sizeof(miss) - strlen(miss) - 2);
+                strncat(miss, " ", sizeof(miss) - strlen(miss) - 1);
+            }
             else
-                kept[i] = false;
+                tsd_say("H1 reference %s exists: %s", must[k], path);
         }
+        if (miss[0] != '\0')
+            TEST_FAIL("H1 FAIL: reference not built: %s(dist/bin of the "
+                      "project has no such file; build.sh did not make it)",
+                      miss);
     }
 
     TEST_STEP("Run ./scripts/run.sh guess 42 %d", HOPS);
     snprintf(cmd, sizeof(cmd), "./scripts/run.sh guess 42 %d 2>/tmp/ts_rg_ts.err "
              "> /tmp/ts_rg_ts.out", HOPS);
     ts_code = tsd_sh(src, cmd, 60, "/tmp/ts_rg_ts.log");
-    tsd_sh("/", NORM("/tmp/ts_rg_ts.out", "/tmp/ts_rg_ts.norm"), 10,
+    tsd_sh("/", NORM("/tmp/ts_rg_ts.out", "/tmp/ts_rg_ts.norm") "; "
+           CMPF("/tmp/ts_rg_ts.norm", "/tmp/ts_rg_ts.cmp"), 10,
            "/tmp/ts_rg_n.log");
     facts("/tmp/ts_rg_ts.norm", &ts_stages, tsfin, sizeof(tsfin));
     tsd_say("H1 TypeScript: exit=%d stages=%d final=%s", ts_code, ts_stages,
@@ -172,47 +152,110 @@ main(int argc, char **argv)
         tsd_head("/tmp/ts_rg_ts.err", a, 401);
         tsd_bad("H1", "typescript run", "exit %d, stderr [%s]", ts_code, a);
     }
+    if (ts_stages != HOPS + 1)
+        tsd_bad("H1", "typescript stages", "%d stage line(s), want %d",
+                ts_stages, HOPS + 1);
+
+    for (i = 0; i < NREF; i++)
+    {
+        char path[PATH_MAX];
+        int  st;
+
+        TEST_STEP("Run the reference %s", refs[i].name);
+        snprintf(path, sizeof(path), "%s/%s", src, refs[i].file);
+        code[i] = -1;
+        if (access(path, R_OK) != 0)
+        {
+            tsd_say("H1 reference %s inconclusive: %s is missing",
+                    refs[i].name, refs[i].file);
+            continue;
+        }
+        snprintf(cmd, sizeof(cmd), "%s 42 %d 2>/tmp/ts_rg_%s.err "
+                 "> /tmp/ts_rg_%s.out", refs[i].cmd, HOPS, refs[i].name,
+                 refs[i].name);
+        snprintf(log, sizeof(log), "/tmp/ts_rg_%s.log", refs[i].name);
+        code[i] = tsd_sh(src, cmd, 60, log);
+        snprintf(cmd, sizeof(cmd), NORM("/tmp/ts_rg_%s.out",
+                 "/tmp/ts_rg_%s.norm") "; " CMPF("/tmp/ts_rg_%s.norm",
+                 "/tmp/ts_rg_%s.cmp"), refs[i].name, refs[i].name,
+                 refs[i].name, refs[i].name);
+        tsd_sh("/", cmd, 10, "/tmp/ts_rg_n.log");
+        snprintf(log, sizeof(log), "/tmp/ts_rg_%s.out", refs[i].name);
+        tsd_head(log, a, 401);
+        if (code[i] != 0)
+        {
+            char e[301];
+
+            snprintf(log, sizeof(log), "/tmp/ts_rg_%s.err", refs[i].name);
+            tsd_head(log, e, sizeof(e));
+            tsd_say("H1 reference %s inconclusive: exit %d, stdout [%.200s], "
+                    "stderr [%s]", refs[i].name, code[i], a, e);
+            continue;
+        }
+        snprintf(log, sizeof(log), "/tmp/ts_rg_%s.norm", refs[i].name);
+        facts(log, &st, fin, sizeof(fin));
+        tsd_say("H1 reference %s: stages=%d final=%s%s", refs[i].name, st,
+                fin, st == HOPS + 1 && st >= ts_stages ? " (full ring)" :
+                " (inconclusive: fewer stages than the full ring)");
+        if (st == HOPS + 1 && st >= ts_stages)
+        {
+            kept[i] = true;
+            nfull++;
+        }
+        else
+            tsd_say("H1 reference %s inconclusive, not passed: %d stage(s), "
+                    "stdout [%.300s]", refs[i].name, st, a);
+    }
 
     TEST_STEP("Compare with every full-ring reference");
     for (i = 0; i < NREF; i++)
     {
         if (!kept[i])
             continue;
-        snprintf(cmd, sizeof(cmd), "test -s /tmp/ts_rg_ts.norm && cmp "
-                 "/tmp/ts_rg_ts.norm /tmp/ts_rg_%s.norm", refs[i].name);
-        if (tsd_sh("/", cmd, 10, "/tmp/ts_rg_cmp.log") == 0 &&
-            ts_code == code[i])
+        snprintf(cmd, sizeof(cmd), "test -s /tmp/ts_rg_ts.cmp && cmp "
+                 "/tmp/ts_rg_ts.cmp /tmp/ts_rg_%s.cmp", refs[i].name);
+        if (tsd_sh("/", cmd, 10, "/tmp/ts_rg_cmp.log") == 0)
         {
             nmatch++;
-            tsd_say("H1 TypeScript equals %s (exit codes %d and %d)",
-                    refs[i].name, ts_code, code[i]);
+            tsd_say("H1 TypeScript stage lines and final value equal %s",
+                    refs[i].name);
         }
         else
-            tsd_say("H1 TypeScript differs from %s (exit %d and %d)",
-                    refs[i].name, ts_code, code[i]);
+        {
+            char d[401];
+
+            snprintf(cmd, sizeof(cmd), "diff /tmp/ts_rg_ts.cmp "
+                     "/tmp/ts_rg_%s.cmp | head -n 6", refs[i].name);
+            tsd_sh("/", cmd, 10, "/tmp/ts_rg_diff.log");
+            tsd_head("/tmp/ts_rg_diff.log", d, sizeof(d));
+            tsd_say("H1 TypeScript differs from %s: [%s]", refs[i].name, d);
+        }
         if (firstfull[0] == '\0')
             snprintf(firstfull, sizeof(firstfull), "%s", refs[i].name);
         else
         {
-            snprintf(cmd, sizeof(cmd), "cmp -s /tmp/ts_rg_%s.norm "
-                     "/tmp/ts_rg_%s.norm", firstfull, refs[i].name);
+            snprintf(cmd, sizeof(cmd), "cmp -s /tmp/ts_rg_%s.cmp "
+                     "/tmp/ts_rg_%s.cmp", firstfull, refs[i].name);
             if (tsd_sh("/", cmd, 10, "/tmp/ts_rg_cmp.log") != 0)
-                tsd_say("H1 the references %s and %s disagree with each "
-                        "other", firstfull, refs[i].name);
+                tsd_say("H1 FINDING on the references: %s and %s run the "
+                        "full ring and disagree with each other (the "
+                        "TypeScript demo is not failed for it)", firstfull,
+                        refs[i].name);
         }
     }
     if (nfull == 0)
-        tsd_bad("H1", "reference", "no reference ran the full %d stages; "
-                "the TypeScript output has nothing to be compared with",
-                HOPS + 1);
-    else if (nmatch == 0 && ts_code == 0)
+        tsd_bad("H1", "reference", "inconclusive: no reference ran the full "
+                "%d stages; the TypeScript output has nothing to be "
+                "compared with", HOPS + 1);
+    else if (nmatch == 0)
     {
-        tsd_head("/tmp/ts_rg_ts.norm", a, 601);
+        tsd_head("/tmp/ts_rg_ts.cmp", a, 601);
         tsd_bad("H1", "stdout", "matches none of %d full-ring reference(s); "
                 "TypeScript [%s]", nfull, a);
     }
 
-    TSD_PASS("H1", "the TypeScript output equals a full-ring reference");
+    TSD_PASS("H1", "the TypeScript stage lines and final value equal a "
+             "full-ring reference");
     TEST_SUCCESS;
 
 cleanup:

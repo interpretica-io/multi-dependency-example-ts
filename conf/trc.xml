@@ -1323,7 +1323,7 @@
               <notes/>
               <results>
                 <result value="PASSED">
-                  <verdict>H1 PASS: the TypeScript output equals a full-ring reference</verdict>
+                  <verdict>H1 PASS: the TypeScript stage lines and final value equal a full-ring reference</verdict>
                 </result>
               </results>
             </iter>
@@ -1335,7 +1335,7 @@
               <notes/>
               <results>
                 <result value="PASSED">
-                  <verdict>H2 H3 PASS: no literal address in ts/src; bad input gives a short error and a non-zero exit</verdict>
+                  <verdict>H2 H4 PASS: scan: 0 hits in the TypeScript source; an unset or bad RING_HOST or RING_PORT exits within 2 s with one line and no trace</verdict>
                 </result>
               </results>
             </iter>
@@ -1359,7 +1359,7 @@
               <notes/>
               <results>
                 <result value="PASSED">
-                  <verdict>H3 PASS: a silent or refusing peer gives an answer or a clean exit, no trace and no leftover process</verdict>
+                  <verdict>H3 PASS: a silent, slow or refusing peer gives an answer within 15 s naming a timeout or a refused connection, the peer saw the connection, no trace, no leftover process</verdict>
                 </result>
               </results>
             </iter>

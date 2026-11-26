@@ -59,6 +59,100 @@ echo "midair-setup: installing the toolchains and tools (base, exposure, ts)"
 "${ENSURE}" "${ROOT}" base exposure ts soft ||
     fail "scripts/ensure-web-deps.sh base exposure ts failed (see above)"
 
+# The Go toolchain (go.mod wants 1.21 or newer) and the .NET 9 SDK build the
+# go-demo and cs-demo references. Each is installed here and checked: a
+# missing one fails the setup and is named, it is not left for a test to find.
+go_ok() {
+    local v
+    command -v go >/dev/null 2>&1 || return 1
+    v="$(go version 2>/dev/null | sed -n 's/.* go\([0-9]*\)\.\([0-9]*\).*/\1 \2/p')"
+    [ -n "${v}" ] || return 1
+    set -- ${v}
+    [ "$1" -gt 1 ] || [ "$2" -ge 21 ]
+}
+if ! go_ok; then
+    echo "midair-setup: installing the Go toolchain"
+    ${SUDO} apt-get update >&2 || fail "apt-get update failed"
+    ${SUDO} apt-get install -y golang-go >&2 || echo "midair-setup: apt-get install golang-go failed" >&2
+    if ! go_ok; then
+        case "$(uname -m)" in aarch64|arm64) GOARCH=arm64 ;; *) GOARCH=amd64 ;; esac
+        GOV="$(curl -fsSL 'https://go.dev/VERSION?m=text' 2>/dev/null | head -n 1)"
+        [ -n "${GOV}" ] || GOV=go1.22.5
+        curl -fsSL "https://go.dev/dl/${GOV}.linux-${GOARCH}.tar.gz" -o /tmp/go-dist.tgz &&
+            ${SUDO} rm -rf /usr/local/go &&
+            ${SUDO} tar -C /usr/local -xzf /tmp/go-dist.tgz &&
+            ${SUDO} ln -sf /usr/local/go/bin/go /usr/local/bin/go &&
+            ${SUDO} ln -sf /usr/local/go/bin/gofmt /usr/local/bin/gofmt ||
+            echo "midair-setup: the download of ${GOV} for ${GOARCH} failed" >&2
+        hash -r
+    fi
+fi
+go_ok || fail "no Go toolchain 1.21 or newer (go version: $(go version 2>&1))"
+echo "midair-setup: $(go version)"
+
+have_dotnet9() {
+    command -v dotnet >/dev/null 2>&1 &&
+        dotnet --list-sdks 2>/dev/null | grep -q '^9\.'
+}
+if ! have_dotnet9; then
+    echo "midair-setup: installing the .NET 9 SDK"
+    ${SUDO} apt-get update >&2 || fail "apt-get update failed"
+    if ! ${SUDO} apt-get install -y dotnet-sdk-9.0 >&2; then
+        curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh &&
+            ${SUDO} bash /tmp/dotnet-install.sh --channel 9.0 \
+                --install-dir /usr/share/dotnet >&2 &&
+            ${SUDO} ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet ||
+            echo "midair-setup: dotnet-install.sh failed" >&2
+        hash -r
+    fi
+fi
+have_dotnet9 || fail "no .NET 9 SDK (dotnet --list-sdks: $(dotnet --list-sdks 2>&1 | tr '\n' ' '))"
+echo "midair-setup: dotnet $(dotnet --version)"
+
+# The 22 tools the suite prologue counts, each with its Debian package. Any
+# that is still missing after the install is named and fails the setup.
+declare -A TOOLPKG=(
+    [python3]=python3 [python3-config]=python3-dev [curl]=curl
+    [readelf]=binutils [nm]=binutils [objdump]=binutils [strings]=binutils
+    [ldd]=libc-bin [dpkg]=dpkg [sha256sum]=coreutils [clang]=clang
+    [gcc]=build-essential [tcc]=tcc [make]=build-essential
+    [llvm-symbolizer]=llvm [docker]=docker.io [node]=nodejs [npx]=npm
+    [lsof]=lsof [ss]=iproute2 [tcpdump]=tcpdump
+)
+TOOLPKGS=
+for c in "${!TOOLPKG[@]}"; do
+    command -v "$c" >/dev/null 2>&1 || TOOLPKGS="${TOOLPKGS} ${TOOLPKG[$c]}"
+done
+if [ -n "${TOOLPKGS}" ]; then
+    echo "midair-setup: installing${TOOLPKGS}"
+    ${SUDO} apt-get update >&2 || fail "apt-get update failed"
+    for pk in $(echo ${TOOLPKGS} | tr ' ' '\n' | sort -u); do
+        ${SUDO} apt-get install -y "${pk}" >&2 ||
+            echo "midair-setup: apt-get install ${pk} failed" >&2
+    done
+fi
+# llvm-symbolizer is often installed only with a version suffix.
+if ! command -v llvm-symbolizer >/dev/null 2>&1; then
+    LS="$(ls /usr/bin/llvm-symbolizer-* /usr/lib/llvm-*/bin/llvm-symbolizer 2>/dev/null | head -n 1)"
+    [ -z "${LS}" ] || ${SUDO} ln -sf "${LS}" /usr/local/bin/llvm-symbolizer
+fi
+if ! command -v frida >/dev/null 2>&1; then
+    echo "midair-setup: installing frida-tools with pip"
+    ${SUDO} apt-get install -y python3-pip >&2 || true
+    pip3 install frida-tools >&2 ||
+        pip3 install --break-system-packages frida-tools >&2 ||
+        echo "midair-setup: pip install frida-tools failed" >&2
+    hash -r
+fi
+TOOLMISS=
+for c in python3 python3-config curl readelf nm objdump strings ldd dpkg \
+         sha256sum clang gcc tcc make llvm-symbolizer docker node npx lsof \
+         ss tcpdump frida; do
+    command -v "$c" >/dev/null 2>&1 || TOOLMISS="${TOOLMISS} $c"
+done
+[ -z "${TOOLMISS}" ] || fail "missing after the install:${TOOLMISS}"
+echo "midair-setup: all 22 tools of the suite prologue are present"
+
 # cmp, pkill and timeout are used by the ts_example tests.
 for c in cmp pkill timeout; do
     if ! command -v "$c" >/dev/null 2>&1; then

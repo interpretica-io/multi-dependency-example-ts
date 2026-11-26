@@ -84,11 +84,11 @@
         -->
         <run name="ts_run_guess">
             <script name="ts_run_guess">
-                <objective>[H1] Runs the C++, Rust, Python, Go and C# demos for 42 3 first (missing or non-zero ones are dropped and logged), normalises stdout, and PASSES when run.sh guess 42 3 equals at least one full-ring reference with the same exit code; stage count and final value of each are logged; the C++ stdout and exit code are logged in full.</objective>
+                <objective>[H1] Fails with "reference not built" when dist/bin/go-demo or dist/bin/cs-demo is missing. Runs every reference for 42 3, counts stage lines; a reference with fewer stages than the TypeScript demo is inconclusive. PASSES only when at least one full-ring reference exists and the TypeScript stage lines and final value equal it (program names removed); each reference, its stage count and final value are logged; references that disagree with each other are logged as a finding on the references.</objective>
             </script>
         </run>
 
-        <!-- @page mde-ts_example-ts_bad_input Bad input and hardcoded addresses (H2, H3)
+        <!-- @page mde-ts_example-ts_bad_input Bad input and hardcoded addresses (H2, H4)
               @objective Empty, non-numeric and very long input under a 10 s timeout, and a source scan for literal addresses.
 
               @par Scenario:
@@ -99,11 +99,11 @@
         -->
         <run name="ts_bad_input">
             <script name="ts_bad_input">
-                <objective>[H2 H3] H2: strict scan of ts/src for literal IPv4 addresses and http(s) URLs, loopback included, with a planted-literal control. H3: empty, non-numeric, long text and long digit input each exit non-zero within 10 s with one line and no trace.</objective>
+                <objective>[H2 H4] H2: strict scan of ts/src and web/service-ts/src for literal IPv4 addresses, localhost and http(s):// (comment-only lines excluded and each listed), every hit printed as file:line or "scan: 0 hits", with a planted-literal control. H4: with RING_HOST and RING_PORT unset, one unset, or RING_PORT non-numeric or out of range, the HTTP variant, run.sh guess serve and service-ts exit non-zero within 2 s with one line, no trace, naming the variable; bad demo arguments exit non-zero in 10 s with one line and no trace.</objective>
             </script>
         </run>
 
-        <!-- @page mde-ts_example-ts_slow_peer Slow and refusing peer (H3)
+        <!-- @page mde-ts_example-ts_slow_peer Silent, refused and slow peer (H3)
               @objective A peer that accepts and never replies, and a closed port; the TypeScript service answers or exits with a clear error within 15 s.
 
               @par Scenario:
@@ -113,7 +113,7 @@
         -->
         <run name="ts_slow_peer">
             <script name="ts_slow_peer">
-                <objective>[H3] Silent peer (accepts, never replies) and refused peer (closed port) on a local ephemeral port, 15 s limit per case; FAIL on a hang, a trace, an unhandled rejection, a death by signal or a leftover process.</objective>
+                <objective>[H3] service-ts on its own free port from the OS (RING_HOST, RING_PORT) with a peer on another port from the OS as upstream (SERVICE_TS_UPSTREAM): (a) accepts and never replies, (b) refuses, (c) replies after 20 s. Answer or exit within 15 s naming a timeout ((a), (c)) or a refused connection ((b)); the peer log must show an accepted connection before the answer, else the reply was input rejection and the case fails; FAIL on a trace or a leftover process. The Go timeout gap (main.go:54) is an information line.</objective>
             </script>
         </run>
 

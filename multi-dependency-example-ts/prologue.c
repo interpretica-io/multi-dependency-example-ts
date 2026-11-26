@@ -55,6 +55,7 @@ main(int argc, char **argv)
     bool              session_up = false;
     bool              built = false;
     double            have[TE_ARRAY_LEN(tools)];
+    te_string         missing = TE_STRING_INIT;
     unsigned int      n_have = 0;
     const char       *labels[16];
     double            sizes[16];
@@ -141,6 +142,23 @@ main(int argc, char **argv)
         have[i] = tsapi_mde_have(&session, tools[i]) ? 1 : 0;
         n_have += have[i] > 0;
         RING("%-20s %s", tools[i], have[i] > 0 ? "present" : "absent");
+        if (have[i] <= 0)
+            te_string_append(&missing, "%s ", tools[i]);
+    }
+    if (missing.len > 0)
+        WARN("%u of %zu tools are missing on the agent: %s(scripts/"
+             "midair-setup.sh installs them)",
+             (unsigned)(TE_ARRAY_LEN(tools) - n_have), TE_ARRAY_LEN(tools),
+             missing.ptr);
+    else
+        RING("all %zu tools are present on the agent", TE_ARRAY_LEN(tools));
+    for (i = 0; i < 2; i++)
+    {
+        static const char * const toolchains[] = { "go", "dotnet" };
+
+        RING("%-20s %s", toolchains[i],
+             tsapi_mde_have(&session, toolchains[i]) ? "present" : "ABSENT "
+             "(the go-demo or cs-demo reference cannot be built)");
     }
     tsapi_mde_mi_bars("agent", "Tools present on the agent (1 = present)",
                       TE_MI_MEAS_UNITLESS_VALUE, "present",
@@ -157,6 +175,7 @@ main(int argc, char **argv)
 cleanup:
 
     te_string_free(&path);
+    te_string_free(&missing);
     if (session_up)
         tsapi_mde_session_fini(&session);
 
