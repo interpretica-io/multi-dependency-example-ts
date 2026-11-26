@@ -397,7 +397,40 @@ ts_find_dir(const char *root, char *dir, size_t size)
             return true;
         }
     }
-    return false;
+    /* Not in a place the project has used: any directory up to four levels
+     * down that holds both a package.json and a tsconfig.json. */
+    {
+        char  cmd[1200];
+        FILE *f;
+        char  line[1100];
+        bool  found = false;
+
+        snprintf(cmd, sizeof(cmd), "find '%.500s' -maxdepth 4 -name "
+                 "tsconfig.json -not -path '*/node_modules/*' 2>/dev/null",
+                 root);
+        f = popen(cmd, "r");
+        if (f == NULL)
+            return false;
+        while (!found && fgets(line, sizeof(line), f) != NULL)
+        {
+            char *sl;
+            char  p[1200];
+
+            line[strcspn(line, "\n")] = '\0';
+            sl = strrchr(line, '/');
+            if (sl == NULL)
+                continue;
+            *sl = '\0';
+            snprintf(p, sizeof(p), "%.1000s/package.json", line);
+            if (access(p, R_OK) == 0)
+            {
+                snprintf(dir, size, "%s", line);
+                found = true;
+            }
+        }
+        pclose(f);
+        return found;
+    }
 }
 
 #endif /* MDE_TS_LIB_H */

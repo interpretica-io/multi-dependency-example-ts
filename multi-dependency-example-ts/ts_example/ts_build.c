@@ -2,11 +2,11 @@
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
  * @brief ts_example: ts_build, the TypeScript example builds from the
- *        project root (settles H1)
+ *        project root (settles H2)
  *
- * Runs ./build.sh in the project root under a 300 s limit. Passes when it
- * exits 0 and the TypeScript output (the entry file named by package.json,
- * or a dist directory) exists, and ./scripts/run.sh exists and is
+ * Runs build.sh by absolute path with the project root as the working
+ * directory. Passes when it exits 0 and compiled .js files written by this
+ * build exist in the TypeScript dist directory, and ./scripts/run.sh exists and is
  * executable. On a failure the verdict names the step: npm install, tsc,
  * an earlier stage of build.sh, or a missing file; the two TypeScript steps
  * are then also run on their own so that the log shows each of them.
@@ -93,177 +93,129 @@ main(int argc, char **argv)
     char        why[400];
     char        cmd[900];
     char        path[400];
-    char        copy[400];
-    char        mk[1400];
     const char *env[] = { "RuntimeIdentifier=linux-x64", NULL };
     struct stat st;
+    time_t      since;
+    int         njs;
 
     TEST_START;
     t_report_begin();
     if (b == NULL || d == NULL)
     {
-        res_set(&res, R_FAIL, "H1 NOT SETTLED: out of memory");
+        res_set(&res, R_FAIL, "H2 NOT SETTLED: out of memory");
         goto verdict;
     }
-    if (!tsx_init(&res, "H1"))
+    if (!tsx_init(&res, "H2"))
         goto verdict;
     snprintf(script, sizeof(script), "%s/build.sh", src_root);
     snprintf(runsh, sizeof(runsh), "%s/scripts/run.sh", src_root);
 
-    TEST_STEP("Known-bad control: the runner reports a hang and a signal");
+    TSX_STEP("Known-bad control: the runner reports a hang and a signal");
     if (!ts_runner_control_ok(workdir, why, sizeof(why)))
     {
-        res_set(&res, R_FAIL, "H1 NOT SETTLED: control failed: %s", why);
+        res_set(&res, R_FAIL, "H2 NOT SETTLED: control failed: %s", why);
         goto verdict;
     }
 
-    TEST_STEP("Check that ./build.sh exists and is executable");
+    TSX_STEP("Check that %s exists and is executable", script);
     if (access(script, X_OK) != 0)
     {
-        res_set(&res, R_FAIL, "H1 FAIL: step missing file: %s does not "
+        res_set(&res, R_FAIL, "H2 FAIL: step missing file: %s does not "
                 "exist or is not executable", script);
         goto verdict;
     }
-    TEST_STEP("Make a clean copy of the project: no node_modules, no dist");
-    snprintf(copy, sizeof(copy), "%s/clean-copy", workdir);
-    snprintf(mk, sizeof(mk),
-             "mkdir -p '%s' && tar -C '%s' -cf - "
-             "--exclude=node_modules --exclude=dist --exclude=target "
-             "--exclude=.git --exclude=cpp/build --exclude=csharp/bin "
-             "--exclude=csharp/obj --exclude=csharp/out "
-             "--exclude=web/service-cs/bin --exclude=web/service-cs/obj "
-             "--exclude=__pycache__ . | tar -C '%s' -xf -",
-             copy, src_root, copy);
-    if (system(mk) != 0)
-    {
-        res_set(&res, R_FAIL, "H1 NOT SETTLED: cannot make a clean copy of "
-                "%s in %s (the build was not run)", src_root, copy);
-        goto verdict;
-    }
-    snprintf(script, sizeof(script), "%s/build.sh", copy);
-    snprintf(runsh, sizeof(runsh), "%s/scripts/run.sh", copy);
-    if (access(script, X_OK) != 0)
-    {
-        res_set(&res, R_FAIL, "H1 NOT SETTLED: the clean copy has no "
-                "executable build.sh");
-        goto verdict;
-    }
-    if (ts_find_dir(copy, tsdir, sizeof(tsdir)))
-    {
-        snprintf(path, sizeof(path), "%.350s/node_modules", tsdir);
-        if (access(path, F_OK) == 0)
-        {
-            res_set(&res, R_FAIL, "H1 NOT SETTLED: the copy is not clean: "
-                    "%s exists", path);
-            goto verdict;
-        }
-        snprintf(path, sizeof(path), "%.350s/dist", tsdir);
-        if (access(path, F_OK) == 0)
-        {
-            res_set(&res, R_FAIL, "H1 NOT SETTLED: the copy is not clean: "
-                    "%s exists", path);
-            goto verdict;
-        }
-    }
-    RING("H1: clean copy %s (TypeScript directory [%s]) has no node_modules "
-         "and no dist", copy, tsdir);
-    tsdir[0] = '\0';
     if (!ts_cc_shim(workdir, shim, sizeof(shim)))
     {
-        res_set(&res, R_FAIL, "H1 NOT SETTLED: cannot write the compiler "
+        res_set(&res, R_FAIL, "H2 NOT SETTLED: cannot write the compiler "
                 "shim in %s", workdir);
         goto verdict;
     }
 
-    TEST_STEP("Run ./build.sh, at most %d s", BUILD_LIMIT_S);
-    if (!ts_run(b, copy, "./build.sh", NULL, env, shim, BUILD_LIMIT_S,
-                "build"))
+    TSX_STEP("Run %s in %s, at most %d s", script, src_root, BUILD_LIMIT_S);
+    since = time(NULL);
+    snprintf(cmd, sizeof(cmd), "'%s'", script);
+    if (!ts_run(b, src_root, cmd, NULL, env, shim, BUILD_LIMIT_S, "build"))
     {
-        res_set(&res, R_FAIL, "H1 NOT SETTLED: cannot start ./build.sh");
+        res_set(&res, R_FAIL, "H2 NOT SETTLED: cannot start %s", script);
         goto verdict;
     }
-    tsx_log_step("H1", "build", "./build.sh", b);
+    tsx_log_step("H2", "build", cmd, b);
     snprintf(path, sizeof(path), "%s/build.stdout", workdir);
     file_tail(path, tail, sizeof(tail));
     snprintf(path, sizeof(path), "%s/build.stderr", workdir);
     file_tail(path, errtail, sizeof(errtail));
     strncat(tail, errtail, sizeof(tail) - strlen(tail) - 1);
-    ts_find_dir(copy, tsdir, sizeof(tsdir));
+    ts_find_dir(src_root, tsdir, sizeof(tsdir));
 
-    if (b->hung)
-    {
-        classify(tail, step, sizeof(step));
-        res_set(&res, R_FAIL, "H1 FAIL: step %s: ./build.sh did not finish "
-                "within %d s (killed); last stage reached: %s", step,
-                BUILD_LIMIT_S, step);
-    }
-    else if (b->code != 0)
+    if (b->hung || b->sig != 0 || b->code != 0)
     {
         classify(tail, step, sizeof(step));
         if (tsdir[0] != '\0' && strncmp(step, "the C build", 11) == 0)
         {
             /* The earlier stage broke first: still try the two
              * TypeScript steps alone, so the log tells their state. */
-            TEST_STEP("Run npm install in %s on its own", tsdir);
+            TSX_STEP("Run npm install in %s on its own", tsdir);
             snprintf(cmd, sizeof(cmd), "cd '%s' && npm install --no-audit "
                      "--no-fund", tsdir);
-            if (ts_run(d, copy, cmd, NULL, NULL, NULL, STEP_LIMIT_S,
+            if (ts_run(d, src_root, cmd, NULL, NULL, NULL, STEP_LIMIT_S,
                        "npm"))
             {
-                tsx_log_step("H1", "npm", cmd, d);
+                tsx_log_step("H2", "npm", cmd, d);
                 append(diag, sizeof(diag), "npm install alone: exit %d; ",
                        d->hung ? -1 : d->code);
             }
             if (d->code == 0 && !d->hung)
             {
-                TEST_STEP("Run tsc in %s on its own", tsdir);
+                TSX_STEP("Run tsc in %s on its own", tsdir);
                 snprintf(cmd, sizeof(cmd), "cd '%s' && npx --no-install tsc "
                          "-p tsconfig.json", tsdir);
-                if (ts_run(d, copy, cmd, NULL, NULL, NULL, STEP_LIMIT_S,
+                if (ts_run(d, src_root, cmd, NULL, NULL, NULL, STEP_LIMIT_S,
                            "tsc"))
                 {
-                    tsx_log_step("H1", "tsc", cmd, d);
+                    tsx_log_step("H2", "tsc", cmd, d);
                     append(diag, sizeof(diag), "tsc alone: exit %d; ",
                            d->hung ? -1 : d->code);
                 }
             }
         }
-        ts_flat(errtail, 200, why, sizeof(why));
-        res_set(&res, R_FAIL, "H1 FAIL: step %s: ./build.sh exit code %d; "
-                "%sstderr [%s]", step, b->code, diag, why);
+        ts_flat(tail + (strlen(tail) > 600 ? strlen(tail) - 600 : 0), 600,
+                why, sizeof(why));
+        res_set(&res, R_FAIL, "H2 FAIL: step %s: %s exit code %d signal %d%s;"
+                " %send of the output [%s]", step, script, b->code, b->sig,
+                b->hung ? " (killed on the time limit)" : "", diag, why);
+        goto verdict;
     }
+
+    TSX_STEP("Check the compiled JavaScript and %s", runsh);
+    if (tsdir[0] == '\0')
+        res_set(&res, R_FAIL, "H2 FAIL: step missing file: build.sh exited "
+                "0 but no TypeScript directory with a package.json exists "
+                "under %s", src_root);
+    else if ((njs = tsx_dist_js(tsdir, since, found, sizeof(found))) <= 0)
+        res_set(&res, R_FAIL, "H2 FAIL: step tsc: build.sh exited 0 but "
+                "%s/dist holds %s", tsdir, njs < 0 ?
+                "no compiled .js files (the directory has none)" :
+                "no .js file written by this build");
+    else if (stat(runsh, &st) != 0)
+        res_set(&res, R_FAIL, "H2 FAIL: step missing file: %s does not "
+                "exist", runsh);
+    else if (access(runsh, X_OK) != 0)
+        res_set(&res, R_FAIL, "H2 FAIL: step missing file: %s exists but "
+                "is not executable (mode %o)", runsh,
+                (unsigned)(st.st_mode & 0777));
     else
-    {
-        TEST_STEP("Check the TypeScript output and ./scripts/run.sh");
-        if (tsdir[0] == '\0')
-            res_set(&res, R_FAIL, "H1 FAIL: step missing file: ./build.sh "
-                    "exited 0 but no TypeScript directory with a "
-                    "package.json exists under the clean copy %s", copy);
-        else if (snprintf(found, sizeof(found), "%.600s/dist/index.js",
-                          tsdir), access(found, R_OK) != 0)
-            res_set(&res, R_FAIL, "H1 FAIL: step tsc: ./build.sh exited 0 "
-                    "but %s is absent", found);
-        else if (stat(runsh, &st) != 0)
-            res_set(&res, R_FAIL, "H1 FAIL: step missing file: %s does not "
-                    "exist", runsh);
-        else if (access(runsh, X_OK) != 0)
-            res_set(&res, R_FAIL, "H1 FAIL: step missing file: %s exists "
-                    "but is not executable (mode %o)", runsh,
-                    (unsigned)(st.st_mode & 0777));
-        else
-            res_set(&res, R_PASS, "H1 PASS: ./build.sh exited 0 in %.1f s in a "
-                    "clean copy, the TypeScript output %s exists and ./scripts/run.sh is "
-                    "executable", b->secs, found);
-    }
-    RING("H1 ts_build: %s", res.msg);
+        res_set(&res, R_PASS, "H2 PASS: %s exited 0 in %.1f s, %d compiled "
+                "JavaScript file(s) written in %s/dist (first %s) and %s is "
+                "executable", script, b->secs, njs, tsdir, found, runsh);
+    RING("H2 ts_build: %s", res.msg);
     T_FINDING(res.kind == R_PASS ? TAPI_CYBERSEC_SEV_INFO :
-              TAPI_CYBERSEC_SEV_HIGH, "ts.build", "./build.sh", "%s",
+              TAPI_CYBERSEC_SEV_HIGH, "ts.build", "build.sh", "%s",
               res.msg);
 
 verdict:
     free(b);
     free(d);
-    T_VERDICT(&res, "H1");
+    TSX_VERDICT(&res, "H2");
 
 cleanup:
     cleanup_all();

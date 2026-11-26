@@ -79,7 +79,10 @@ main(int argc, char **argv)
     char              tsdir[700];
     char              index[800];
     char              why[400];
+    char              cmd[400] = "";
     char              bd[1000] = "";
+    char             *big = NULL;
+    int               stop_st = 0;
     unsigned          ports[TSH_MAX_PORTS];
     unsigned          total = 0;
     unsigned          port;
@@ -95,14 +98,14 @@ main(int argc, char **argv)
     if (!tsx_init(&res, "H4"))
         goto verdict;
 
-    TEST_STEP("Known-bad control: the reply classifier");
+    TSX_STEP("Known-bad control: the reply classifier");
     if (!tsh_reply_control_ok(why, sizeof(why)))
     {
         res_set(&res, R_FAIL, "H4 NOT SETTLED: control failed: %s", why);
         goto verdict;
     }
 
-    TEST_STEP("Open a tapi_netexpose session on the agent");
+    TSX_STEP("Open a tapi_netexpose session on the agent");
     if (tsapi_mde_session_init(&session, "ts_h4_port_badinput") != 0)
     {
         res_set(&res, R_FAIL, "H4 NOT SETTLED: no tapi_netexpose session "
@@ -111,7 +114,7 @@ main(int argc, char **argv)
     }
     have_session = true;
 
-    TEST_STEP("Known-bad control: tapi_netexpose names the port of a "
+    TSX_STEP("Known-bad control: tapi_netexpose names the port of a "
               "planted listener and refuses a port it does not use");
     if (!ts_peer_start(&pa, workdir))
     {
@@ -137,17 +140,17 @@ main(int argc, char **argv)
     ts_peer_stop(&pa);
     pa_up = false;
 
-    TEST_STEP("Check that the TypeScript build exists");
+    TSX_STEP("Check that the TypeScript build exists");
     tsx_index_js(src_root, tsdir, sizeof(tsdir), index, sizeof(index));
     if (access(index, R_OK) != 0)
     {
-        res_set(&res, R_FAIL, "H4 NOT SETTLED: H1 build missing: %s does "
+        res_set(&res, R_FAIL, "H4 NOT SETTLED: H2 build missing: %s does "
                 "not exist, so there is no TypeScript example to start",
                 index);
         goto verdict;
     }
 
-    TEST_STEP("Start the example with another port in its configuration");
+    TSX_STEP("Start the example with another port in its configuration");
     port = tsh_free_port();
     if (port == 0)
     {
@@ -166,13 +169,17 @@ main(int argc, char **argv)
         char ep[100];
         int  z = open("/dev/null", O_RDWR);
         char errp[200];
+        char outp[200];
         int  e;
+        int  o;
 
         setpgid(0, 0);
         snprintf(errp, sizeof(errp), "%s/h4.stderr", workdir);
+        snprintf(outp, sizeof(outp), "%s/h4.stdout", workdir);
         e = open(errp, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+        o = open(outp, O_WRONLY | O_CREAT | O_TRUNC, 0600);
         dup2(z, 0);
-        dup2(z, 1);
+        dup2(o, 1);
         dup2(e, 2);
         snprintf(val, sizeof(val), "%u", port);
         snprintf(ep, sizeof(ep), "127.0.0.1:%u", port);
@@ -180,14 +187,22 @@ main(int argc, char **argv)
         setenv("GUESS_PORT", val, 1);
         setenv("LISTEN_PORT", val, 1);
         setenv("GUESS_LISTEN", ep, 1);
+        setenv("GUESS_ADDR", "127.0.0.1", 1);
+        setenv("GUESS_ADDRESS", "127.0.0.1", 1);
+        setenv("GUESS_HOST", "127.0.0.1", 1);
+        setenv("LISTEN_ADDR", "127.0.0.1", 1);
+        setenv("LISTEN_HOST", "127.0.0.1", 1);
+        setenv("HOST", "127.0.0.1", 1);
         execlp("node", "node", index, (char *)NULL);
         _exit(127);
     }
     setpgid(pid, pid);
-    RING("H4: started node %s with the port %u in PORT, GUESS_PORT, "
-         "LISTEN_PORT and GUESS_LISTEN (pid %d)", index, port, (int)pid);
+    snprintf(cmd, sizeof(cmd), "node '%s' (address variables = 127.0.0.1, "
+             "port variables = %u)", index, port);
+    RING("H4: started %s as pid %d, working directory %s", cmd, (int)pid,
+         src_root);
 
-    TEST_STEP("tapi_netexpose: it listens on port %u and on no other", port);
+    TSX_STEP("tapi_netexpose: it listens on port %u and on no other", port);
     end = now_s() + START_S;
     n = 0;
     while (now_s() < end && tsh_alive(pid))
@@ -229,7 +244,7 @@ main(int argc, char **argv)
     if (res.kind != R_PASS)
         goto verdict;
 
-    TEST_STEP("Send an empty and malformed requests; each within %.0f s",
+    TSX_STEP("Send an empty and malformed requests; each within %.0f s",
               ANSWER_S);
     for (i = 0; i < sizeof(bads) / sizeof(bads[0]); i++)
     {
@@ -258,24 +273,141 @@ main(int argc, char **argv)
             break;
         }
     }
+    if (bd[0] == '\0' && tsh_alive(pid))
+    {
+        /* A non-numeric guess and a 1 MB string, each on its own. */
+        static const char * const nn[] = {
+            "GET /ring?value=abc&hops=3 HTTP/1.1\r\nHost: x\r\n"
+            "Connection: close\r\n\r\n",
+            "GET /ring?value=1&hops=abc HTTP/1.1\r\nHost: x\r\n"
+            "Connection: close\r\n\r\n",
+        };
+        const size_t big_n = 1024 * 1024;
+        size_t       k;
+
+        TSX_STEP("Send a non-numeric guess and a 1 MB string");
+        for (k = 0; k < sizeof(nn) / sizeof(nn[0]); k++)
+        {
+            tsh_xchg_t x;
+            char       first[100];
+
+            tsh_xchg(port, nn[k], strlen(nn[k]), true, ANSWER_S, &x);
+            ts_flat(x.data, 60, first, sizeof(first));
+            RING("H4: non-numeric guess %zu: connected %d, reply [%s], "
+                 "alive %d", k, x.connected, first, (int)tsh_alive(pid));
+            if (!x.connected || !tsh_is_error_reply(x.data))
+                append(bd, sizeof(bd), "non-numeric guess %zu: no 4xx reply "
+                       "[%s]; ", k, first);
+        }
+        big = malloc(big_n + 128);
+        if (big == NULL)
+            append(bd, sizeof(bd), "cannot allocate the 1 MB string; ");
+        else
+        {
+            static const char * const shape[2] = {
+                "GET /ring?value=", "POST /ring HTTP/1.1\r\nHost: x\r\n"
+                "Connection: close\r\nContent-Length: 1048576\r\n\r\n",
+            };
+            int   v;
+
+            for (v = 0; v < 2; v++)
+            {
+                tsh_xchg_t x;
+                char       first[100];
+                size_t     n0 = (size_t)snprintf(big, 100, "%s", shape[v]);
+                size_t     total_len;
+
+                memset(big + n0, '9', big_n);
+                total_len = n0 + big_n;
+                if (v == 0)
+                {
+                    static const char tail_s[] = " HTTP/1.1\r\nHost: x\r\n"
+                        "Connection: close\r\n\r\n";
+
+                    memcpy(big + total_len, tail_s, sizeof(tail_s) - 1);
+                    total_len += sizeof(tail_s) - 1;
+                }
+                tsh_xchg(port, big, total_len, true, ANSWER_S * 2, &x);
+                ts_flat(x.data, 60, first, sizeof(first));
+                RING("H4: 1 MB string (%s): connected %d, sent %zu byte(s), "
+                     "reply [%s], reset %d, alive %d", v == 0 ? "in the "
+                     "request line" : "as the body", x.connected, total_len,
+                     first, x.reset, (int)tsh_alive(pid));
+                if (!x.connected || !tsh_is_error_reply(x.data))
+                    append(bd, sizeof(bd), "1 MB string (%s): no 4xx reply "
+                           "[%s]%s; ", v == 0 ? "request line" : "body",
+                           first, x.reset ? ", connection reset" : "");
+            }
+        }
+        if (!tsh_alive(pid))
+            append(bd, sizeof(bd), "the process died after the non-numeric "
+                   "or the 1 MB input; ");
+    }
     if (bd[0] != '\0')
         res_set(&res, R_FAIL, "H4 FAIL: bad input: %s", bd);
     else if (!port_accepts(port))
         res_set(&res, R_FAIL, "H4 FAIL: the process is alive but port %u "
                 "no longer accepts after the bad input", port);
     else
-        res_set(&res, R_PASS, "H4 PASS: the example listens only on the "
-                "configured port %u (tapi_netexpose) and answered %zu empty "
-                "or malformed requests with a normal error within %.0f s "
-                "each, still alive", port, sizeof(bads) / sizeof(bads[0]),
-                ANSWER_S);
+    {
+        double t0;
+        pid_t  w = 0;
+
+        TSX_STEP("Stop the example normally (SIGTERM) and read its exit "
+                 "code");
+        kill(pid, SIGTERM);
+        t0 = now_s();
+        while (now_s() - t0 < 10.0 &&
+               (w = waitpid(pid, &stop_st, WNOHANG)) == 0)
+            usleep(50000);
+        if (w == pid)
+            pid = 0;
+        {
+            char op[200];
+            char ep[200];
+
+            snprintf(op, sizeof(op), "%s/h4.stdout", workdir);
+            snprintf(ep, sizeof(ep), "%s/h4.stderr", workdir);
+            tsx_note_proc("H4", "h4", cmd, w == pid || pid == 0 ?
+                          (WIFEXITED(stop_st) ? WEXITSTATUS(stop_st) : -1) :
+                          -1, pid == 0 && WIFSIGNALED(stop_st) ?
+                          WTERMSIG(stop_st) : 0, op, ep);
+        }
+        if (pid != 0)
+            res_set(&res, R_FAIL, "H4 FAIL: step stop: the example did not "
+                    "exit within 10 s of SIGTERM");
+        else if (!WIFEXITED(stop_st) || WEXITSTATUS(stop_st) != 0)
+            res_set(&res, R_FAIL, "H4 FAIL: step stop: the example did not "
+                    "exit with code 0 on a normal stop (%s %d)",
+                    WIFSIGNALED(stop_st) ? "killed by signal" : "exit code",
+                    WIFSIGNALED(stop_st) ? WTERMSIG(stop_st) :
+                    WEXITSTATUS(stop_st));
+        else
+            res_set(&res, R_PASS, "H4 PASS: the example listens only on the "
+                    "configured port %u (tapi_netexpose), answered %zu "
+                    "empty or malformed requests, a non-numeric guess and a "
+                    "1 MB string with a 4xx error within %.0f s each, "
+                    "stayed alive, and exited 0 on a normal stop", port,
+                    sizeof(bads) / sizeof(bads[0]), ANSWER_S);
+    }
     T_FINDING(res.kind == R_PASS ? TAPI_CYBERSEC_SEV_INFO :
               TAPI_CYBERSEC_SEV_HIGH, "ts.bad-input", "empty and malformed "
               "requests", "%s", res.msg);
 
 verdict:
+    free(big);
     if (pid > 0)
     {
+        char op[200];
+        char ep[200];
+
+        if (res.kind != R_PASS && workdir[0] != '\0')
+        {
+            snprintf(op, sizeof(op), "%s/h4.stdout", workdir);
+            snprintf(ep, sizeof(ep), "%s/h4.stderr", workdir);
+            tsx_note_proc("H4", "h4", cmd[0] != '\0' ? cmd : "node", -1, 0,
+                          op, ep);
+        }
         kill(-pid, SIGKILL);
         kill(pid, SIGKILL);
         waitpid(pid, NULL, 0);
@@ -284,7 +416,7 @@ verdict:
         ts_peer_stop(&pa);
     if (have_session)
         tsapi_mde_session_fini(&session);
-    T_VERDICT(&res, "H4");
+    TSX_VERDICT(&res, "H4");
 
 cleanup:
     cleanup_all();

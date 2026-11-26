@@ -21,6 +21,30 @@ if [ "$(id -u)" != 0 ] && ! command -v sudo >/dev/null 2>&1; then
     fail "not root and no sudo: cannot install packages"
 fi
 
+# node, npm and tsc come first and on their own: the TypeScript tests need
+# them even when a later optional install (.NET, for instance) fails.
+export DEBIAN_FRONTEND=noninteractive
+SUDO=
+[ "$(id -u)" = 0 ] || SUDO="sudo -n"
+if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+    echo "midair-setup: installing nodejs and npm"
+    ${SUDO} apt-get update >&2 || fail "apt-get update failed"
+    ${SUDO} apt-get install -y nodejs npm >&2 ||
+        fail "apt-get install nodejs npm failed"
+fi
+command -v node >/dev/null 2>&1 || fail "node is missing after the install"
+command -v npm >/dev/null 2>&1 || fail "npm is missing after the install"
+if ! command -v tsc >/dev/null 2>&1; then
+    echo "midair-setup: installing typescript with npm"
+    ${SUDO} npm install -g typescript >&2 ||
+        fail "npm install -g typescript failed"
+    hash -r
+fi
+command -v tsc >/dev/null 2>&1 || fail "tsc is missing after npm install -g typescript"
+echo "midair-setup: node -v: $(node -v)"
+echo "midair-setup: npm -v: $(npm -v)"
+echo "midair-setup: tsc -v: $(tsc -v)"
+
 # A directory the installer can use as the example root even when the
 # project checkout is not there (it only reads it to decide on a build).
 ROOT="${MIDAIR_PROJECT_DIR:-}"
@@ -38,5 +62,13 @@ echo "midair-setup: installing the toolchains and tools (base, exposure, ts)"
 for c in node npm gcc g++ make go cargo python3 curl tar; do
     command -v "$c" >/dev/null 2>&1 || fail "$c is still missing after the install"
 done
-echo "midair-setup: node $(node --version), npm $(npm --version), $(go version 2>&1)"
+# Report the three tools again after the rest of the install, and fail when
+# any of them has gone missing or does not run.
+for c in node npm tsc; do
+    command -v "$c" >/dev/null 2>&1 || fail "$c is missing at the end of the setup"
+done
+echo "midair-setup: node -v: $(node -v)" || fail "node -v failed"
+echo "midair-setup: npm -v: $(npm -v)" || fail "npm -v failed"
+echo "midair-setup: tsc -v: $(tsc -v)" || fail "tsc -v failed"
+echo "midair-setup: $(go version 2>&1)"
 echo "midair-setup: done"

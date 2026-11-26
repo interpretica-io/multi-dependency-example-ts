@@ -3,7 +3,7 @@
 /** @file
  * @brief ts_example: ts_robust, the TypeScript example reads its endpoint
  *        from GUESS_ENDPOINT, has no hardcoded URL and ends in time against
- *        a silent peer (settles H3)
+ *        a silent peer (settles H4)
  *
  * Three checks, each with its own message in the verdict:
  *  (a) the TypeScript source under src/ is scanned, comments removed, for a
@@ -281,26 +281,26 @@ main(int argc, char **argv)
     pa.lfd = pb.lfd = -1;
     if (r == NULL)
     {
-        res_set(&res, R_FAIL, "H3 NOT SETTLED: out of memory");
+        res_set(&res, R_FAIL, "H4 NOT SETTLED: out of memory");
         goto verdict;
     }
-    if (!tsx_init(&res, "H3"))
+    if (!tsx_init(&res, "H4"))
         goto verdict;
     built = false;
     tsx_index_js(src_root, tsdir, sizeof(tsdir), index, sizeof(index));
     built = access(index, R_OK) == 0;
 
-    TEST_STEP("Known-bad controls: trace detector and runner");
+    TSX_STEP("Known-bad controls: trace detector and runner");
     why[0] = '\0';
     if (!ts_trace_control_ok(why, sizeof(why)) ||
         !ts_runner_control_ok(workdir, why, sizeof(why)))
     {
-        res_set(&res, R_FAIL, "H3 NOT SETTLED: control failed: %s", why);
+        res_set(&res, R_FAIL, "H4 NOT SETTLED: control failed: %s", why);
         goto verdict;
     }
 
     /* ---- (a) literal endpoints in the source ---- */
-    TEST_STEP("(a) Scan the TypeScript source under src/ outside comments");
+    TSX_STEP("(a) Scan the TypeScript source under src/ outside comments");
     {
         static const char ctl[] =
             "// http://in-a-comment.example/ and 10.9.9.9\n"
@@ -318,7 +318,7 @@ main(int argc, char **argv)
             strstr(ch, "control.ts:1") != NULL ||
             strstr(ch, "control.ts:2") != NULL)
         {
-            res_set(&res, R_FAIL, "H3 NOT SETTLED: control failed: the "
+            res_set(&res, R_FAIL, "H4 NOT SETTLED: control failed: the "
                     "source scan found %d hit(s) [%s] in a planted file "
                     "(expected the URL and the IP outside comments only)",
                     cf, ch);
@@ -346,56 +346,56 @@ main(int argc, char **argv)
                  "literal http://, https:// or IP address outside comments",
                  files, srcdir);
     }
-    RING("H3 %s", msg_a);
+    RING("H4 %s", msg_a);
     T_FINDING(ok_a ? TAPI_CYBERSEC_SEV_INFO : TAPI_CYBERSEC_SEV_MEDIUM,
               "ts.hardcoded-endpoint", "typescript source", "%s", msg_a);
 
     if (!built)
     {
-        snprintf(msg_b, sizeof(msg_b), "H1 build missing: %s does not "
+        snprintf(msg_b, sizeof(msg_b), "H2 build missing: %s does not "
                  "exist, so (b), (c) and (d) were not run", index);
         res_set(&res, R_FAIL, "%s", msg_b);
         goto verdict;
     }
 
-    TEST_STEP("Start two local listeners: the chosen port and a decoy");
+    TSX_STEP("Start two local listeners: the chosen port and a decoy");
     if (!ts_peer_start(&pa, workdir))
     {
-        res_set(&res, R_FAIL, "H3 NOT SETTLED: cannot start the listener");
+        res_set(&res, R_FAIL, "H4 NOT SETTLED: cannot start the listener");
         goto verdict;
     }
     pa_up = true;
     snprintf(why, sizeof(why), "%s/peer-b", workdir);
     if (mkdir(why, 0700) != 0 || !ts_peer_start(&pb, why))
     {
-        res_set(&res, R_FAIL, "H3 NOT SETTLED: cannot start the decoy "
+        res_set(&res, R_FAIL, "H4 NOT SETTLED: cannot start the decoy "
                 "listener");
         goto verdict;
     }
     pb_up = true;
-    RING("H3: chosen port %u, decoy port %u", pa.port, pb.port);
+    RING("H4: chosen port %u, decoy port %u", pa.port, pb.port);
 
     /* ---- (b) the example uses the port from GUESS_ENDPOINT ---- */
-    TEST_STEP("(b) Known-bad control: a counted listener sees a connection");
+    TSX_STEP("(b) Known-bad control: a counted listener sees a connection");
     {
         int before = ts_peer_count(&pa);
 
         if (!port_accepts(pa.port))
         {
-            res_set(&res, R_FAIL, "H3 NOT SETTLED: control failed: the "
+            res_set(&res, R_FAIL, "H4 NOT SETTLED: control failed: the "
                     "listener does not accept");
             goto verdict;
         }
         usleep(400000);
         if (ts_peer_count(&pa) <= before)
         {
-            res_set(&res, R_FAIL, "H3 NOT SETTLED: control failed: a "
+            res_set(&res, R_FAIL, "H4 NOT SETTLED: control failed: a "
                     "planted connection to port %u was not counted",
                     pa.port);
             goto verdict;
         }
     }
-    TEST_STEP("(b) Run the example with GUESS_ENDPOINT on the chosen port");
+    TSX_STEP("(b) Run the example with GUESS_ENDPOINT on the chosen port");
     {
         char        ep[120];
         char        cmd[1024];
@@ -411,11 +411,11 @@ main(int argc, char **argv)
         if (!ts_run(r, src_root, cmd, NULL, env, NULL,
                     LIMIT_S + 5, "endpoint"))
         {
-            res_set(&res, R_FAIL, "H3 NOT SETTLED: cannot start the "
+            res_set(&res, R_FAIL, "H4 NOT SETTLED: cannot start the "
                     "example");
             goto verdict;
         }
-        tsx_log_step("H3", "endpoint", cmd, r);
+        tsx_log_step("H4", "endpoint", cmd, r);
         usleep(300000);
         da = ts_peer_count(&pa) - a0;
         db = ts_peer_count(&pb) - b0;
@@ -436,13 +436,13 @@ main(int argc, char **argv)
                      "the chosen port %u (%d connection(s)) and not to "
                      "another one (decoy port %u: 0)", pa.port, da, pb.port);
         }
-        RING("H3 %s", msg_b);
+        RING("H4 %s", msg_b);
         T_FINDING(ok_b ? TAPI_CYBERSEC_SEV_INFO : TAPI_CYBERSEC_SEV_HIGH,
                   "ts.endpoint-variable", "GUESS_ENDPOINT", "%s", msg_b);
     }
 
     /* ---- (c) a peer that never answers ---- */
-    TEST_STEP("(c) Run the example against a listener that never answers");
+    TSX_STEP("(c) Run the example against a listener that never answers");
     {
         char        ep[120];
         char        cmd[1024];
@@ -456,13 +456,13 @@ main(int argc, char **argv)
         if (!ts_run(r, src_root, cmd, NULL, env, NULL, LIMIT_S + 5,
                     "silent"))
         {
-            res_set(&res, R_FAIL, "H3 NOT SETTLED: cannot start the "
+            res_set(&res, R_FAIL, "H4 NOT SETTLED: cannot start the "
                     "example against the silent peer");
             goto verdict;
         }
-        tsx_log_step("H3", "silent", cmd, r);
+        tsx_log_step("H4", "silent", cmd, r);
         ts_end_text(r, t, sizeof(t));
-        RING("H3 (c): elapsed %.2f s, exit code %d, signal %d, hung %d, "
+        RING("H4 (c): elapsed %.2f s, exit code %d, signal %d, hung %d, "
              "connections to the silent peer %d", r->secs, r->code, r->sig,
              r->hung, ts_peer_count(&pa) - c0);
         if (r->hung || r->secs > LIMIT_S)
@@ -491,20 +491,20 @@ main(int argc, char **argv)
                      "non-zero exit code %d in %.1f s (limit %d s) against "
                      "a peer that never answers", r->code, r->secs, LIMIT_S);
         }
-        RING("H3 %s", msg_c);
+        RING("H4 %s", msg_c);
         T_FINDING(ok_c ? TAPI_CYBERSEC_SEV_INFO : TAPI_CYBERSEC_SEV_HIGH,
                   "ts.silent-peer", "GUESS_ENDPOINT", "%s", msg_c);
     }
 
     /* ---- (d) bad input ---- */
-    TEST_STEP("(d) Bad input: empty, non-numeric and oversize");
+    TSX_STEP("(d) Bad input: empty, non-numeric and oversize");
     big = malloc(BIG_ARG + 1);
     snprintf(in_big, sizeof(in_big), "%s/in-big", workdir);
     snprintf(in_none, sizeof(in_none), "%s/in-none", workdir);
     if (big == NULL || !ts_write_fill(in_big, '9', BIG_STDIN) ||
         !ts_write_fill(in_none, ' ', 0))
     {
-        res_set(&res, R_FAIL, "H3 NOT SETTLED: cannot write the inputs");
+        res_set(&res, R_FAIL, "H4 NOT SETTLED: cannot write the inputs");
         goto verdict;
     }
     memset(big, '9', BIG_ARG);
@@ -532,11 +532,11 @@ main(int argc, char **argv)
         if (!ts_run(r, src_root, cmd, c->big_stdin ? in_big : in_none, env,
                     NULL, LIMIT_S, c->name))
         {
-            res_set(&res, R_FAIL, "H3 NOT SETTLED: cannot start the example "
+            res_set(&res, R_FAIL, "H4 NOT SETTLED: cannot start the example "
                     "for case %s", c->name);
             goto verdict;
         }
-        tsx_log_step("H3", c->name, cmd, r);
+        tsx_log_step("H4", c->name, cmd, r);
         ts_end_text(r, t, sizeof(t));
         trace = ts_has_trace(r->err) || ts_has_trace(r->out);
         problem = r->hung || r->sig != 0 || trace;
@@ -558,7 +558,7 @@ main(int argc, char **argv)
         snprintf(tmp, sizeof(tmp), "%s", msg_d);
         snprintf(msg_d, sizeof(msg_d), "(d) FAIL: %.2000s", tmp);
     }
-    RING("H3 %s", msg_d);
+    RING("H4 %s", msg_d);
     T_FINDING(ok_d ? TAPI_CYBERSEC_SEV_INFO : TAPI_CYBERSEC_SEV_HIGH,
               "ts.robust", "bad input", "%s", msg_d);
 
@@ -572,12 +572,12 @@ verdict:
     if (res.kind == R_FAIL)
         ; /* a harness fault or a missing build, already worded */
     else if (ok_a && ok_b && ok_c && ok_d)
-        res_set(&res, R_PASS, "H3 PASS: %s; %s; %s; %s", msg_a, msg_b,
+        res_set(&res, R_PASS, "H4 PASS: %s; %s; %s; %s", msg_a, msg_b,
                 msg_c, msg_d);
     else
-        res_set(&res, R_FAIL, "H3 FAIL: %s; %s; %s; %s", msg_a, msg_b,
+        res_set(&res, R_FAIL, "H4 FAIL: %s; %s; %s; %s", msg_a, msg_b,
                 msg_c, msg_d);
-    T_VERDICT(&res, "H3");
+    TSX_VERDICT(&res, "H4");
 
 cleanup:
     cleanup_all();

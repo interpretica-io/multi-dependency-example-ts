@@ -201,6 +201,11 @@ tsh_xchg(unsigned port, const char *req, size_t n, bool fin, double limit_s,
         return;
     }
     x->connected = true;
+    {
+        struct timeval tv = { .tv_sec = (time_t)limit_s, .tv_usec = 0 };
+
+        setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+    }
     if (n > 0)
     {
         size_t off = 0;

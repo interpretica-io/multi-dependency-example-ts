@@ -69,7 +69,7 @@ typedef struct res_t {
         R_INCONCLUSIVE, /**< A scanner returned no data; names which one. */
         R_SKIP,         /**< A tool the container cannot have is absent. */
     } kind;   /**< R_SETUP: setup_<component>. */
-    char msg[1536];
+    char msg[4096];
 } res_t;
 
 /** A child process. */

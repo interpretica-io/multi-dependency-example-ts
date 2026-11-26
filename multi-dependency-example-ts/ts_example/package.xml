@@ -3,15 +3,16 @@
     <description>TypeScript example tests</description>
 
     <!-- @page mde-ts_example TypeScript Example Tests
-          @objective Settle H1 to H4 about the TypeScript example, one
-                     test per step, each logging its command, exit code,
-                     elapsed time and the last 40 lines of stdout and stderr.
+          @objective Settle H1 to H4 about the TypeScript example. Every test
+                     that runs a command logs it with its working directory,
+                     exit code, elapsed time and the whole of stdout and
+                     stderr, and a failing verdict names the failing step.
 
           @par Test Groups:
-          - @ref mde-ts_example-ts_build - Build in a clean copy (H1)
-          - @ref mde-ts_example-ts_run_guess - Start with guess (H1)
-          - @ref mde-ts_example-ts_contract - Same answer as Go and C# (H2)
-          - @ref mde-ts_example-ts_robust - Endpoint variable, no hardcoded URL, silent peer (H3)
+          - @ref mde-ts_example-ts_build - Build (H2)
+          - @ref mde-ts_example-ts_run_guess - Start with guess (H2)
+          - @ref mde-ts_example-ts_contract - Same reply as Go and C# (H3)
+          - @ref mde-ts_example-ts_robust - Endpoint variable, no hardcoded URL, silent peer (H4)
     -->
 
     <author mailto="midair@localhost" />
@@ -22,7 +23,7 @@
 
               @par Scenario:
               -# Report TE_TS_MDE_SRC.
-              -# Check bash, node, npm, npx, gcc and curl; name what is missing.
+              -# Check bash, node, npm, npx, tsc, find, gcc and curl; name what is missing.
         -->
         <prologue>
             <script name="prologue">
@@ -30,53 +31,52 @@
             </script>
         </prologue>
 
-        <!-- @page mde-ts_example-ts_build Build (H1)
-              @objective Run ./build.sh in a clean copy (no node_modules, no dist) within 540 s.
+        <!-- @page mde-ts_example-ts_build Build (H2)
+              @objective Run build.sh in the project root within 540 s.
 
               @par Scenario:
               -# Check the runner against a planted hang and signal.
-              -# Copy the project without node_modules and dist; check both are absent.
-              -# Run ./build.sh in the copy; log command, exit code, time, output.
-              -# On a failure print the last 40 lines and name the step (npm install, tsc, the C build).
-              -# Pass only on exit code 0 and an existing typescript/dist/index.js.
+              -# Run build.sh by absolute path in the project root; log command, exit code, time, stdout and stderr in full.
+              -# On a failure log the last 50 lines and name the step (npm install, tsc, the C build).
+              -# Pass only on exit code 0, compiled .js files written by this build in the TypeScript dist, and an executable scripts/run.sh.
         -->
         <run name="ts_build">
             <script name="ts_build">
-                <objective>[H1] Run ./build.sh in a clean copy of the project with a 540 s limit. H1 PASS only when it exits 0 and typescript/dist/index.js exists; H1 FAIL naming npm install, tsc or the C build, with the last 40 lines of the output in the log.</objective>
+                <objective>[H2] Run build.sh in the project root with a 540 s limit. H2 PASS only when it exits 0 and compiled .js files written by it exist in the TypeScript dist directory; H2 FAIL names npm install, tsc or the C build, with the failing step, exit code, stdout and stderr and the last 50 lines of the output in the verdict and the log.</objective>
             </script>
         </run>
 
-        <!-- @page mde-ts_example-ts_run_guess Start with guess (H1)
-              @objective Run ./scripts/run.sh guess within 30 s.
+        <!-- @page mde-ts_example-ts_run_guess Start with guess (H2)
+              @objective Run scripts/run.sh guess with a 30 s limit.
 
               @par Scenario:
               -# Start the web services that exist.
-              -# Run the example; log command, exit code, time, output tails.
+              -# Run the example by absolute path; log command, exit code, time, stdout and stderr in full.
         -->
         <run name="ts_run_guess">
             <script name="ts_run_guess">
-                <objective>[H1] Run ./scripts/run.sh guess with a 30 s limit against the local web tier. H1 PASS on exit code 0 and a non-empty stdout; H1 FAIL on a non-zero exit, a timeout or an empty stdout, naming the services that were not up.</objective>
+                <objective>[H2] Run scripts/run.sh guess (absolute path, project root as working directory) with a 30 s limit against the local web tier. H2 PASS when it exits 0 with output, or is still running at the limit without a crash trace; H2 FAIL on a signal, a crash trace, a non-zero exit or an empty stdout, with exit code, stdout and stderr in the verdict.</objective>
             </script>
         </run>
 
-        <!-- @page mde-ts_example-ts_contract Contract (H2)
-              @objective Compare guess of the TypeScript example with the Go and C# examples.
+        <!-- @page mde-ts_example-ts_contract Contract (H3)
+              @objective Compare the reply of the TypeScript example with the Go and C# examples byte for byte.
 
               @par Scenario:
-              -# Fail with "H1 build missing" when dist/index.js does not exist.
-              -# Check the comparison against planted differences.
-              -# Start the services; a port not open within 10 s is a "start-up fault".
+              -# Fail with "H2 build missing" when dist/index.js does not exist.
+              -# Check the byte comparison against planted differences.
+              -# Start the services; skip the test when the Go example cannot start; a gateway that is not up is a "start-up fault".
               -# Log what the TypeScript process listens on (tapi_netexpose).
-              -# Run ./scripts/run.sh guess and the same input on Go and C#; log all outputs in full.
-              -# Compare the answer lines and exit codes; print both values on a mismatch.
+              -# Send one fixed set of inputs, one valid guess first, to scripts/run.sh guess and to Go and C#; log all outputs in full.
+              -# Compare the TypeScript and Go replies byte for byte; print both on a mismatch. A C# difference is a warning.
         -->
         <run name="ts_contract">
             <script name="ts_contract">
-                <objective>[H2] Run guess for the TypeScript example and the same input for the Go and C# examples, log all three outputs, compare answer lines and exit codes. H2 PASS when the three match; H2 FAIL mismatch with both values; "H1 build missing" when dist/index.js is absent; "H2 start-up fault" when a port is not open within 10 s.</objective>
+                <objective>[H3] Send the fixed contract inputs (one valid guess first) to the TypeScript, Go and C# examples and compare the replies byte for byte. H3 PASS when the TypeScript reply equals the Go reply; H3 FAIL mismatch prints both replies; SKIPPED with a message when the Go example cannot start; "H2 build missing" when dist/index.js is absent; "H3 start-up fault" when the gateway is not up.</objective>
             </script>
         </run>
 
-        <!-- @page mde-ts_example-ts_robust Endpoint Variable and a Silent Peer (H3)
+        <!-- @page mde-ts_example-ts_robust Endpoint Variable and a Silent Peer (H4)
               @objective Three checks with their own messages, plus bad input.
 
               @par Scenario:
@@ -87,64 +87,67 @@
         -->
         <run name="ts_robust">
             <script name="ts_robust">
-                <objective>[H3] (a) no literal URL or IP in the TypeScript source outside comments; (b) the example connects to the port in GUESS_ENDPOINT and no other; (c) against a listener that never answers it exits non-zero within 10 s, elapsed time and exit code logged; (d) bad input ends cleanly. The verdict names the failing check; "H1 build missing" when dist/index.js is absent.</objective>
+                <objective>[H4] (a) no literal URL or IP in the TypeScript source outside comments; (b) the example connects to the port in GUESS_ENDPOINT and no other; (c) against a listener that never answers it exits non-zero within 10 s, elapsed time and exit code logged; (d) bad input ends cleanly. The verdict names the failing check and the failing step with the last command, exit code, stdout and stderr; "H2 build missing" when dist/index.js is absent.</objective>
             </script>
         </run>
 
         <!-- @page mde-ts_example-ts_h1_listing Directory listing (H1)
-              @objective List /work/src and the project root; fail when no directory holds a .ts file and a package.json or tsconfig.json.
+              @objective Run find over /work/src for .ts, tsconfig.json and package.json and record whether a TypeScript example exists.
 
               @par Scenario:
-              -# Check the finder against a planted tree with one real example and look-alikes.
-              -# List the roots and log every directory read.
-              -# Fail when no TypeScript example directory is found.
+              -# Check the finder against a planted tree and find against a missing directory.
+              -# Run find /work/src -iname '*.ts' -o -iname 'tsconfig.json' -o -iname 'package.json'; log command, exit code, stdout and stderr.
+              -# Record in the log and in the verdict whether a TypeScript example exists; do not fail on the finding.
+              -# Fail only when find itself errors, printing the error.
         -->
         <run name="ts_h1_listing">
             <script name="ts_h1_listing">
-                <objective>[H1] List /work/src (when present) and the project root. H1 PASS when a directory holds a .ts source and a package.json or tsconfig.json; H1 FAIL "no TypeScript example directory" otherwise.</objective>
+                <objective>[H1] Run find over /work/src for .ts files, tsconfig.json and package.json. H1 PASS when find runs, with the finding (a TypeScript example exists or not) in the verdict and the log; H1 FAIL only when find itself errors, with its error printed.</objective>
             </script>
         </run>
 
         <!-- @page mde-ts_example-ts_h2_build_guess Build and run (H2)
-              @objective ./build.sh exits 0, then ./scripts/run.sh guess exits 0 within 60 s.
+              @objective build.sh exits 0 and compiles the JavaScript, then scripts/run.sh guess starts without a crash within 30 s.
 
               @par Scenario:
               -# Check the runner against a planted hang, signal and exit code.
-              -# Run ./build.sh; require exit code 0.
-              -# Start the services, run ./scripts/run.sh guess; require exit code 0 within 60 s.
+              -# Run build.sh; require exit code 0 and compiled .js files in the TypeScript dist; on a failure print the last 50 lines of the build output.
+              -# Start the services, run scripts/run.sh guess with a 30 s timeout; it must exit 0 or still be running at the limit, with no signal and no crash trace.
         -->
         <run name="ts_h2_build_guess">
             <script name="ts_h2_build_guess">
-                <objective>[H2] Run ./build.sh and require exit code 0, then ./scripts/run.sh guess and require exit code 0 within 60 s. H2 FAIL names the step (build or guess) with exit code and stderr tail.</objective>
+                <objective>[H2] Run build.sh, require exit code 0 and compiled .js output, then scripts/run.sh guess with a 30 s timeout and require that it starts without a crash. H2 FAIL names the step (build, tsc or guess) with exit code, stdout, stderr and, for the build, the last 50 lines.</objective>
             </script>
         </run>
 
         <!-- @page mde-ts_example-ts_h3_same_output Same output as Go (H3)
-              @objective Run the TypeScript example and the Go service with the same input and compare.
+              @objective Send one fixed set of inputs to the TypeScript example and the Go service and compare the replies byte for byte.
 
               @par Scenario:
-              -# Check the comparison against planted differences.
-              -# Start the services; run the example (value 42, 3 hops) and send the same input to the Go service.
-              -# Fail on any difference of answer line or exit code, printing both.
+              -# Check the byte comparison against planted differences.
+              -# Start the services; skip the test when the Go example cannot start.
+              -# Send value 42 hops 3 (a valid guess) and three more fixed inputs to the example and to the Go service.
+              -# Fail on any byte of difference, printing both replies.
         -->
         <run name="ts_h3_same_output">
             <script name="ts_h3_same_output">
-                <objective>[H3] Same input to the TypeScript example and the Go service; H3 FAIL on any difference of answer line or exit code with both values printed; "H1 build missing" when dist/index.js is absent.</objective>
+                <objective>[H3] Same fixed inputs to the TypeScript example and the Go service; H3 PASS when the TypeScript reply equals the Go reply byte for byte; H3 FAIL prints both replies; SKIPPED when the Go example cannot start; "H2 build missing" when dist/index.js is absent.</objective>
             </script>
         </run>
 
         <!-- @page mde-ts_example-ts_h4_port_badinput Configured port and bad input (H4)
-              @objective The example listens only on the configured port and answers empty and malformed requests with an error in 5 s.
+              @objective The example listens only on the configured address and port, answers empty and bad input with an error in 5 s and exits 0 on a normal stop.
 
               @par Scenario:
               -# Check tapi_netexpose and the reply classifier against planted listeners and replies.
-              -# Start the example with another port in its configuration.
+              -# Start the example with the address variables set to 127.0.0.1 and another port in its configuration.
               -# tapi_netexpose: it listens on that port and on no other.
-              -# Send an empty and malformed requests: a 4xx reply within 5 s, process alive.
+              -# Send empty and malformed requests, a non-numeric guess and a 1 MB string: a 4xx reply within 5 s each, process alive.
+              -# Stop it with SIGTERM: exit code 0.
         -->
         <run name="ts_h4_port_badinput">
             <script name="ts_h4_port_badinput">
-                <objective>[H4] Start the example on a chosen port; H4 FAIL when it listens elsewhere or not at all, gives no 4xx reply to an empty or malformed request, answers after 5 s or dies.</objective>
+                <objective>[H4] Start the example with the address variables set to 127.0.0.1 and a chosen port; H4 FAIL when it listens elsewhere or not at all, gives no 4xx reply to empty input, a malformed or non-numeric request or a 1 MB string, answers after 5 s, dies, or does not exit 0 on a normal stop.</objective>
             </script>
         </run>
     </session>

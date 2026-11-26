@@ -15,9 +15,37 @@
 #include "../webdeps/ts_lib.h"
 
 #include <ctype.h>
+#include <limits.h>
+#include <glob.h>
 #include <math.h>
 
-#define TSX_TAIL    40      /**< Lines of each stream kept in the log. */
+#define TSX_TAIL    50      /**< Lines of the tail logged when a step fails. */
+
+static void tsx_log_full(const char *label, const char *text);
+
+/** Text of the TEST_STEP that is running, for the verdict of a failure. */
+static char tsx_step[200] = "(before the first step)";
+
+/** What the last command run through tsx_log_step() did. */
+static struct tsx_last_t {
+    bool    set;
+    char    id[16];
+    char    tag[64];
+    char    cmd[500];
+    char    cwd[300];
+    int     code;
+    int     sig;
+    bool    hung;
+    char    out[500];
+    char    err[500];
+} tsx_last;
+
+/** TEST_STEP that also remembers its text as the current step name. */
+#define TSX_STEP(_fs...) \
+    do {                                                            \
+        snprintf(tsx_step, sizeof(tsx_step), _fs);                  \
+        TEST_STEP(_fs);                                             \
+    } while (0)
 
 /** Set up the work directory and the example root; false on a fault. */
 static bool
@@ -36,6 +64,19 @@ tsx_init(res_t *res, const char *id)
         res_set(res, R_FAIL, "%s NOT SETTLED: project root %s does not "
                 "exist", id, src_root);
         return false;
+    }
+    {
+        static char absroot[PATH_MAX];
+
+        if (realpath(src_root, absroot) != NULL)
+            src_root = absroot;
+        if (chdir(src_root) != 0)
+        {
+            res_set(res, R_FAIL, "%s NOT SETTLED: cannot change the working "
+                    "directory to the project root %s: %s", id, src_root,
+                    strerror(errno));
+            return false;
+        }
     }
     snprintf(workdir, sizeof(workdir), "/tmp/mde-wd-XXXXXX");
     if (mkdtemp(workdir) == NULL)
@@ -104,7 +145,11 @@ tsx_log_tail(const char *label, const char *path, int n)
     }
 }
 
-/** Log one step: command, exit code, elapsed time, tails of both streams. */
+/**
+ * Log one step: command, working directory, exit code, elapsed time and
+ * the whole of stdout and stderr; when the step failed, also the last
+ * TSX_TAIL lines of both. The step is kept for tsx_evidence().
+ */
 static void
 tsx_log_step(const char *id, const char *tag, const char *cmd,
              const ts_run_t *r)
@@ -112,19 +157,105 @@ tsx_log_step(const char *id, const char *tag, const char *cmd,
     char what[200];
     char path[300];
     char label[120];
+    bool failed = r->hung || r->sig != 0 || r->code != 0;
 
     ts_end_text(r, what, sizeof(what));
-    RING("%s step %s: command [%s]; exit code %d; signal %d; elapsed %.2f s; "
-         "%s", id, tag, cmd, r->code, r->sig, r->secs, what);
-    snprintf(path, sizeof(path), "%s/%s.stdout", workdir, tag);
-    snprintf(label, sizeof(label), "%s %s stdout(last %d lines)", id, tag,
-             TSX_TAIL);
-    tsx_log_tail(label, path, TSX_TAIL);
-    snprintf(path, sizeof(path), "%s/%s.stderr", workdir, tag);
-    snprintf(label, sizeof(label), "%s %s stderr(last %d lines)", id, tag,
-             TSX_TAIL);
-    tsx_log_tail(label, path, TSX_TAIL);
+    RING("%s step %s: command [%s]; working directory [%s]; exit code %d; "
+         "signal %d; elapsed %.2f s; %s", id, tag, cmd,
+         src_root != NULL ? src_root : "", r->code, r->sig, r->secs, what);
+    snprintf(label, sizeof(label), "%s %s stdout", id, tag);
+    tsx_log_full(label, r->out);
+    snprintf(label, sizeof(label), "%s %s stderr", id, tag);
+    tsx_log_full(label, r->err);
+    if (failed)
+    {
+        ERROR("%s step %s FAILED: %s; last %d lines of the output follow",
+              id, tag, what, TSX_TAIL);
+        snprintf(path, sizeof(path), "%s/%s.stdout", workdir, tag);
+        snprintf(label, sizeof(label), "%s %s stdout(last %d lines)", id,
+                 tag, TSX_TAIL);
+        tsx_log_tail(label, path, TSX_TAIL);
+        snprintf(path, sizeof(path), "%s/%s.stderr", workdir, tag);
+        snprintf(label, sizeof(label), "%s %s stderr(last %d lines)", id,
+                 tag, TSX_TAIL);
+        tsx_log_tail(label, path, TSX_TAIL);
+    }
+    memset(&tsx_last, 0, sizeof(tsx_last));
+    tsx_last.set = true;
+    snprintf(tsx_last.id, sizeof(tsx_last.id), "%s", id);
+    snprintf(tsx_last.tag, sizeof(tsx_last.tag), "%s", tag);
+    snprintf(tsx_last.cmd, sizeof(tsx_last.cmd), "%s", cmd);
+    snprintf(tsx_last.cwd, sizeof(tsx_last.cwd), "%s",
+             src_root != NULL ? src_root : "");
+    tsx_last.code = r->code;
+    tsx_last.sig = r->sig;
+    tsx_last.hung = r->hung;
+    ts_flat(r->out + (r->out_len > 300 ? r->out_len - 300 : 0), 300,
+            tsx_last.out, sizeof(tsx_last.out));
+    ts_flat(r->err + (r->err_len > 300 ? r->err_len - 300 : 0), 300,
+            tsx_last.err, sizeof(tsx_last.err));
 }
+
+/**
+ * Record, and log in full, a command that was started by the test itself
+ * (not through ts_run) and whose output went to @p outp and @p errp.
+ */
+static void
+tsx_note_proc(const char *id, const char *tag, const char *cmd, int code,
+              int sig, const char *outp, const char *errp)
+{
+    ts_run_t *r = calloc(1, sizeof(*r));
+
+    if (r == NULL)
+        return;
+    r->code = code;
+    r->sig = sig;
+    r->out_len = ts_read(outp, r->out, sizeof(r->out));
+    r->err_len = ts_read(errp, r->err, sizeof(r->err));
+    {
+        char path[300];
+
+        /* tsx_log_step reads the tails of <workdir>/<tag>.* on a failure. */
+        snprintf(path, sizeof(path), "%s/%s.stdout", workdir, tag);
+        if (strcmp(path, outp) != 0)
+            ts_write_fill(path, ' ', 0);
+    }
+    tsx_log_step(id, tag, cmd, r);
+    free(r);
+}
+
+/**
+ * Add to a failing result the evidence the verdict must carry: the step
+ * that was running, the last command, its exit code and the end of stdout
+ * and stderr. A passing or skipped result is left alone.
+ */
+static void
+tsx_evidence(res_t *r)
+{
+    size_t n;
+
+    if (r->kind == R_PASS || r->kind == R_SKIP)
+        return;
+    n = strlen(r->msg);
+    snprintf(r->msg + n, sizeof(r->msg) - n, " | failing step [%s]",
+             tsx_step);
+    n = strlen(r->msg);
+    if (tsx_last.set)
+        snprintf(r->msg + n, sizeof(r->msg) - n, "; last command [%s] in "
+                 "[%s] (%s): exit code %d, signal %d%s; stdout [%s]; "
+                 "stderr [%s]", tsx_last.cmd, tsx_last.cwd, tsx_last.tag,
+                 tsx_last.code, tsx_last.sig, tsx_last.hung ? ", killed on "
+                 "the time limit" : "", tsx_last.out, tsx_last.err);
+    else
+        snprintf(r->msg + n, sizeof(r->msg) - n, "; no command had run yet");
+}
+
+/** The verdict of a test: the evidence first, then the usual verdict. */
+#define TSX_VERDICT(_r, _id) \
+    do {                                                                    \
+        tsx_evidence(_r);                                                   \
+        T_VERDICT(_r, _id);                                                 \
+    } while (0)
 
 /** The entry file of the TypeScript build, from "main" in package.json. */
 static void
@@ -177,6 +308,108 @@ tsx_output_exists(const char *tsdir, char *found, size_t size)
     }
     snprintf(found, size, "%.600s/%s (and no dist directory)", tsdir, entry);
     return false;
+}
+
+/**
+ * Count the compiled JavaScript files the compiled files of <tsdir>/dist that were written
+ * at or after @p since (a wall-clock second; 0 accepts any). The first one
+ * is copied to @p found. Returns -1 when there is no such directory.
+ */
+static int
+tsx_dist_js(const char *tsdir, time_t since, char *found, size_t size)
+{
+    glob_t  g;
+    char    pat[900];
+    int     n = 0;
+    size_t  i;
+
+    found[0] = '\0';
+    snprintf(pat, sizeof(pat), "%.800s/dist/*.js", tsdir);
+    if (glob(pat, 0, NULL, &g) != 0)
+        return -1;
+    for (i = 0; i < g.gl_pathc; i++)
+    {
+        struct stat st;
+
+        if (stat(g.gl_pathv[i], &st) != 0 || st.st_mtime + 2 < since)
+            continue;
+        if (n++ == 0)
+            snprintf(found, size, "%s", g.gl_pathv[i]);
+    }
+    globfree(&g);
+    return n;
+}
+
+/** True when the two replies are the same bytes, length included. */
+static bool
+tsx_same_bytes(const char *a, size_t an, const char *b, size_t bn)
+{
+    return an == bn && memcmp(a, b, an) == 0;
+}
+
+/** Offset of the first byte in which the two replies differ. */
+static size_t
+tsx_first_diff(const char *a, size_t an, const char *b, size_t bn)
+{
+    size_t i;
+
+    for (i = 0; i < an && i < bn && a[i] == b[i]; i++)
+        ;
+    return i;
+}
+
+/** The reply as one line: newlines shown as \n, at most @p max bytes. */
+static void
+tsx_escape(const char *s, size_t n, size_t max, char *dst, size_t size)
+{
+    size_t i;
+    size_t o = 0;
+
+    for (i = 0; i < n && i < max && o + 3 < size; i++)
+    {
+        if (s[i] == '\n')
+        {
+            dst[o++] = '\\';
+            dst[o++] = 'n';
+        }
+        else if (s[i] == '\r')
+        {
+            dst[o++] = '\\';
+            dst[o++] = 'r';
+        }
+        else
+            dst[o++] = s[i];
+    }
+    dst[o] = '\0';
+}
+
+/** Known-bad control of tsx_same_bytes(): a one-byte, a length and a
+ *  trailing-newline difference must all be told apart. */
+static bool
+tsx_bytes_control_ok(char *why, size_t size)
+{
+    static const char a[] = "value=47.5\n";
+
+    if (!tsx_same_bytes(a, sizeof(a) - 1, "value=47.5\n", 11))
+    {
+        snprintf(why, size, "equal replies were called different");
+        return false;
+    }
+    if (tsx_same_bytes(a, sizeof(a) - 1, "value=48.5\n", 11) ||
+        tsx_same_bytes(a, sizeof(a) - 1, "value=47.5", 10) ||
+        tsx_same_bytes(a, sizeof(a) - 1, "value=47.5\n\n", 12) ||
+        tsx_same_bytes(a, sizeof(a) - 1, "", 0))
+    {
+        snprintf(why, size, "a planted one-byte, missing-newline, "
+                 "extra-newline or empty difference was called equal");
+        return false;
+    }
+    if (tsx_first_diff(a, sizeof(a) - 1, "value=48.5\n", 11) != 6)
+    {
+        snprintf(why, size, "the first differing byte was not found");
+        return false;
+    }
+    return true;
 }
 
 /** Gateway URL the example is pointed at; filled by tsx_services_up(). */
@@ -283,7 +516,7 @@ tsx_log_full(const char *label, const char *text)
         RING("%s: (empty)", label);
         return;
     }
-    while (*p != '\0' && n < 200)
+    while (*p != '\0' && n < 2000)
     {
         size_t k = strcspn(p, "\n");
 
@@ -365,7 +598,7 @@ tsx_section(const char *text, const char *svc, char *out, size_t size)
     }
     p++;
     e = strstr(p, "\n== ");
-    n = e != NULL ? (size_t)(e - p) : strlen(p);
+    n = e != NULL ? (size_t)(e - p) + 1 : strlen(p);
     if (n >= size)
         n = size - 1;
     memcpy(out, p, n);

@@ -26,7 +26,7 @@ int
 main(int argc, char **argv)
 {
     static const char * const need[] = {
-        "bash", "node", "npm", "npx", "gcc", "curl", "tar",
+        "bash", "node", "npm", "npx", "tsc", "find", "gcc", "curl", "tar",
     };
     const char *root;
     char        missing[256] = "";
