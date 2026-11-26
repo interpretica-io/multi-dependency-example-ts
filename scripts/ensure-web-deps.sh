@@ -83,7 +83,7 @@ for c in "${!PKG[@]}" ; do
     command -v "$c" >/dev/null 2>&1 && continue
     case "$c" in
         gcc|g++|make|go|cargo|rustc|python3|python3-config|curl)
-            die "$c is still missing after the install" ;;
+            soft_die "$c is still missing after the install" ;;
         *)  echo "ensure-web-deps: WARNING: $c is still missing after the install" ;;
     esac
 done
@@ -102,16 +102,18 @@ if ! cargo_ok ; then
     curl -fsSL https://sh.rustup.rs -o /tmp/rustup-init.sh &&
         ${SUDO} env RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo \
             sh /tmp/rustup-init.sh -y --profile minimal --no-modify-path >&2 ||
-        die "cannot install Rust with rustup (needed for Cargo.lock version 4)"
+        soft_die "cannot install Rust with rustup (needed for Cargo.lock version 4)"
     # Link the real toolchain binaries, not the rustup proxies, which need
     # RUSTUP_HOME in the environment of every caller.
     TC="$(ls -d /usr/local/rustup/toolchains/*/bin 2>/dev/null | head -n 1)"
-    [ -n "${TC}" ] || die "rustup installed no toolchain under /usr/local/rustup"
-    for t in cargo rustc rustdoc ; do
-        ${SUDO} ln -sf "${TC}/$t" /usr/local/bin/$t
-    done
+    [ -n "${TC}" ] || soft_die "rustup installed no toolchain under /usr/local/rustup"
+    if [ -n "${TC}" ] ; then
+        for t in cargo rustc rustdoc ; do
+            ${SUDO} ln -sf "${TC}/$t" /usr/local/bin/$t
+        done
+    fi
     hash -r
-    cargo_ok || die "cargo is still too old after rustup ($(cargo --version 2>&1)); need 1.78 or newer"
+    cargo_ok || soft_die "cargo is still too old after rustup ($(cargo --version 2>&1)); need 1.78 or newer"
 fi
 
 # The projects target net9.0: an older SDK cannot build them.
@@ -225,10 +227,10 @@ if want ts ; then
     if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1 ; then
         echo "ensure-web-deps: installing nodejs and npm"
         apt_update
-        ${SUDO} apt-get install -y nodejs npm >&2 || die "apt-get install nodejs npm failed"
+        ${SUDO} apt-get install -y nodejs npm >&2 || soft_die "apt-get install nodejs npm failed"
     fi
-    command -v node >/dev/null 2>&1 || die "node is still missing after the install"
-    command -v npm >/dev/null 2>&1 || die "npm is still missing after the install"
+    command -v node >/dev/null 2>&1 || soft_die "node is still missing after the install"
+    command -v npm >/dev/null 2>&1 || soft_die "npm is still missing after the install"
     if ! command -v tsc >/dev/null 2>&1 || ! command -v ts-node >/dev/null 2>&1 ; then
         echo "ensure-web-deps: installing typescript and ts-node with npm"
         ${SUDO} npm install -g typescript ts-node @types/node >&2 ||
