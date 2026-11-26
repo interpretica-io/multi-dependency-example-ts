@@ -100,7 +100,7 @@
         -->
         <run name="ts_contract">
             <script name="ts_contract">
-                <objective>[H3] After ts_build passed (else 'H3 blocked by H2' and FAIL), send a valid, a low, a high and a repeated guess to the Go and TypeScript examples and compare the replies byte for byte; both replies are in the error on a mismatch.</objective>
+                <objective>[H3 H5] First verdict 'H5 start', then 'H5 build precondition' (dist/main.js; else 'H3 blocked by H2' and FAIL). Sends a valid, an empty, a non-numeric and a 70000-byte input to the Go and TypeScript examples with a 5 s timeout, saves both replies in /tmp, and writes 'H3 input N same' or 'H3 input N differs' with both replies. A known-bad script printing a different reply must be caught by cmp.</objective>
             </script>
         </run>
 
@@ -144,7 +144,7 @@
         -->
         <run name="ts_h2_build_guess">
             <script name="ts_h2_build_guess">
-                <objective>[H2] Run scripts/run.sh guess for 30 s with output in /tmp/ts_h2_guess.log; PASS when it does not exit non-zero before the limit; the log text is in the verdict and the log.</objective>
+                <objective>[H2] Verdict 'H2 guess alive' after scripts/run.sh guess for 30 s; PASS when still running or exit 0.</objective>
             </script>
         </run>
 
@@ -159,7 +159,7 @@
         -->
         <run name="ts_h3_same_output">
             <script name="ts_h3_same_output">
-                <objective>[H3] After ts_build passed (else 'H3 blocked by H2' and FAIL), same fixed inputs to Go and TypeScript, replies saved to files and compared byte for byte; both replies in the error on a mismatch.</objective>
+                <objective>[H3] Reads the reply files saved by ts_contract (or collects them the same way) and compares each pair with cmp; one verdict per input; PASS only when all four are the same.</objective>
             </script>
         </run>
 

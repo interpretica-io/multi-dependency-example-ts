@@ -28,6 +28,7 @@
 #include <time.h>
 #include <limits.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -299,17 +300,156 @@ tsd_body(const char *reply)
     return p != NULL ? p + 4 : reply;
 }
 
-/** Fail unless the build of the group passed; says "blocked by H2". */
-#define TSD_NEED_BUILD(_id) \
+/** Number of failed steps and their names; the test fails at its end. */
+static int  tsd_nfail = 0;
+static char tsd_fails[1200] = "";
+
+/** Copy @p in to @p out with unprintable bytes shown as '.'. */
+static inline void
+tsd_clean(const char *in, char *out, size_t size)
+{
+    size_t i;
+
+    for (i = 0; i + 1 < size && in[i] != '\0'; i++)
+    {
+        unsigned char c = (unsigned char)in[i];
+
+        out[i] = (c >= 32 && c < 127) || c == '\n' ? (char)c : '.';
+    }
+    out[i] = '\0';
+}
+
+/** Write a verdict that does not end the test. */
+static inline void
+tsd_say(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+static inline void
+tsd_say(const char *fmt, ...)
+{
+    char    buf[3000];
+    char    cl[3000];
+    va_list ap;
+
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    tsd_clean(buf, cl, sizeof(cl));
+    RING_VERDICT("%s", cl);
+}
+
+/** Record a failed step (name only; the verdict is written by the caller). */
+static inline void
+tsd_flag(const char *what)
+{
+    size_t len = strlen(tsd_fails);
+
+    tsd_nfail++;
+    snprintf(tsd_fails + len, sizeof(tsd_fails) - len, "%s; ", what);
+}
+
+/** Write a verdict and mark the step failed. */
+static inline void
+tsd_bad(const char *id, const char *step, const char *fmt, ...)
+    __attribute__((format(printf, 3, 4)));
+static inline void
+tsd_bad(const char *id, const char *step, const char *fmt, ...)
+{
+    char    buf[2500];
+    char    nm[200];
+    va_list ap;
+
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    snprintf(nm, sizeof(nm), "%s %s", id, step);
+    tsd_say("%s FAIL (step %s): %s", id, step, buf);
+    tsd_flag(nm);
+}
+
+/**
+ * Run @p cmd, output in @p log, and write the verdict "<name> exit=N:
+ * [first 400 bytes (last 400 when @p last)]". Returns the exit code.
+ */
+static inline int
+tsd_cmd(const char *name, const char *cwd, const char *cmd, int tmo,
+        const char *log, bool last)
+{
+    char text[401];
+    int  code = tsd_sh(cwd, cmd, tmo, log);
+
+    if (last)
+        tsd_tail(log, text, sizeof(text));
+    else
+        tsd_head(log, text, sizeof(text));
+    tsd_say("%s exit=%d: [%s]", name, code, text);
+    return code;
+}
+
+/** A port nothing listens on now. */
+static inline unsigned
+tsd_free_port(void)
+{
+    struct sockaddr_in sa = { .sin_family = AF_INET };
+    socklen_t          l = sizeof(sa);
+    int                fd = socket(AF_INET, SOCK_STREAM, 0);
+    unsigned           port = 0;
+
+    inet_pton(AF_INET, "127.0.0.1", &sa.sin_addr);
+    if (fd >= 0 && bind(fd, (void *)&sa, sizeof(sa)) == 0 &&
+        getsockname(fd, (void *)&sa, &l) == 0)
+        port = ntohs(sa.sin_port);
+    if (fd >= 0)
+        close(fd);
+    return port != 0 ? port : 29100;
+}
+
+/** Write @p text to @p path. */
+static inline void
+tsd_put(const char *path, const char *text)
+{
+    FILE *f = fopen(path, "w");
+
+    if (f != NULL)
+    {
+        fputs(text, f);
+        fclose(f);
+    }
+}
+
+/** True when the dist/main.js of the TypeScript example exists. */
+static inline bool
+tsd_have_main(char *path, size_t size)
+{
+    snprintf(path, size, "%s/ts/dist/main.js", tsd_src());
+    return access(path, R_OK) == 0;
+}
+
+/**
+ * First verdict of a test that needs the build: 'H5 build precondition'
+ * with the dist/main.js check. Returns false (and flags 'H3 blocked by H2'
+ * style failure under @p id) when it is missing.
+ */
+static inline bool
+tsd_build_gate(const char *id)
+{
+    char path[PATH_MAX];
+    bool ok = tsd_have_main(path, sizeof(path));
+
+    tsd_say("H5 build precondition: %s %s", path, ok ? "exists" : "MISSING");
+    if (!ok)
+    {
+        tsd_say("%s blocked by H2: %s is missing, so ./build.sh did not "
+                "produce the TypeScript example", id, path);
+        tsd_flag("blocked by H2");
+    }
+    return ok;
+}
+
+/** End of a test: fail with the names of the failed steps, if any. */
+#define TSD_FINISH(_id) \
     do {                                                                \
-        if (access(TSD_BUILD_MARK, R_OK) != 0)                          \
-        {                                                               \
-            RING_VERDICT("%s blocked by H2: ts_build did not pass "     \
-                         "(no %s)", _id, TSD_BUILD_MARK);               \
-            TEST_FAIL("%s blocked by H2: ts_build did not pass, so the "\
-                      "TypeScript example was not built; see the "      \
-                      "ts_build message", _id);                         \
-        }                                                               \
+        if (tsd_nfail > 0)                                              \
+            TEST_FAIL("%s: %d step(s) failed: %s", _id, tsd_nfail,      \
+                      tsd_fails);                                       \
     } while (0)
 
 #endif /* MDE_TSD_H */

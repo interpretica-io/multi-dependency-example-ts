@@ -27,8 +27,10 @@ int
 main(int argc, char **argv)
 {
     TEST_START;
-    TSD_NEED_BUILD("H4");
-    tsd_h4_scenario("H4", true);
+    tsd_say("H4 start");
+    if (tsd_build_gate("H4"))
+        tsd_h4_scenario("H4", true);
+    TSD_FINISH("H4");
     TEST_SUCCESS;
 
 cleanup:

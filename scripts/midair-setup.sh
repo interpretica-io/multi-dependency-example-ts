@@ -59,6 +59,20 @@ echo "midair-setup: installing the toolchains and tools (base, exposure, ts)"
 "${ENSURE}" "${ROOT}" base exposure ts soft ||
     fail "scripts/ensure-web-deps.sh base exposure ts failed (see above)"
 
+# cmp, pkill and timeout are used by the ts_example tests.
+for c in cmp pkill timeout; do
+    if ! command -v "$c" >/dev/null 2>&1; then
+        echo "midair-setup: installing diffutils, procps and coreutils"
+        ${SUDO} apt-get update >&2 || fail "apt-get update failed"
+        ${SUDO} apt-get install -y diffutils procps coreutils >&2 ||
+            fail "apt-get install diffutils procps coreutils failed"
+        break
+    fi
+done
+for c in cmp pkill timeout; do
+    command -v "$c" >/dev/null 2>&1 || fail "$c is missing after the install"
+done
+
 for c in node npm gcc g++ make go cargo python3 curl tar; do
     command -v "$c" >/dev/null 2>&1 || fail "$c is still missing after the install"
 done

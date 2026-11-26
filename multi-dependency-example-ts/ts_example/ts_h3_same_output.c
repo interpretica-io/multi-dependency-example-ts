@@ -19,8 +19,21 @@ int
 main(int argc, char **argv)
 {
     TEST_START;
-    TSD_NEED_BUILD("H3");
-    tsd_h3_scenario("H3", false);
+    tsd_say("H3 start");
+    tsd_h3_control("H3");
+    if (tsd_h3_files_exist())
+        tsd_say("H3 reply files of ts_contract found in /tmp");
+    else
+    {
+        tsd_say("H3 reply files absent: building them with the same steps");
+        if (tsd_build_gate("H3"))
+            tsd_h3_collect("H3");
+    }
+    if (tsd_h3_files_exist())
+        tsd_h3_compare("H3");
+    else
+        tsd_flag("no reply files");
+    TSD_FINISH("H3");
     TEST_SUCCESS;
 
 cleanup:

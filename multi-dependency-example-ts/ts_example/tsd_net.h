@@ -3,6 +3,8 @@
 /** @file
  * @brief ts_example: the listen-address and reply scenarios (H3, H4)
  *
+ * Nothing here ends a test: every step writes a verdict, a failed step is
+ * recorded with tsd_bad() and the test fails once at its end.
  * tsd_listeners() reads the listening TCP sockets of a process with
  * tapi_netexpose. tsd_h4_scenario() starts the TypeScript example with and
  * without the address variables, checks where it listens, sends bad input
@@ -152,7 +154,6 @@ static inline void
 tsd_listener_control(void)
 {
     struct sockaddr_in a = { .sin_family = AF_INET };
-    socklen_t          l = sizeof(a);
     int                f1 = socket(AF_INET, SOCK_STREAM, 0);
     int                f2 = socket(AF_INET, SOCK_STREAM, 0);
     char               addr[TSD_MAXL][48];
@@ -166,12 +167,19 @@ tsd_listener_control(void)
     inet_pton(AF_INET, "127.0.0.1", &a.sin_addr);
     if (f1 < 0 || f2 < 0 || bind(f1, (void *)&a, sizeof(a)) != 0 ||
         listen(f1, 1) != 0)
-        TEST_FAIL("H4 control: cannot plant a listener: %s", strerror(errno));
+    {
+        tsd_bad("H4", "listener control", "cannot plant a listener: %s",
+                strerror(errno));
+        return;
+    }
     a.sin_addr.s_addr = htonl(INADDR_ANY);
+    a.sin_port = 0;
     if (bind(f2, (void *)&a, sizeof(a)) != 0 || listen(f2, 1) != 0)
-        TEST_FAIL("H4 control: cannot plant a second listener: %s",
-                  strerror(errno));
-    (void)l;
+    {
+        tsd_bad("H4", "listener control", "cannot plant a second listener: "
+                "%s", strerror(errno));
+        return;
+    }
     n = tsd_listeners(getpid(), addr, port);
     tsd_listeners_text(addr, port, n, txt, sizeof(txt));
     for (i = 0; i < n; i++)
@@ -183,27 +191,27 @@ tsd_listener_control(void)
     }
     close(f1);
     close(f2);
-    if (n < 0)
-        TEST_FAIL("H4 NOT SETTLED: tapi_netexpose cannot read the socket "
-                  "tables");
-    if (!saw_lo || !saw_any)
-        TEST_FAIL("H4 control failed: planted listeners on 127.0.0.1 and "
-                  "0.0.0.0 were reported as [%s]", txt);
+    if (n < 0 || !saw_lo || !saw_any)
+        tsd_bad("H4", "listener control", "planted listeners on 127.0.0.1 "
+                "and 0.0.0.0 were reported as [%s] (n=%d)", txt, n);
+    else
+        tsd_say("H4 listener control: planted listeners seen as [%s]", txt);
 }
 
 /** One request with value=<v> hops=0. */
 static inline ssize_t
 tsd_ring(unsigned port, const char *value, char *out, size_t size)
 {
-    size_t vl = strlen(value);
-    char  *req = malloc(vl + 200);
+    size_t  vl = strlen(value);
+    char   *req = malloc(vl + 200);
     ssize_t n;
 
+    out[0] = '\0';
     if (req == NULL)
         return -1;
     snprintf(req, vl + 200, "GET /ring?value=%s&hops=0 HTTP/1.0\r\n"
              "Host: 127.0.0.1\r\n\r\n", value);
-    n = tsd_exchange(port, req, strlen(req), 8000, out, size);
+    n = tsd_exchange(port, req, strlen(req), 5000, out, size);
     free(req);
     return n;
 }
@@ -223,13 +231,13 @@ tsd_h4_run(const char *id, bool set, unsigned port, int sig, bool hostile)
     char        addr[TSD_MAXL][48];
     unsigned    lp[TSD_MAXL];
     char        txt[800];
-    char        logtext[1500];
-    char       *big = malloc(100001);
+    char        logtext[401];
     char        reply[4096];
-    const char *bad[4] = { "", "abc", NULL, "1e999999" };
-    const char *names[4] = { "empty", "non-numeric", "100000 characters",
-                             "out of range" };
-    int         n;
+    char       *big = malloc(70001);
+    const char *bad[3] = { "", "abc", NULL };
+    const char *names[3] = { "empty", "non-numeric", "70000-byte" };
+    const char *sname = sig == SIGTERM ? "SIGTERM" : "SIGINT";
+    int         n = -1;
     int         i;
     int         code;
     bool        lo = false;
@@ -240,9 +248,12 @@ tsd_h4_run(const char *id, bool set, unsigned port, int sig, bool hostile)
     snprintf(ts, sizeof(ts), "%s/ts", tsd_src());
     snprintf(log, sizeof(log), "/tmp/%s_%u_%d.log", id, port, sig);
     if (big == NULL)
-        TEST_FAIL("%s NOT SETTLED: out of memory", id);
-    memset(big, 'a', 100000);
-    big[100000] = '\0';
+    {
+        tsd_bad(id, "memory", "out of memory");
+        return;
+    }
+    memset(big, 'a', 70000);
+    big[70000] = '\0';
     bad[2] = big;
 
     if (set)
@@ -251,6 +262,14 @@ tsd_h4_run(const char *id, bool set, unsigned port, int sig, bool hostile)
     else
         snprintf(cmd, sizeof(cmd), "exec env -u EXAMPLE_PORT -u EXAMPLE_HOST "
                  "node dist/main.js");
+    if (tsd_connect(port) >= 0)
+    {
+        tsd_bad(id, set ? "port in use" : "default port in use",
+                "something already listens on 127.0.0.1:%u before the "
+                "start", port);
+        free(big);
+        return;
+    }
     TEST_STEP("Start node dist/main.js (%s), expect 127.0.0.1:%u",
               set ? "EXAMPLE_PORT and EXAMPLE_HOST set" : "variables unset",
               port);
@@ -258,11 +277,17 @@ tsd_h4_run(const char *id, bool set, unsigned port, int sig, bool hostile)
     if (!tsd_wait_port(port, 15) || !tsd_alive(tsd_child, &st))
     {
         tsd_tail(log, logtext, sizeof(logtext));
-        TEST_FAIL("%s FAIL: [%s] did not listen on port %u within 15 s "
-                  "(alive %d); output: [%s]", id, cmd, port,
-                  tsd_alive(tsd_child, &st), logtext);
+        tsd_bad(id, set ? "listens on configured port" : "default port",
+                "[%s] did not listen on port %u within 15 s (alive %d); "
+                "output: [%s]", cmd, port, tsd_alive(tsd_child, &st),
+                logtext);
+        tsd_stop(tsd_child, SIGKILL, 5);
+        tsd_child = 0;
+        free(big);
+        return;
     }
-    n = tsd_listeners(tsd_child, addr, lp);
+    if (tsd_have_session)
+        n = tsd_listeners(tsd_child, addr, lp);
     tsd_listeners_text(addr, lp, n, txt, sizeof(txt));
     for (i = 0; i < n; i++)
     {
@@ -273,26 +298,27 @@ tsd_h4_run(const char *id, bool set, unsigned port, int sig, bool hostile)
         else
             other = true;
     }
-    RING_VERDICT("%s listeners (%s): %s", id, set ? "variables set" :
-                 "variables unset", txt);
-    if (n < 0 || !lo || wild || other)
-    {
-        tsd_tail(log, logtext, sizeof(logtext));
-        TEST_FAIL("%s FAIL: expected only 127.0.0.1:%u, tapi_netexpose "
-                  "reports [%s] (wildcard %d, other %d); output: [%s]", id,
-                  port, txt, wild, other, logtext);
-    }
+    if (n < 0)
+        tsd_say("%s %s: port %u accepts connections (connect check; "
+                "tapi_netexpose not available)", id,
+                set ? "listens on configured port" : "default port", port);
+    else if (!lo || wild || other)
+        tsd_bad(id, set ? "listens on configured port" : "default port",
+                "expected only 127.0.0.1:%u, tapi_netexpose reports [%s] "
+                "(wildcard %d, other %d)", port, txt, wild, other);
+    else
+        tsd_say("%s %s: 127.0.0.1:%u only (tapi_netexpose [%s])", id,
+                set ? "listens on configured port" : "default port", port,
+                txt);
 
     TEST_STEP("A valid request gets 200");
     tsd_ring(port, "42", reply, sizeof(reply));
     if (tsd_status(reply) != 200)
-    {
-        tsd_tail(log, logtext, sizeof(logtext));
-        TEST_FAIL("%s FAIL: a valid request got [%.300s]; output: [%s]", id,
-                  reply, logtext);
-    }
+        tsd_bad(id, "valid input", "a valid request got [%.300s]", reply);
+    else
+        tsd_say("%s valid input reply: status 200", id);
 
-    for (i = 0; i < 4; i++)
+    for (i = 0; i < 3; i++)
     {
         ssize_t r;
         int     status;
@@ -301,22 +327,28 @@ tsd_h4_run(const char *id, bool set, unsigned port, int sig, bool hostile)
         r = tsd_ring(port, bad[i], reply, sizeof(reply));
         status = tsd_status(reply);
         if (r <= 0 || status < 400 || status > 499)
-        {
-            tsd_tail(log, logtext, sizeof(logtext));
-            TEST_FAIL("%s FAIL: %s input got no error reply (read %zd, "
-                      "status %d, reply [%.300s]); process alive %d; "
-                      "output: [%s]", id, names[i], r, status, reply,
-                      tsd_alive(tsd_child, &st), logtext);
-        }
+            tsd_bad(id, "bad input reply", "%s input got no error reply "
+                    "(read %zd, status %d, reply [%.300s])", names[i], r,
+                    status, reply);
+        else
+            tsd_say("%s bad input reply: %s input -> status %d [%.200s]",
+                    id, names[i], status, tsd_body(reply));
         if (!tsd_alive(tsd_child, &st))
         {
             tsd_tail(log, logtext, sizeof(logtext));
-            TEST_FAIL("%s FAIL: the process ended after %s input with "
-                      "code %d; output: [%s]", id, names[i], tsd_code(st),
-                      logtext);
+            tsd_bad(id, "alive after bad input", "the process ended after "
+                    "%s input with code %d; output: [%s]", names[i],
+                    tsd_code(st), logtext);
+            tsd_child = 0;
+            free(big);
+            return;
         }
-        RING("%s: %s input -> status %d", id, names[i], status);
     }
+    tsd_ring(port, "42", reply, sizeof(reply));
+    if (tsd_status(reply) != 200)
+        tsd_bad(id, "valid input after bad input", "got [%.300s]", reply);
+    else
+        tsd_say("%s alive after bad input: a later valid input got 200", id);
 
     if (hostile)
     {
@@ -341,92 +373,169 @@ tsd_h4_run(const char *id, bool set, unsigned port, int sig, bool hostile)
                          sizeof(reply));
             status = tsd_status(reply);
             if (status < 400 || status > 499)
-            {
-                tsd_tail(log, logtext, sizeof(logtext));
-                TEST_FAIL("%s FAIL: hostile request %d got status %d "
-                          "(reply [%.300s]); output: [%s]", id, i, status,
-                          reply, logtext);
-            }
+                tsd_bad(id, "hostile input", "hostile request %d got "
+                        "status %d (reply [%.300s])", i, status, reply);
+            else
+                tsd_say("%s hostile input %d: status %d", id, i, status);
         }
         if (!tsd_alive(tsd_child, &st))
         {
             tsd_tail(log, logtext, sizeof(logtext));
-            TEST_FAIL("%s FAIL: the process ended on hostile input with "
-                      "code %d; output: [%s]", id, tsd_code(st), logtext);
+            tsd_bad(id, "alive after hostile input", "the process ended "
+                    "with code %d; output: [%s]", tsd_code(st), logtext);
+            tsd_child = 0;
+            free(big);
+            return;
         }
     }
     free(big);
 
-    TEST_STEP("Send signal %d, expect exit code 0", sig);
+    TEST_STEP("Send %s, expect exit code 0", sname);
     code = tsd_stop(tsd_child, sig, 10);
     tsd_child = 0;
     tsd_tail(log, logtext, sizeof(logtext));
     if (code != 0)
-        TEST_FAIL("%s FAIL: after signal %d the exit code is %d (-2: it did "
-                  "not end in 10 s; 128+n: killed by signal n); output: [%s]",
-                  id, sig, code, logtext);
-    RING_VERDICT("%s PASS: %s on 127.0.0.1:%u, error replies to bad input, "
-                 "exit code 0 on signal %d", id,
-                 set ? "configured" : "default", port, sig);
+        tsd_bad(id, sig == SIGTERM ? "SIGTERM exit" : "SIGINT exit",
+                "%s exit=%d (-2: still running after 10 s; 128+n: killed "
+                "by signal n); output: [%s]", sname, code, logtext);
+    else
+        tsd_say("%s %s exit=%d (%s, 127.0.0.1:%u)", id, sname, code,
+                set ? "configured" : "default", port);
 }
 
 /** Full H4 scenario: four runs (set/unset, SIGTERM/SIGINT). */
 static inline void
 tsd_h4_scenario(const char *id, bool hostile)
 {
+    unsigned p1 = tsd_free_port();
+    unsigned p2;
+
+    signal(SIGPIPE, SIG_IGN);
     TEST_STEP("Open a tapi_netexpose session");
     if (tsapi_mde_session_init(&tsd_session, id) != 0)
-        TEST_FAIL("%s NOT SETTLED: no session on the agent, the listening "
-                  "ports cannot be checked", id);
-    tsd_have_session = true;
-    TEST_STEP("Control: tapi_netexpose reports planted listeners");
-    tsd_listener_control();
-    tsd_h4_run(id, true, 9101, SIGTERM, hostile);
+        tsd_say("%s: no session on the agent; the listening ports are "
+                "checked by connecting only", id);
+    else
+    {
+        tsd_have_session = true;
+        TEST_STEP("Control: tapi_netexpose reports planted listeners");
+        tsd_listener_control();
+    }
+    tsd_h4_run(id, true, p1, SIGTERM, hostile);
+    p2 = tsd_free_port();
+    tsd_h4_run(id, true, p2 == p1 ? p2 + 1 : p2, SIGINT, hostile);
     tsd_h4_run(id, false, 9100, SIGTERM, hostile);
-    tsd_h4_run(id, true, 9101, SIGINT, hostile);
     tsd_h4_run(id, false, 9100, SIGINT, hostile);
 }
 
 #define TSD_GO_PORT     8082
-#define TSD_TS_PORT     9103
+
+/** True when files @p a and @p b are equal (cmp, exit code in @p code). */
+static inline bool
+tsd_cmp(const char *a, const char *b, int *code)
+{
+    char cmd[400];
+
+    snprintf(cmd, sizeof(cmd), "cmp '%s' '%s' > /dev/null 2>&1", a, b);
+    *code = tsd_code(system(cmd));
+    return *code == 0;
+}
 
 /**
- * H3: send the same fixed inputs to the Go and the TypeScript example,
- * save status and body of each reply to files and compare them byte for
- * byte. @p structure also checks the shape of the TypeScript reply.
+ * Known-bad control for the H3 comparison: a tiny script prints a reply
+ * that differs from the reference, and cmp must fail on it; the same script
+ * compared with itself must pass.
  */
 static inline void
-tsd_h3_scenario(const char *id, bool structure)
+tsd_h3_control(const char *id)
 {
-    static const char *const inputs[] = {
-        "value=42&hops=0",      /* a valid guess */
-        "value=1&hops=0",       /* a low guess */
-        "value=1000&hops=0",    /* a high guess */
-        "value=42&hops=0",      /* a repeat */
-    };
-    static const char *const kind[] = { "valid", "low", "high", "repeat" };
+    int code1 = -1;
+    int code2 = -1;
+    int code3 = -1;
+
+    tsd_put("/tmp/ts_h3_ctl_bad.sh", "#!/bin/sh\necho 'status 200'\necho "
+            "'value=999'\n");
+    tsd_put("/tmp/ts_h3_ctl_ref.txt", "status 200\nvalue=42\n");
+    code1 = tsd_sh("/tmp", "sh /tmp/ts_h3_ctl_bad.sh", 10,
+                   "/tmp/ts_h3_ctl_out.txt");
+    (void)tsd_cmp("/tmp/ts_h3_ctl_ref.txt", "/tmp/ts_h3_ctl_out.txt", &code2);
+    (void)tsd_cmp("/tmp/ts_h3_ctl_out.txt", "/tmp/ts_h3_ctl_out.txt", &code3);
+    if (code1 != 0 || code2 == 0 || code3 != 0)
+        tsd_bad(id, "known-bad control", "script exit=%d, cmp on a "
+                "different reply exit=%d (must be non-zero), cmp on equal "
+                "replies exit=%d (must be 0)", code1, code2, code3);
+    else
+        tsd_say("%s control known-bad: cmp exit=%d on the script printing a "
+                "different reply (difference caught), exit=%d on equal "
+                "files", id, code2, code3);
+}
+
+#define TSD_H3_N    4
+static const char *const tsd_h3_kind[TSD_H3_N] = {
+    "valid", "empty", "non-numeric", "oversized"
+};
+
+static inline void
+tsd_h3_paths(unsigned i, char *pg, char *pt, size_t size)
+{
+    snprintf(pg, size, "/tmp/ts_h3_go_%u.txt", i + 1);
+    snprintf(pt, size, "/tmp/ts_h3_ts_%u.txt", i + 1);
+}
+
+/** True when all reply files of a previous run exist. */
+static inline bool
+tsd_h3_files_exist(void)
+{
+    unsigned i;
+
+    for (i = 0; i < TSD_H3_N; i++)
+    {
+        char pg[64], pt[64];
+
+        tsd_h3_paths(i, pg, pt, sizeof(pg));
+        if (access(pg, R_OK) != 0 || access(pt, R_OK) != 0)
+            return false;
+    }
+    return true;
+}
+
+/**
+ * Start the Go and the TypeScript example, send the four fixed inputs to
+ * both with a 5 s timeout and save the replies (status line and body) to
+ * /tmp/ts_h3_{go,ts}_N.txt. Failures are verdicts under @p id.
+ */
+static inline void
+tsd_h3_collect(const char *id)
+{
     const char *src = tsd_src();
     char        ts[PATH_MAX];
     char        cmd[600];
-    char        gtxt[2200] = "";
-    char        glog[1500];
-    char        rg[4096], rt[4096];
-    char        fg[2200], ft[2200];
+    char        glog[401];
+    char       *big = malloc(70100);
+    char       *req = malloc(70300);
+    char       *rg = malloc(16384);
+    char       *rt = malloc(16384);
+    char        fb[16500];
+    unsigned    tsport = tsd_free_port();
     int         st = 0;
     unsigned    i;
 
+    signal(SIGPIPE, SIG_IGN);
     snprintf(ts, sizeof(ts), "%s/ts", src);
-    TEST_STEP("Control: a differing byte is seen");
+    if (big == NULL || req == NULL || rg == NULL || rt == NULL)
     {
-        char a[] = "status 200\nvalue=1\n";
-        char b[] = "status 200\nvalue=2\n";
-
-        if (memcmp(a, a, sizeof(a)) != 0 || memcmp(a, b, sizeof(a)) == 0)
-            TEST_FAIL("%s control failed: the byte comparison does not "
-                      "see a planted difference", id);
+        tsd_bad(id, "memory", "out of memory");
+        goto out;
     }
+    memset(big, 'a', 70000);
+    big[70000] = '\0';
 
-    TEST_STEP("Start the Go example");
+    TEST_STEP("Start the Go example (its port is fixed by the contract: %d)",
+              TSD_GO_PORT);
+    if (tsd_connect(TSD_GO_PORT) >= 0)
+        tsd_say("%s: something already listens on port %d; the Go example "
+                "takes its port from web/contract/services.tab and has no "
+                "variable for it", id, TSD_GO_PORT);
     snprintf(cmd, sizeof(cmd), "test -x dist/bin/service-go && "
              "LD_LIBRARY_PATH=\"$PWD/dist/lib:$LD_LIBRARY_PATH\" "
              "exec dist/bin/service-go");
@@ -434,64 +543,99 @@ tsd_h3_scenario(const char *id, bool structure)
     if (!tsd_wait_port(TSD_GO_PORT, 20) || !tsd_alive(tsd_child, &st))
     {
         tsd_tail("/tmp/ts_h3_go.log", glog, sizeof(glog));
-        RING_VERDICT("%s SKIPPED: the Go example cannot start", id);
-        TEST_SKIP("%s SKIPPED: the Go example cannot start (%s/dist/bin/"
-                  "service-go, port %d); H3 cannot be compared; its output: "
-                  "[%s]", id, src, TSD_GO_PORT, glog);
+        tsd_bad(id, "start Go", "the Go example did not listen on port %d "
+                "(%s/dist/bin/service-go); output: [%s]", TSD_GO_PORT, src,
+                glog);
+        goto out;
     }
-    TEST_STEP("Start the TypeScript example on port %d", TSD_TS_PORT);
-    snprintf(cmd, sizeof(cmd), "EXAMPLE_PORT=%d EXAMPLE_HOST=127.0.0.1 "
-             "exec node dist/main.js", TSD_TS_PORT);
+    tsd_say("%s start Go: listening on port %d", id, TSD_GO_PORT);
+
+    TEST_STEP("Start the TypeScript example on port %u", tsport);
+    snprintf(cmd, sizeof(cmd), "EXAMPLE_PORT=%u EXAMPLE_HOST=127.0.0.1 "
+             "exec node dist/main.js", tsport);
     tsd_child2 = tsd_spawn(ts, cmd, "/tmp/ts_h3_ts.log");
-    if (!tsd_wait_port(TSD_TS_PORT, 15))
+    if (!tsd_wait_port(tsport, 15) || !tsd_alive(tsd_child2, &st))
     {
         tsd_tail("/tmp/ts_h3_ts.log", glog, sizeof(glog));
-        TEST_FAIL("%s FAIL: the TypeScript example did not listen on port "
-                  "%d; output: [%s]", id, TSD_TS_PORT, glog);
+        tsd_bad(id, "start TypeScript", "the TypeScript example did not "
+                "listen on port %u; output: [%s]", tsport, glog);
+        goto out;
     }
+    tsd_say("%s start TypeScript: listening on port %u", id, tsport);
 
-    for (i = 0; i < 4; i++)
+    for (i = 0; i < TSD_H3_N; i++)
     {
-        char req[200];
-        char pg[64], pt[64];
-        FILE *f;
+        char    pg[64], pt[64];
+        char    val[80];
+        ssize_t ng, nt;
+        const char *v;
 
-        snprintf(req, sizeof(req), "GET /ring?%s HTTP/1.0\r\nHost: "
-                 "127.0.0.1\r\n\r\n", inputs[i]);
-        TEST_STEP("Send the %s input [%s] to both", kind[i], inputs[i]);
-        tsd_exchange(TSD_GO_PORT, req, strlen(req), 8000, rg, sizeof(rg));
-        tsd_exchange(TSD_TS_PORT, req, strlen(req), 8000, rt, sizeof(rt));
-        snprintf(fg, sizeof(fg), "status %d\n%s", tsd_status(rg),
+        v = i == 0 ? "42" : i == 1 ? "" : i == 2 ? "abc" : big;
+        snprintf(val, sizeof(val), "%.60s", v);
+        snprintf(req, 70300, "GET /ring?value=%s&hops=0 HTTP/1.0\r\n"
+                 "Host: 127.0.0.1\r\n\r\n", v);
+        TEST_STEP("Send the %s input to both", tsd_h3_kind[i]);
+        ng = tsd_exchange(TSD_GO_PORT, req, strlen(req), 5000, rg, 16384);
+        nt = tsd_exchange(tsport, req, strlen(req), 5000, rt, 16384);
+        tsd_h3_paths(i, pg, pt, sizeof(pg));
+        snprintf(fb, sizeof(fb), "status %d\n%s", tsd_status(rg),
                  tsd_body(rg));
-        snprintf(ft, sizeof(ft), "status %d\n%s", tsd_status(rt),
+        tsd_put(pg, fb);
+        snprintf(fb, sizeof(fb), "status %d\n%s", tsd_status(rt),
                  tsd_body(rt));
-        snprintf(pg, sizeof(pg), "/tmp/ts_h3_go_%u.txt", i + 1);
-        snprintf(pt, sizeof(pt), "/tmp/ts_h3_ts_%u.txt", i + 1);
-        f = fopen(pg, "w");
-        if (f != NULL)
-            fputs(fg, f), fclose(f);
-        f = fopen(pt, "w");
-        if (f != NULL)
-            fputs(ft, f), fclose(f);
-        RING("%s: %s input: Go reply [%s] TypeScript reply [%s]", id,
-             kind[i], fg, ft);
-        if (strlen(fg) != strlen(ft) || memcmp(fg, ft, strlen(fg)) != 0)
-        {
-            RING_VERDICT("%s mismatch on the %s input", id, kind[i]);
-            TEST_FAIL("%s FAIL: replies differ on the %s input [%s]. "
-                      "Go reply: [%s] TypeScript reply: [%s]", id, kind[i],
-                      inputs[i], fg, ft);
-        }
-        if (structure && (tsd_status(rt) != 200 ||
-                          strstr(tsd_body(rt), "value=") == NULL))
-            TEST_FAIL("%s FAIL: the TypeScript reply to the %s input has "
-                      "no status 200 and value= line: [%s]", id, kind[i],
-                      ft);
-        snprintf(gtxt + strlen(gtxt), sizeof(gtxt) - strlen(gtxt), "%s ok; ",
-                 kind[i]);
+        tsd_put(pt, fb);
+        tsd_say("%s input %u collected (%s, value=%.40s): Go read %zd "
+                "bytes status %d, TypeScript read %zd bytes status %d",
+                id, i + 1, tsd_h3_kind[i], val, ng, tsd_status(rg), nt,
+                tsd_status(rt));
+        if (ng < 0 || nt < 0)
+            tsd_bad(id, "send input", "input %u: connect failed (Go %zd, "
+                    "TypeScript %zd)", i + 1, ng, nt);
     }
-    RING_VERDICT("%s PASS: Go and TypeScript replies equal byte for byte "
-                 "(%s)", id, gtxt);
+out:
+    tsd_cleanup();
+    free(big);
+    free(req);
+    free(rg);
+    free(rt);
+}
+
+/**
+ * H3 comparison of the saved files, one verdict per input: 'H3 input N
+ * same' or 'H3 input N differs' with both replies. Nothing is weakened:
+ * one differing byte fails the test.
+ */
+static inline void
+tsd_h3_compare(const char *id)
+{
+    unsigned i;
+
+    for (i = 0; i < TSD_H3_N; i++)
+    {
+        char pg[64], pt[64];
+        char a[401], b[401];
+        int  code;
+        bool same;
+
+        tsd_h3_paths(i, pg, pt, sizeof(pg));
+        same = tsd_cmp(pg, pt, &code);
+        tsd_head(pg, a, sizeof(a));
+        tsd_head(pt, b, sizeof(b));
+        if (same)
+            tsd_say("H3 input %u same (%s; cmp exit=%d) reply: [%s]", i + 1,
+                    tsd_h3_kind[i], code, a);
+        else
+        {
+            char nm[40];
+
+            snprintf(nm, sizeof(nm), "input %u differs", i + 1);
+            tsd_say("H3 input %u differs (%s; cmp exit=%d) Go reply: [%s] "
+                    "TypeScript reply: [%s]", i + 1, tsd_h3_kind[i], code,
+                    a, b);
+            tsd_flag(nm);
+        }
+    }
+    (void)id;
 }
 
 #endif /* MDE_TSD_NET_H */

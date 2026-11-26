@@ -19,33 +19,35 @@
 int
 main(int argc, char **argv)
 {
-    char        text[3001];
+    char        text[401];
     const char *src = tsd_src();
     int         code;
     long long   t0;
 
     TEST_START;
+    tsd_say("H2 start");
 
     TEST_STEP("Control: an early non-zero exit is not taken for a server");
     code = tsd_sh("/", "echo planted >&2; exit 2", 30, "/tmp/ts_h2_ctl.log");
     if (code == 0 || code == 124)
-        TEST_FAIL("H2 control failed: planted exit 2 was read as %d", code);
+        tsd_bad("H2", "control", "planted exit 2 was read as %d", code);
+    else
+        tsd_say("H2 control exit=%d: planted early failure seen", code);
 
     TEST_STEP("Run scripts/run.sh guess for 30 s in %s", src);
     t0 = tsd_ms();
     code = tsd_sh(src, "scripts/run.sh guess", 30, "/tmp/ts_h2_guess.log");
     tsd_head("/tmp/ts_h2_guess.log", text, sizeof(text));
-    RING("H2 scripts/run.sh guess exit code %d after %lld ms; output: [%s]",
-         code, tsd_ms() - t0, text);
+    (void)!system("pkill -f 'node dist/main.js' > /dev/null 2>&1");
     if (code != 0 && code != 124)
-    {
-        RING_VERDICT("H2 guess exited with %d before the limit", code);
-        TEST_FAIL("H2 scripts/run.sh guess exited with %d after %lld ms "
-                  "before the 30 s limit; output: [%s]", code,
-                  tsd_ms() - t0, text);
-    }
-    RING_VERDICT("H2 guess ran (exit code %d, 124 is the time limit); "
-                 "output [%.300s]", code, text);
+        tsd_bad("H2", "guess alive", "scripts/run.sh guess exit=%d after "
+                "%lld ms before the 30 s limit: [%.400s]", code,
+                tsd_ms() - t0, text);
+    else
+        tsd_say("H2 guess alive: exit=%d after %lld ms (124: still running "
+                "at the 30 s limit; 0: ended cleanly): [%.400s]", code,
+                tsd_ms() - t0, text);
+    TSD_FINISH("H2");
     TEST_SUCCESS;
 
 cleanup:

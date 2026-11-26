@@ -24,7 +24,7 @@
 #include <string.h>
 #include <sys/wait.h>
 
-#include "tapi_test.h"
+#include "tsd.h"
 
 int
 main(int argc, char **argv)
@@ -42,6 +42,7 @@ main(int argc, char **argv)
     unsigned i;
 
     TEST_START;
+    tsd_say("H5 start");
 
     for (i = 0; i < sizeof(cmds) / sizeof(cmds[0]); i++)
     {
@@ -75,6 +76,36 @@ main(int argc, char **argv)
                      "%zu bytes of %s: [%s]", i + 1, cmds[i], code,
                      f != NULL ? "log read" : "log NOT readable", got, path,
                      head);
+    }
+
+    {
+        static const char *const vc[] = { "node --version", "npm --version",
+                                          "tsc --version",
+                                          "ls /work/src" };
+        char     all[1500] = "";
+        char     bad[200] = "";
+        char     one[401];
+        unsigned k;
+
+        for (k = 0; k < 4; k++)
+        {
+            char log[48];
+            int  c;
+
+            snprintf(log, sizeof(log), "/tmp/ts_diag_v%u.log", k + 1);
+            TEST_STEP("Run %s", vc[k]);
+            c = tsd_sh("/", vc[k], 60, log);
+            tsd_head(log, one, sizeof(one));
+            if (c != 0)
+                snprintf(bad + strlen(bad), sizeof(bad) - strlen(bad),
+                         "%s ", vc[k]);
+            snprintf(all + strlen(all), sizeof(all) - strlen(all),
+                     "[%s exit=%d: %.300s] ", vc[k], c, one);
+        }
+        if (bad[0] != '\0')
+            tsd_say("H5 versions: FAILED commands: %s; %s", bad, all);
+        else
+            tsd_say("H5 versions: all commands ran; %s", all);
     }
 
     TEST_SUCCESS;

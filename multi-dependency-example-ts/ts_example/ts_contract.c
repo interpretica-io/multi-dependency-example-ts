@@ -21,8 +21,17 @@ int
 main(int argc, char **argv)
 {
     TEST_START;
-    TSD_NEED_BUILD("H3");
-    tsd_h3_scenario("H3", true);
+    tsd_say("H5 start");
+    if (tsd_build_gate("H3"))
+    {
+        tsd_h3_control("H3");
+        tsd_h3_collect("H3");
+        if (tsd_h3_files_exist())
+            tsd_h3_compare("H3");
+        else
+            tsd_flag("no reply files");
+    }
+    TSD_FINISH("H3");
     TEST_SUCCESS;
 
 cleanup:

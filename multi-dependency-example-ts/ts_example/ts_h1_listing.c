@@ -69,61 +69,59 @@ main(int argc, char **argv)
     char        why[PATH_MAX + 64];
     char        cmd[PATH_MAX + 128];
     char        tsdir[PATH_MAX];
-    char        text[401];
-    char        all[3000] = "";
+    char        p[PATH_MAX + 32];
     const char *src = tsd_src();
+    static const char *const need[] = { "package.json", "tsconfig.json",
+                                        "src/main.ts" };
     unsigned    i;
-    bool        ok;
 
     TEST_START;
+    tsd_say("H1 start");
 
     TEST_STEP("Control: a tree with only package.json is not an example");
     if (mkdtemp(ctl) == NULL)
-        TEST_FAIL("H1 NOT SETTLED: cannot create %s: %s", ctl,
-                  strerror(errno));
-    snprintf(cmd, sizeof(cmd), "touch %s/package.json", ctl);
-    if (system(cmd) != 0 || example_ok(ctl, why, sizeof(why)))
-        TEST_FAIL("H1 control failed: package.json alone was accepted as "
-                  "a TypeScript example");
-    TEST_STEP("Control: package.json, tsconfig.json and a .ts file are one");
-    snprintf(cmd, sizeof(cmd), "touch %s/tsconfig.json %s/main.ts", ctl, ctl);
-    if (system(cmd) != 0 || !example_ok(ctl, why, sizeof(why)))
-        TEST_FAIL("H1 control failed: a complete planted example was "
-                  "rejected: %s", why);
-    snprintf(cmd, sizeof(cmd), "rm -rf %s", ctl);
-    (void)!system(cmd);
+        tsd_bad("H1", "control", "cannot create %s: %s", ctl, strerror(errno));
+    else
+    {
+        snprintf(cmd, sizeof(cmd), "touch %s/package.json", ctl);
+        if (system(cmd) != 0 || example_ok(ctl, why, sizeof(why)))
+            tsd_bad("H1", "control", "package.json alone was accepted as "
+                    "a TypeScript example");
+        snprintf(cmd, sizeof(cmd), "touch %s/tsconfig.json %s/main.ts", ctl,
+                 ctl);
+        if (system(cmd) != 0 || !example_ok(ctl, why, sizeof(why)))
+            tsd_bad("H1", "control", "a complete planted example was "
+                    "rejected: %s", why);
+        else
+            tsd_say("H1 control: package.json alone rejected, a complete "
+                    "planted tree accepted");
+        snprintf(cmd, sizeof(cmd), "rm -rf %s", ctl);
+        (void)!system(cmd);
+    }
 
     snprintf(tsdir, sizeof(tsdir), "%s/ts", src);
+    TEST_STEP("Run ls -R of %s without node_modules", tsdir);
+    snprintf(cmd, sizeof(cmd), "ls -R -I node_modules %s", tsdir);
+    tsd_cmd("H1 listing", "/", cmd, 60, "/tmp/ts_h1_listing.log", false);
+
     for (i = 0; i < 3; i++)
     {
-        char path[64];
-        int  code;
-
-        snprintf(path, sizeof(path), "/tmp/ts_h1_%u.log", i + 1);
-        if (i == 0)
-            snprintf(cmd, sizeof(cmd), "ls -la %s", src);
-        else if (i == 1)
-            snprintf(cmd, sizeof(cmd), "ls -la %s", tsdir);
+        snprintf(p, sizeof(p), "%s/%s", tsdir, need[i]);
+        TEST_STEP("Check %s", p);
+        if (access(p, R_OK) == 0)
+            tsd_say("H1 %s exists: %s", need[i], p);
         else
-            snprintf(cmd, sizeof(cmd), "find %s -name '*.ts' -not -path "
-                     "'*/node_modules/*'", src);
-        TEST_STEP("Run %s", cmd);
-        code = tsd_sh("/", cmd, 60, path);
-        tsd_head(path, text, sizeof(text));
-        RING_VERDICT("H1 command [%s] exit code %d, first 400 bytes: [%s]",
-                     cmd, code, text);
-        snprintf(all + strlen(all), sizeof(all) - strlen(all),
-                 "[%s] exit %d: %.350s\n", cmd, code, text);
+        {
+            tsd_say("H1 missing %s: %s does not exist", need[i], p);
+            tsd_flag(need[i]);
+        }
     }
 
-    TEST_STEP("Check ts/package.json, ts/tsconfig.json and a .ts file");
-    ok = example_ok(tsdir, why, sizeof(why));
-    if (!ok)
-    {
-        RING_VERDICT("H1 no TypeScript example found");
-        TEST_FAIL("H1 no TypeScript example found: %s. Listing: %s", why, all);
-    }
-    RING_VERDICT("H1 TypeScript example found");
+    if (tsd_nfail == 0)
+        tsd_say("H1 TypeScript example found");
+    else
+        tsd_say("H1 no TypeScript example found: missing %s", tsd_fails);
+    TSD_FINISH("H1");
     TEST_SUCCESS;
 
 cleanup:
