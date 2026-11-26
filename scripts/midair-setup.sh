@@ -59,6 +59,30 @@ echo "midair-setup: installing the toolchains and tools (base, exposure, ts)"
 "${ENSURE}" "${ROOT}" base exposure ts soft ||
     fail "scripts/ensure-web-deps.sh base exposure ts failed (see above)"
 
+# The probe of ensure-web-deps.sh stays as it is. Where ts-node cannot run a
+# trivial file in the ts/ or web/service-ts directory of the project, install
+# ts-node and typescript there and print the versions.
+PROJ="${MIDAIR_PROJECT_DIR:-}"
+for d in ts web/service-ts; do
+    dir="${PROJ}/${d}"
+    if [ -z "${PROJ}" ] || [ ! -d "${dir}" ]; then
+        echo "midair-setup: ${d}: no such directory in the project, ts-node probe not run"
+        continue
+    fi
+    PT="$(mktemp -d /tmp/midair-tsprobe.XXXXXX)"
+    echo 'const n: number = 41; console.log(n + 1);' > "${PT}/t.ts"
+    if [ "$(cd "${dir}" && npx --no-install ts-node "${PT}/t.ts" 2>&1)" != 42 ]; then
+        echo "midair-setup: ${d}: ts-node probe failed on node $(node -v), installing ts-node and typescript there"
+        (cd "${dir}" && npm install --no-save ts-node typescript @types/node) >&2 ||
+            echo "midair-setup: WARNING: npm install of ts-node and typescript in ${d} failed" >&2
+    else
+        echo "midair-setup: ${d}: ts-node probe passed"
+    fi
+    rm -rf "${PT}"
+    echo "midair-setup: ${d}: ts-node $(cd "${dir}" && npx --no-install ts-node --version 2>&1 | head -n 1)"
+    echo "midair-setup: ${d}: tsc $(cd "${dir}" && npx --no-install tsc --version 2>&1 | head -n 1)"
+done
+
 # The Go toolchain (go.mod wants 1.21 or newer) and the .NET 9 SDK build the
 # go-demo and cs-demo references. Each is installed here and checked: a
 # missing one fails the setup and is named, it is not left for a test to find.

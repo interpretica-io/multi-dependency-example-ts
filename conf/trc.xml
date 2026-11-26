@@ -1447,7 +1447,7 @@
               <notes/>
               <results>
                 <result value="FAILED">
-                  <verdict>H3 contract differs for bad-value: go=200 ts=400; H3 contract differs for bad-hops: go=200 ts=400</verdict>
+                  <verdict>H3 contract differs for bad-value: go=200 ts=400; H3 contract differs for bad-hops: go=200 ts=400; H3 contract differs for no-query: go=200 ts=502</verdict>
                 </result>
               </results>
             </iter>

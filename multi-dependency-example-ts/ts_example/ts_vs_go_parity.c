@@ -178,6 +178,9 @@ main(int argc, char **argv)
         tsj_art_reply("H3", one, rg.code, web_str(&rg.body));
         snprintf(one, sizeof(one), "%s ts", reqs[i].name);
         tsj_art_reply("H3", one, rt.code, web_str(&rt.body));
+        if (strcmp(reqs[i].name, "no-query") == 0)
+            tsj_art_reply("H2", "ts no-query reply (502 means the absent "
+                          "upstream on 8081)", rt.code, web_str(&rt.body));
         if (cg == CONN_FAILED || ct == CONN_FAILED)
             why = "connection failure";
         else if (cg / 100 != ct / 100)

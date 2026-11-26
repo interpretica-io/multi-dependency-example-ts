@@ -127,7 +127,9 @@ main(int argc, char **argv)
             int         hi;
         } more[] = {
             { "hops=abc",       "/ring?value=1&hops=abc", 400, 400 },
-            { "missing query",  "/ring",                  0, 999 },
+            { "missing query, default hops (artifact only; upstream 8081 "
+              "is absent)", "/ring", 0, 999 },
+            { "missing query with hops=0", "/ring?hops=0",   0, 999 },
             { "wrong path",     "/nowhere?value=1&hops=0", 400, 499 },
         };
         size_t k;

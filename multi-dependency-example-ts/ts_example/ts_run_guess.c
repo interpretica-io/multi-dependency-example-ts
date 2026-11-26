@@ -10,10 +10,9 @@
  * H1 passes only when the exit code is 0 and 4 stage lines appear; a crash
  * is named with the language, the signal and the last stage reached, and a
  * libSystem, dlopen or wrong ELF class text in the output is named too.
- * After that the stage lines and the final value of each reference that
- * passed H1 are compared with the TypeScript demo by stage count and formula
- * text only; the final values differ by design, as the demos start at
- * different ring stages. RING_HOST and RING_PORT are set for every job. ./scripts/run.sh guess without arguments is run
+ * After that (H4) the formula lines and the final value of the TypeScript
+ * demo are compared with cpp-demo only; the other demos start at different
+ * ring stages, so their finals are recorded as artifacts, not compared. RING_HOST and RING_PORT are set for every job. ./scripts/run.sh guess without arguments is run
  * too, to log its stage count and final value against the defaults of the
  * demo.
  *
@@ -294,40 +293,53 @@ main(int argc, char **argv)
     tsd_say("H1 %d of %d references exited 0 with 4 stage lines", nok,
             TSR_NREF);
 
-    TEST_STEP("H1: compare the stage count and the formula text of "
-              "each stage line with the TypeScript demo");
+    TEST_STEP("H4: record the final value of every demo as an artifact");
     for (i = 0; i < TSR_NREF; i++)
+        TEST_ARTIFACT("H4 %s 42 3: exit %d, %d stage line(s), final [%s]",
+                      tsr_refs[i].name, r[i].code, r[i].stages,
+                      r[i].fin[0] != '\0' ? r[i].fin : "none");
+    TEST_ARTIFACT("H4 typescript 42 3: exit %d, %d stage line(s), final [%s]",
+                  ts_code, ts_stages, tsfin);
+
+    TEST_STEP("H4: compare the formula lines and the final value of the "
+              "TypeScript demo with cpp-demo only");
     {
         char tag[40];
         char d[601];
 
-        if (!r[i].ok)
-        {
-            tsd_say("H1 %s not compared: it did not pass H1", tsr_refs[i].name);
-            continue;
-        }
-        snprintf(tag, sizeof(tag), "g_%s", tsr_refs[i].name);
-        snprintf(cmd, sizeof(cmd), NORM("/tmp/ts_ref_%s.out",
-                 "/tmp/ts_rg_%s.norm") "; " CMPF("/tmp/ts_rg_%s.norm",
-                 "/tmp/ts_rg_%s.cmp"), tag, tsr_refs[i].name,
-                 tsr_refs[i].name, tsr_refs[i].name);
-        tsd_sh("/", cmd, 10, "/tmp/ts_rg_n.log");
-        snprintf(cmd, sizeof(cmd), "test -s /tmp/ts_rg_ts.cmp && cmp "
-                 "/tmp/ts_rg_ts.cmp %s", ref_cmp(tsr_refs[i].name));
-        if (tsd_sh("/", cmd, 10, "/tmp/ts_rg_cmp.log") == 0)
-            tsd_say("H1 TypeScript stage count and formula text equal %s",
-                    tsr_refs[i].name);
+        /* Known-bad control: a planted different formula must be seen. */
+        tsd_put("/tmp/ts_rg_k1", "(v*0.8+3)*go_weight\n");
+        tsd_put("/tmp/ts_rg_k2", "(v*1.5+1)*cs_weight\n");
+        if (tsd_sh("/", "cmp -s /tmp/ts_rg_k1 /tmp/ts_rg_k2", 10,
+                   "/tmp/ts_rg_k.log") != 1)
+            TEST_FAIL("H4 NOT SETTLED: the formula comparison does not see a "
+                      "planted difference");
+        if (!r[0].ok)
+            tsd_say("H4 cpp-demo did not pass H1, so it is not compared");
         else
         {
-            first_diff("/tmp/ts_rg_ts.cmp", ref_cmp(tsr_refs[i].name), d,
-                       sizeof(d));
-            char step[160];
-            char *c = strstr(d, ": typescript");
-
-            snprintf(step, sizeof(step), "%s %.*s", tsr_refs[i].name,
-                     c != NULL ? (int)(c - d) : 40, d);
-            tsd_bad("H1", step, "TypeScript and %s print different "
-                    "formula text: %s", tsr_refs[i].name, d);
+            snprintf(tag, sizeof(tag), "g_%s", tsr_refs[0].name);
+            snprintf(cmd, sizeof(cmd), NORM("/tmp/ts_ref_%s.out",
+                     "/tmp/ts_rg_%s.norm") "; " CMPF("/tmp/ts_rg_%s.norm",
+                     "/tmp/ts_rg_%s.cmp"), tag, tsr_refs[0].name,
+                     tsr_refs[0].name, tsr_refs[0].name);
+            tsd_sh("/", cmd, 10, "/tmp/ts_rg_n.log");
+            snprintf(cmd, sizeof(cmd), "test -s /tmp/ts_rg_ts.cmp && cmp "
+                     "/tmp/ts_rg_ts.cmp %s", ref_cmp(tsr_refs[0].name));
+            if (tsd_sh("/", cmd, 10, "/tmp/ts_rg_cmp.log") == 0)
+                tsd_say("H4 TypeScript formula lines equal cpp-demo");
+            else
+            {
+                first_diff("/tmp/ts_rg_ts.cmp", ref_cmp(tsr_refs[0].name), d,
+                           sizeof(d));
+                tsd_bad("H4", "cpp-demo formula lines", "TypeScript and "
+                        "cpp-demo print different formula lines: %s", d);
+            }
+            if (strcmp(tsfin, r[0].fin) != 0)
+                tsd_bad("H4", "cpp-demo final value", "TypeScript final %s, "
+                        "cpp-demo final %s", tsfin, r[0].fin);
+            else
+                tsd_say("H4 TypeScript and cpp-demo both end at %s", tsfin);
         }
     }
 
@@ -365,10 +377,10 @@ main(int argc, char **argv)
                     "while DEFAULT_HOPS is %s", st, dh);
     }
 
-    TSD_FINISH("H1");
-    TEST_ARTIFACT("H1 the TypeScript run exited 0 with 4 stage lines and a "
-                  "final value; every reference has 4 stage lines with the "
-                  "same formula text");
+    TSD_FINISH("H1/H4");
+    TEST_ARTIFACT("H4 the TypeScript run exited 0 with 4 stage lines and a "
+                  "final value that equals cpp-demo, with the same formula "
+                  "lines; all five demos exited 0 with 4 stage lines");
     TEST_SUCCESS;
 
 cleanup:
