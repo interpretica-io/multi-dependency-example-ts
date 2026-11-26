@@ -47,7 +47,8 @@ main(int argc, char **argv)
 
     TEST_STEP("Run ./build.sh in %s", src);
     t0 = tsd_ms();
-    code = tsd_sh(src, "./build.sh", 540, "/tmp/ts_build.log");
+    code = tsd_sh(src, "S=$(mktemp -d); export HOME=$S GOCACHE=$S/gocache; "
+                  "./build.sh", 540, "/tmp/ts_build.log");
     tsd_tail("/tmp/ts_build.log", tail, sizeof(tail));
     if (strlen(tail) > 400)
         memmove(tail, tail + strlen(tail) - 400, 401);

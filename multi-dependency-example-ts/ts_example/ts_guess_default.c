@@ -65,6 +65,8 @@ main(int argc, char **argv)
     TEST_STEP("Run ./scripts/run.sh guess");
     CHECK_RC(tsg_guess(&session, root, TSG_ENV, "", 900, &res));
     tsg_art("H1 guess", "default run", &res);
+    TEST_ARTIFACT("H1 default run: stages=%d final value 17.6799 wanted",
+                  tsg_stages(web_str(&res.out)));
     why = judge(&res, 7, "17.6799");
     if (why != NULL)
     {
@@ -76,6 +78,8 @@ main(int argc, char **argv)
     TEST_STEP("Run ./scripts/run.sh guess 42 3");
     CHECK_RC(tsg_guess(&session, root, TSG_ENV, "42 3", 120, &res));
     tsg_art("H1 guess", "42 3 run", &res);
+    TEST_ARTIFACT("H1 42 3 run: stages=%d final value 38.9640 wanted",
+                  tsg_stages(web_str(&res.out)));
     why = judge(&res, 4, "38.9640");
     if (why != NULL)
     {

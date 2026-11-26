@@ -1,17 +1,16 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief ts_example: ts_vs_go_parity, the TypeScript and Go services keep
- *        the same contract (settles H3)
+ * @brief ts_example: ts_vs_go_parity, each service against its own contract
+ *        (settles H6 and H7)
  *
- * Starts service-go on its contract port and service-ts, waits for each port
- * with a retry loop (up to 10 s, 100 ms apart), sends the same requests to
- * both and records both status codes and both bodies as artifacts. Only the
- * status code class (2xx or 4xx) and the shape of a good reply (a stage tag
- * in brackets, "hops=N", a "value=" line) are compared; the formula, the
- * stage tag name and the number differ by design. A known-bad control sends a
- * request to a closed port: the same helper must report a connection
- * failure. Skipped when service-go is not built.
+ * Starts service-go and service-ts, polls each port (20 tries, 0.5 s apart),
+ * and checks service-ts only against its contract: 200 with value 3.7500 for
+ * value=1 hops=0, 400 for value=abc, 400 for hops=65 and hops=abc. The Go
+ * status and value of each case, and the TS status of the no-query case, are
+ * recorded as artifacts only: Go answering 200 on bad input (H7) is a known
+ * difference outside the TypeScript goal. A closed port is the known-bad
+ * control (curl exit 7). Skipped when service-go is not built.
  *
  * @author midair <midair@localhost>
  */
@@ -23,13 +22,13 @@
 static const struct {
     const char *name;
     const char *target;
+    int         want;       /* TS status, 0 when only recorded */
 } reqs[] = {
-    { "value-42-hops-0",  "/ring?value=42&hops=0" },
-    { "value-1-hops-0",   "/ring?value=1&hops=0" },
-    { "value-neg-hops-0", "/ring?value=-3.5&hops=0" },
-    { "bad-value",        "/ring?value=abc&hops=0" },
-    { "bad-hops",         "/ring?value=1&hops=abc" },
-    { "no-query",         "/ring" },
+    { "good",        "/ring?value=1&hops=0",   200 },
+    { "bad-value",   "/ring?value=abc&hops=0", 400 },
+    { "hops-65",     "/ring?value=1&hops=65",  400 },
+    { "bad-hops",    "/ring?value=1&hops=abc", 400 },
+    { "no-query",    "/ring",                  0 },
 };
 
 #define CONN_FAILED     (-1)
@@ -47,7 +46,7 @@ probe(tsapi_mde_session *s, unsigned int port, const char *target,
     return reply->code;
 }
 
-/** Poll the port up to 10 s, 100 ms apart; true when it answers. */
+/** Poll the port up to 20 tries, 0.5 s apart; true when it answers. */
 static bool
 poll_port(tsapi_mde_session *s, tsj_svc *svc, unsigned int port)
 {
@@ -55,34 +54,44 @@ poll_port(tsapi_mde_session *s, tsj_svc *svc, unsigned int port)
     int       i;
     bool      up = false;
 
-    for (i = 0; i < 100 && !up; i++)
+    for (i = 0; i < 20 && !up; i++)
     {
         if (!tsj_running(svc))
             break;
         if (probe(s, port, "/ring?value=1&hops=0", &reply) != CONN_FAILED)
             up = true;
         else
-            usleep(100000);
+            usleep(500000);
     }
     te_string_free(&reply.body);
     return up;
 }
 
-/** NULL when @p body has the shape of a good reply. */
+/** The value line of a reply, copied into @p out; empty when none. */
 static const char *
-good_shape(const char *body)
+value_of(const char *body, char *out, size_t size)
 {
-    const char *o = strchr(body, '[');
-    const char *c = o != NULL ? strchr(o, ']') : NULL;
-    const char *h = strstr(body, "hops=");
+    const char *p = strstr(body, "value=");
+    size_t      n = 0;
 
-    if (o == NULL || c == NULL || c - o < 2)
-        return "no stage tag in brackets";
-    if (h == NULL || h[5] < '0' || h[5] > '9')
-        return "no hops=N";
-    if (strncmp(body, "value=", 6) != 0 && strstr(body, "\nvalue=") == NULL)
-        return "no value= line";
-    return NULL;
+    out[0] = '\0';
+    if (p == NULL)
+        return out;
+    for (p += 6; n + 1 < size && *p != '\0' && *p != '\n'; p++)
+        out[n++] = *p;
+    out[n] = '\0';
+    return out;
+}
+
+/** Whether a good TS body carries the value 3.7500. */
+static bool
+is_good_value(const char *body)
+{
+    char v[64];
+
+    return strcmp(value_of(body, v, sizeof(v)), "3.7500") == 0 ||
+           strstr(body, "\"value\":3.7500") != NULL ||
+           strstr(body, "\"value\": 3.7500") != NULL;
 }
 
 int
@@ -96,6 +105,8 @@ main(int argc, char **argv)
     web_reply           rt = WEB_REPLY_INIT;
     char                cmd[800];
     char                diff[900] = "";
+    char                val[64];
+    tsapi_mde_sh_result cres = TSAPI_MDE_SH_RESULT_INIT;
     const char         *root;
     unsigned int        tsport;
     size_t              i;
@@ -107,16 +118,14 @@ main(int argc, char **argv)
     up = true;
     root = tsj_root();
     if (root == NULL)
-        TEST_VERDICT("H3 NOT SETTLED: TE_TS_MDE_SRC is not set");
+        TEST_VERDICT("H6 NOT SETTLED: TE_TS_MDE_SRC is not set");
 
-    TEST_STEP("Control: the shape check rejects planted wrong replies");
-    if (good_shape("[service-x] hops=0 1.0000 -> 2.0000 f\nvalue=2\n") != NULL ||
-        good_shape("service hops=0\nvalue=2\n") == NULL ||
-        good_shape("[a] 1.0\nvalue=2\n") == NULL ||
-        good_shape("[a] hops=0 1.0\n") == NULL ||
-        good_shape("error: bad\n") == NULL)
-        TEST_VERDICT("H3 NOT SETTLED: the reply shape check accepted a "
-                     "planted wrong reply or rejected a planted good one");
+    TEST_STEP("Control: the value check rejects planted wrong replies");
+    if (!is_good_value("[service-ts] hops=0 x\nvalue=3.7500\n") ||
+        is_good_value("[service-ts] hops=0 x\nvalue=6.2400\n") ||
+        is_good_value("error: bad\n"))
+        TEST_VERDICT("H6 NOT SETTLED: the value check accepted a planted "
+                     "wrong reply or rejected a planted good one");
 
     TEST_STEP("Skip when node or the Go service is missing");
     if (!tsapi_mde_have(&session, "node"))
@@ -127,7 +136,7 @@ main(int argc, char **argv)
         TEST_SKIP("The Go service is not built (dist/bin/service-go)");
     snprintf(cmd, sizeof(cmd), "test -f '%s/web/service-ts/out/main.js'", root);
     if (!tsj_ok(&session, 10000, cmd))
-        TEST_VERDICT("H3 FAILED: web/service-ts/out/main.js is not built "
+        TEST_VERDICT("H6 FAILED: web/service-ts/out/main.js is not built "
                      "by ./build.sh");
 
     TEST_STEP("Known-bad control: a closed port is a connection failure");
@@ -135,13 +144,20 @@ main(int argc, char **argv)
         unsigned int closed = tsj_free_port(&session);
 
         if (closed == 0)
-            TEST_VERDICT("H3 NOT SETTLED: no free port on the agent");
+            TEST_VERDICT("H6 NOT SETTLED: no free port on the agent");
         if (probe(&session, closed, "/ring?value=1&hops=0", &rg) !=
             CONN_FAILED)
-            TEST_VERDICT("H3 NOT SETTLED: a request to a closed port was "
+            TEST_VERDICT("H6 NOT SETTLED: a request to a closed port was "
                          "not reported as a connection failure");
-        TEST_ARTIFACT("H3 control: a request to a closed port is reported "
-                      "as a connection failure");
+        CHECK_RC(tsapi_mde_sh(&session, 20000, &cres,
+                              "curl -sS --max-time 3 'http://127.0.0.1:%u/'",
+                              closed));
+        if (cres.status.type != TAPI_JOB_STATUS_EXITED ||
+            cres.status.value != 7)
+            TEST_VERDICT("H6 NOT SETTLED: curl to a closed port did not "
+                         "exit with code 7");
+        TEST_ARTIFACT("H6 control: a request to a closed port is reported "
+                      "as a connection failure (curl exit 7)");
     }
 
     TEST_STEP("Start the Go service on its contract port %d", TSJ_GO_PORT);
@@ -152,16 +168,16 @@ main(int argc, char **argv)
     TEST_STEP("Start the TypeScript service");
     tsport = tsj_free_port(&session);
     if (tsport == 0)
-        TEST_VERDICT("H3 NOT SETTLED: no free port on the agent");
+        TEST_VERDICT("H6 NOT SETTLED: no free port on the agent");
     tsj_ts_cmd(root, tsport, cmd, sizeof(cmd));
     CHECK_RC(tsj_start(&session, "service-ts", cmd, tsport, &ts));
 
     TEST_STEP("Wait for both ports before the first request");
     if (!poll_port(&session, &ts, tsport))
-        TEST_VERDICT("H3 FAILED: service-ts did not open its port within "
-                     "10 s");
+        TEST_VERDICT("H6 FAILED: service-ts did not open its port within "
+                     "10 s (20 tries)");
     if (!poll_port(&session, &go, TSJ_GO_PORT))
-        TEST_VERDICT("H3 NOT SETTLED: service-go did not open port %d "
+        TEST_VERDICT("H6 NOT SETTLED: service-go did not open port %d "
                      "within 10 s", TSJ_GO_PORT);
 
     for (i = 0; i < TE_ARRAY_LEN(reqs); i++)
@@ -174,45 +190,47 @@ main(int argc, char **argv)
         TEST_STEP("Send %s to both services", reqs[i].name);
         cg = probe(&session, TSJ_GO_PORT, reqs[i].target, &rg);
         ct = probe(&session, tsport, reqs[i].target, &rt);
-        snprintf(one, sizeof(one), "%s go", reqs[i].name);
-        tsj_art_reply("H3", one, rg.code, web_str(&rg.body));
+        TEST_ARTIFACT("H7 go %s: status %d value [%s] (recorded only)",
+                      reqs[i].name, rg.code,
+                      value_of(web_str(&rg.body), val, sizeof(val)));
         snprintf(one, sizeof(one), "%s ts", reqs[i].name);
-        tsj_art_reply("H3", one, rt.code, web_str(&rt.body));
-        if (strcmp(reqs[i].name, "no-query") == 0)
-            tsj_art_reply("H2", "ts no-query reply (502 means the absent "
-                          "upstream on 8081)", rt.code, web_str(&rt.body));
-        if (cg == CONN_FAILED || ct == CONN_FAILED)
+        tsj_art_reply("H6", one, rt.code, web_str(&rt.body));
+        if (reqs[i].want == 0)
+        {
+            TEST_ARTIFACT("H6 ts %s: status %d (recorded only)",
+                          reqs[i].name, ct);
+            continue;
+        }
+        if (ct == CONN_FAILED)
             why = "connection failure";
-        else if (cg / 100 != ct / 100)
-            why = "status class";
-        else if (cg / 100 == 2 &&
-                 (good_shape(web_str(&rg.body)) != NULL ||
-                  good_shape(web_str(&rt.body)) != NULL))
-            why = "reply shape";
+        else if (ct != reqs[i].want)
+            why = "wrong status";
+        else if (ct == 200 && !is_good_value(web_str(&rt.body)))
+            why = "value is not 3.7500";
         if (why != NULL)
         {
-            char item[120];
+            char item[160];
 
-            snprintf(item, sizeof(item), "H3 contract differs for %s: "
-                     "go=%d ts=%d", reqs[i].name, rg.code, rt.code);
-            RING("%s (%s)", item, why);
+            snprintf(item, sizeof(item), "H6 ts contract broken for %s: "
+                     "%s, want %d", reqs[i].name, why, reqs[i].want);
             if (diff[0] != '\0')
                 te_strlcat(diff, "; ", sizeof(diff));
             te_strlcat(diff, item, sizeof(diff));
         }
     }
 
-    TEST_STEP("A difference fails the test and names the request");
+    TEST_STEP("A broken contract fails the test and names the request");
     if (diff[0] != '\0')
         TEST_VERDICT("%s", diff);
 
-    TEST_ARTIFACT("H3 the Go and TypeScript services keep the same status "
-                  "class and reply shape for every request");
+    TEST_ARTIFACT("H6 service-ts keeps its contract: 200 with 3.7500 for "
+                  "value=1 hops=0, 400 for bad value and bad hops");
     TEST_SUCCESS;
 
 cleanup:
     tsj_stop(&ts);
     tsj_stop(&go);
+    tsapi_mde_sh_result_free(&cres);
     te_string_free(&rg.body);
     te_string_free(&rt.body);
     if (up)

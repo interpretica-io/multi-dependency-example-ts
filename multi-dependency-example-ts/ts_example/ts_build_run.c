@@ -128,7 +128,8 @@ main(int argc, char **argv)
     TEST_STEP("Step C: run ./build.sh with RING_HOST and RING_PORT set, "
               "whatever step B gave");
     snprintf(cmd, sizeof(cmd), "cd '%s' && export RING_HOST=127.0.0.1 "
-             "RING_PORT=9100 && { ./build.sh >/tmp/build.log 2>/tmp/build.err;"
+             "RING_PORT=9100 && S=$(mktemp -d) && export HOME=$S "
+             "GOCACHE=$S/gocache && { ./build.sh >/tmp/build.log 2>/tmp/build.err;"
              " echo exit=$?; tr -c '[:print:]\\n' '.' < /tmp/build.err | "
              "tail -n 30 | tr '\\n' '|'; }", root);
     CHECK_RC(tsapi_mde_sh(&session, 900000, &res, "%s", cmd));
@@ -140,31 +141,35 @@ main(int argc, char **argv)
     tsapi_mde_sh_result_free(&res);
     res = (tsapi_mde_sh_result)TSAPI_MDE_SH_RESULT_INIT;
 
-    TEST_STEP("Step D: list the build output");
-    snprintf(cmd, sizeof(cmd), "cd '%s' && ls -l ts/out/main.js "
-             "web/service-ts/out/main.js 2>&1; ls ts/dist 2>&1 | head -n 20",
-             root);
+    TEST_STEP("Step D: list the build output, record mtimes and tsc");
+    snprintf(cmd, sizeof(cmd), "cd '%s' && stat -c '%%n %%Y' ts/dist/main.js "
+             "web/service-ts/out/main.js 2>&1; date +%%s", root);
     CHECK_RC(tsapi_mde_sh(&session, 30000, &res, "%s", cmd));
-    tsj_artifact_text("H1 build output ls", web_str(&res.out), 3000);
+    tsj_artifact_text("H5 mtimes of the TypeScript outputs and now",
+                      web_str(&res.out), 3000);
     tsapi_mde_sh_result_free(&res);
     res = (tsapi_mde_sh_result)TSAPI_MDE_SH_RESULT_INIT;
-    snprintf(cmd, sizeof(cmd), "test -f '%s/ts/out/main.js' || test -d "
-             "'%s/ts/dist'", root, root);
+    snprintf(cmd, sizeof(cmd), "cd '%s/ts' && npx --no-install tsc "
+             "--version 2>&1 | tail -n 3; grep -i 'tsc' /tmp/ensure.log | "
+             "tail -n 5", root);
+    CHECK_RC(tsapi_mde_sh(&session, 60000, &res, "%s", cmd));
+    tsj_artifact_text("H5 tsc version in ts/ and tsc lines of ensure output",
+                      web_str(&res.out), 1500);
+    tsapi_mde_sh_result_free(&res);
+    res = (tsapi_mde_sh_result)TSAPI_MDE_SH_RESULT_INIT;
+    snprintf(cmd, sizeof(cmd), "test -f '%s/ts/dist/main.js' && test -f "
+             "'%s/web/service-ts/out/main.js'", root, root);
     have_out = tsj_ok(&session, 10000, cmd);
 
     TEST_STEP("Verdict");
     if (code != 0)
-        TEST_VERDICT("H1 FAILED: ./build.sh did not exit with code 0, last "
+        TEST_VERDICT("H5 FAILED: ./build.sh did not exit with code 0, last "
                      "lines of stderr: %s", last);
     if (!have_out)
-        TEST_VERDICT("H1 FAILED: ./build.sh exited 0 but neither "
-                     "ts/out/main.js nor ts/dist exists");
-    if (ensure_code != 0)
-        TEST_ARTIFACT("H1 project_spec defect: scripts/ensure-web-deps.sh "
-                      "base exposure ts exited %d while ./build.sh passed "
-                      "and the build output exists", ensure_code);
-    else
-        TEST_ARTIFACT("H1 ./build.sh exits 0 and the build output exists");
+        TEST_VERDICT("H5 FAILED: ./build.sh exited 0 but ts/dist/main.js or "
+                     "web/service-ts/out/main.js is missing");
+    TEST_ARTIFACT("H5 ./build.sh exits 0 and both TypeScript outputs exist "
+                  "(ensure-web-deps exit %d)", ensure_code);
 
     TEST_STEP("Run ./scripts/run.sh guess");
     snprintf(cmd, sizeof(cmd), "cd '%s' && RING_HOST=127.0.0.1 "
