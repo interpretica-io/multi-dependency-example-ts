@@ -1452,6 +1452,46 @@
               </results>
             </iter>
           </test>
+          <test name="ts_guess_default" type="script">
+            <objective/>
+            <notes/>
+            <iter result="PASSED">
+              <notes/>
+              <results>
+                <result value="PASSED"/>
+              </results>
+            </iter>
+          </test>
+          <test name="ts_guess_bad_input" type="script">
+            <objective/>
+            <notes/>
+            <iter result="PASSED">
+              <notes/>
+              <results>
+                <result value="PASSED"/>
+              </results>
+            </iter>
+          </test>
+          <test name="ts_serve_http" type="script">
+            <objective/>
+            <notes/>
+            <iter result="PASSED">
+              <notes/>
+              <results>
+                <result value="PASSED"/>
+              </results>
+            </iter>
+          </test>
+          <test name="service_ts_upstream_errors" type="script">
+            <objective/>
+            <notes/>
+            <iter result="PASSED">
+              <notes/>
+              <results>
+                <result value="PASSED"/>
+              </results>
+            </iter>
+          </test>
         </iter>
       </test>
       <test name="graph" type="package">

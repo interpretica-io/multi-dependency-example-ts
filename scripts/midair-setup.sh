@@ -56,8 +56,22 @@ fi
 echo "midair-setup: installing the toolchains and tools (base, exposure, ts)"
 # 'soft' turns a failed optional install (.NET) into a warning: the tests
 # that need it then report the cause themselves.
-"${ENSURE}" "${ROOT}" base exposure ts soft ||
-    fail "scripts/ensure-web-deps.sh base exposure ts failed (see above)"
+# node and npm are already installed and checked above, so a non-zero exit
+# of the installer is reported with its status and the parts are then retried
+# one at a time; only a node or npm that is gone fails the setup.
+ENSURE_FAILED=
+if ! "${ENSURE}" "${ROOT}" base exposure ts soft; then
+    rc=$?
+    echo "midair-setup: WARNING: ensure-web-deps.sh base exposure ts exited with status ${rc}, retrying each part" >&2
+    for comp in base exposure ts; do
+        "${ENSURE}" "${ROOT}" ${comp} soft ||
+            ENSURE_FAILED="${ENSURE_FAILED} ${comp}"
+    done
+fi
+[ -z "${ENSURE_FAILED}" ] ||
+    echo "midair-setup: WARNING: ensure-web-deps.sh failed for:${ENSURE_FAILED}; the tests that need those parts skip with the cause" >&2
+command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1 ||
+    fail "node or npm is missing after scripts/ensure-web-deps.sh"
 
 # The probe of ensure-web-deps.sh stays as it is. Where ts-node cannot run a
 # trivial file in the ts/ or web/service-ts directory of the project, install

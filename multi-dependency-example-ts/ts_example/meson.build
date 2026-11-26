@@ -20,6 +20,10 @@ tests = [
     'ts_h1_listing',
     'ts_h2_build_guess',
     'ts_h4_port_badinput',
+    'ts_guess_default',
+    'ts_guess_bad_input',
+    'ts_serve_http',
+    'service_ts_upstream_errors',
 ]
 
 foreach test : tests

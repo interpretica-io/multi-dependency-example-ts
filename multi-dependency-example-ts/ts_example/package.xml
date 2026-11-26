@@ -16,6 +16,10 @@
           - @ref mde-ts_example-ts_build_run - Build and run as jobs (H1)
           - @ref mde-ts_example-ts_service_contract - Service answers its contract (H2)
           - @ref mde-ts_example-ts_vs_go_parity - TypeScript against Go (H3)
+          - @ref mde-ts_example-ts_guess_default - Documented trace of the demo (H1)
+          - @ref mde-ts_example-ts_guess_bad_input - Bad input is refused (H2)
+          - @ref mde-ts_example-ts_serve_http - guess serve over HTTP (H3)
+          - @ref mde-ts_example-service_ts_upstream_errors - service-ts upstream errors (H4)
     -->
 
     <author mailto="midair@localhost" />
@@ -254,6 +258,42 @@
         <run name="ts_vs_go_parity">
             <script name="ts_vs_go_parity">
                 <objective>[H3] Same six requests to service-go and service-ts, status and body compared byte for byte, both replies recorded; a difference fails and names the request.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-ts_example-ts_guess_default Documented trace of the demo (H1)
+              @objective `./scripts/run.sh guess` gives 7 stages ending at 17.6799 and `guess 42 3` gives 4 stages ending at 38.9640, both as jobs.
+        -->
+        <run name="ts_guess_default">
+            <script name="ts_guess_default">
+                <objective>[H1] `./scripts/run.sh guess` gives 7 stages ending at 17.6799 and `guess 42 3` gives 4 stages ending at 38.9640, both as jobs.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-ts_example-ts_guess_bad_input Bad input is refused (H2)
+              @objective RING_HOST or RING_PORT unset, `guess 1 65` and `guess abc 3` exit 1 with the documented error line; a good run is the control.
+        -->
+        <run name="ts_guess_bad_input">
+            <script name="ts_guess_bad_input">
+                <objective>[H2] RING_HOST or RING_PORT unset, `guess 1 65` and `guess abc 3` exit 1 with the documented error line; a good run is the control.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-ts_example-ts_serve_http guess serve over HTTP (H3)
+              @objective `guess serve` as a job answers 200 to a valid GET /ring and 400 with an error: body to hops=65.
+        -->
+        <run name="ts_serve_http">
+            <script name="ts_serve_http">
+                <objective>[H3] `guess serve` as a job answers 200 to a valid GET /ring and 400 with an error: body to hops=65.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-ts_example-service_ts_upstream_errors service-ts upstream errors (H4)
+              @objective service-ts answers 502 with a JSON error field for a closed upstream and 504 after about 5 s for a silent one; the 504 case is skipped without python3.
+        -->
+        <run name="service_ts_upstream_errors">
+            <script name="service_ts_upstream_errors">
+                <objective>[H4] service-ts answers 502 with a JSON error field for a closed upstream and 504 after about 5 s for a silent one; the 504 case is skipped without python3.</objective>
             </script>
         </run>
     </session>
