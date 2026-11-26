@@ -11,7 +11,9 @@
  * @author midair <midair@localhost>
  */
 
+#ifndef TE_TEST_NAME
 #define TE_TEST_NAME    "ts_example/ts_contract"
+#endif
 
 #include "tsd_net.h"
 
