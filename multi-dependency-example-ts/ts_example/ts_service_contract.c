@@ -23,6 +23,8 @@ good_reply(int code, const char *body)
 {
     if (code != 200)
         return "status is not 200";
+    if (strstr(body, "[service-ts]") == NULL)
+        return "no [service-ts] stage tag";
     if (strncmp(body, "[service-ts] hops=0 ", 20) != 0)
         return "no stage line";
     if (strstr(body, "\nvalue=34.5\n") == NULL)
@@ -97,7 +99,7 @@ main(int argc, char **argv)
     snprintf(url, sizeof(url), "http://127.0.0.1:%u/ring?value=42&hops=0",
              port);
     CHECK_RC(web_get(&session, "", url, 5, &reply));
-    TEST_ARTIFACT("H2 reply to value=42 hops=0: HTTP %d [%.300s]", reply.code,
+    tsj_art_reply("H2", "good value and hops", reply.code,
                   web_str(&reply.body));
     why = good_reply(reply.code, web_str(&reply.body));
     if (why != NULL)
@@ -108,17 +110,45 @@ main(int argc, char **argv)
     snprintf(url, sizeof(url), "http://127.0.0.1:%u/ring?value=abc&hops=0",
              port);
     CHECK_RC(web_get(&session, "", url, 5, &reply));
-    TEST_ARTIFACT("H2 reply to value=abc: HTTP %d [%.200s]", reply.code,
-                  web_str(&reply.body));
+    tsj_art_reply("H2", "value=abc", reply.code, web_str(&reply.body));
     why = error_reply(reply.code, web_str(&reply.body));
     if (why != NULL)
         TEST_VERDICT("H2 FAILED: a bad value is not answered with an "
                      "error: %s", why);
 
+    TEST_STEP("Known-bad control: a bad hops gets 400, a wrong path a 4xx "
+              "answer; a missing query is recorded (the contract has "
+              "defaults for it)");
+    {
+        static const struct {
+            const char *what;
+            const char *target;
+            int         lo;
+            int         hi;
+        } more[] = {
+            { "hops=abc",       "/ring?value=1&hops=abc", 400, 400 },
+            { "missing query",  "/ring",                  0, 999 },
+            { "wrong path",     "/nowhere?value=1&hops=0", 400, 499 },
+        };
+        size_t k;
+
+        for (k = 0; k < TE_ARRAY_LEN(more); k++)
+        {
+            snprintf(url, sizeof(url), "http://127.0.0.1:%u%s", port,
+                     more[k].target);
+            CHECK_RC(web_get(&session, "", url, 5, &reply));
+            tsj_art_reply("H2", more[k].what, reply.code,
+                          web_str(&reply.body));
+            if (reply.code < more[k].lo || reply.code > more[k].hi)
+                TEST_VERDICT("H2 FAILED: %s is not answered with the "
+                             "expected 4xx status", more[k].what);
+        }
+    }
+
     TEST_STEP("Known-bad control: a malformed request target");
     snprintf(url, sizeof(url), "http://127.0.0.1:%u//x", port);
     CHECK_RC(web_get(&session, "--path-as-is", url, 5, &reply));
-    TEST_ARTIFACT("H2 reply to //x: HTTP %d [%.200s]", reply.code,
+    tsj_art_reply("H2", "malformed target //x", reply.code,
                   web_str(&reply.body));
     why = error_reply(reply.code, web_str(&reply.body));
     if (why != NULL)

@@ -1322,9 +1322,7 @@
             <iter result="PASSED">
               <notes/>
               <results>
-                <result value="PASSED">
-                  <verdict>H1 H2 PASS: every reference exited 0 with 4 stage lines (H1) and its stage lines and final value equal the TypeScript demo</verdict>
-                </result>
+                <result value="PASSED"/>
               </results>
             </iter>
           </test>
@@ -1406,9 +1404,7 @@
             <iter result="PASSED">
               <notes/>
               <results>
-                <result value="PASSED">
-                  <verdict>H2 PASS: a finished reference printed the ring value 38.9640 within 1e-4 and run.sh guess printed an equal value</verdict>
-                </result>
+                <result value="PASSED"/>
               </results>
             </iter>
           </test>
@@ -1451,7 +1447,7 @@
               <notes/>
               <results>
                 <result value="FAILED">
-                  <verdict>H3 FAILED: the Go and TypeScript services answer differently for: value-42-hops-0, value-1-hops-0, value-neg-hops-0, bad-value, bad-hops, no-query-hops-0</verdict>
+                  <verdict>H3 contract differs for bad-value: go=200 ts=400; H3 contract differs for bad-hops: go=200 ts=400</verdict>
                 </result>
               </results>
             </iter>

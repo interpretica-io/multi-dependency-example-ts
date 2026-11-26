@@ -51,9 +51,58 @@ tsj_log_text(const char *label, const char *text)
 {
     size_t len = strlen(text);
     size_t off;
+    char   piece[801];
 
     for (off = 0; off < len && off < 6400; off += 800)
-        RING("%s [%zu]: %.800s", label, off, text + off);
+    {
+        snprintf(piece, sizeof(piece), "%s", text + off);
+        RING("%s [%zu]: %s", label, off, piece);
+    }
+}
+
+/** Copy at most @p size - 1 bytes of @p text into @p out, printable only. */
+static inline const char *
+tsj_cut(char *out, size_t size, const char *text)
+{
+    size_t i;
+
+    for (i = 0; i + 1 < size && text[i] != '\0'; i++)
+        out[i] = (text[i] >= 32 && text[i] < 127) || text[i] == '\n' ?
+                 text[i] : '.';
+    out[i] = '\0';
+    return out;
+}
+
+/** The last @p n lines of @p text (the whole text when it has fewer). */
+static inline const char *
+tsj_last_lines(const char *text, int n)
+{
+    const char *p = text + strlen(text);
+
+    if (p > text && p[-1] == '\n')
+        p--;
+    while (p > text && n > 0)
+    {
+        p--;
+        if (*p == '\n')
+            n--;
+    }
+    return (n == 0 && *p == '\n') ? p + 1 : p;
+}
+
+/** Record a request result as an artifact, with the body cut and cleaned. */
+static inline void
+tsj_art_reply(const char *id, const char *what, int code, const char *body)
+{
+    char cut[301];
+    char one[301];
+    size_t i;
+
+    tsj_cut(cut, sizeof(cut), body);
+    for (i = 0; cut[i] != '\0'; i++)
+        one[i] = cut[i] == '\n' ? '|' : cut[i];
+    one[i] = '\0';
+    TEST_ARTIFACT("%s %s: HTTP %d body [%s]", id, what, code, one);
 }
 
 /** Start `sh -c cmd` as a job whose output goes to the TE log. */

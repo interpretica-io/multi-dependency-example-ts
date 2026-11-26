@@ -713,8 +713,10 @@ tsx_log_full(const char *label, const char *text)
     while (*p != '\0' && n < 2000)
     {
         size_t k = strcspn(p, "\n");
+        char   piece[391];
 
-        RING("%s: %.*s", label, (int)(k > 390 ? 390 : k), p);
+        snprintf(piece, sizeof(piece), "%.*s", (int)(k > 390 ? 390 : k), p);
+        RING("%s: %s", label, piece);
         p += k + (p[k] == '\n' ? 1 : 0);
         n++;
     }

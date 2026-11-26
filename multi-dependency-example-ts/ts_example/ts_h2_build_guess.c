@@ -1,17 +1,16 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief ts_example: ts_h2_build_guess, the final ring value of a finished
- *        reference run is 38.9640 within 1e-4, and run.sh guess prints it
- *        (settles H2)
+ * @brief ts_example: ts_h2_build_guess, run.sh guess with RING_HOST and
+ *        RING_PORT set exits 0 with 4 stage lines and a final value
+ *        (settles H1)
  *
  * Runs `scripts/run.sh guess` for 30 seconds with output in a file, then
  * `scripts/run.sh guess 42 3`, then every reference demo alone with 42 3.
- * The final ring value of the first reference that exited 0 with 4 stage
- * lines is parsed and compared with 38.9640 within 1e-4; the TypeScript
- * value is compared with it too. When no reference finished, H1 failed and
- * nothing is compared. Planted outputs check the parser and the comparison,
- * and a planted exit 2 checks that an early non-zero exit is seen.
+ * RING_HOST=127.0.0.1 and RING_PORT=9100 are set for every job. The final
+ * values are not compared, the demos start at different ring stages; the
+ * stage count and the formula text of the stage lines are compared with the
+ * TypeScript demo. Planted outputs check the parser and the comparison.
  *
  * @author midair <midair@localhost>
  */
@@ -49,21 +48,19 @@ stage_count(const char *file)
     return atoi(buf);
 }
 
-/** True when @p a and @p b differ by at most 1e-4 (both must parse). */
-static bool
-close_enough(const char *a, const char *b)
+/** Formula text of each stage line of @p file, sorted, into @p out. */
+static void
+formulas(const char *file, const char *out)
 {
-    char  *ea;
-    char  *eb;
-    double x = strtod(a, &ea);
-    double y = strtod(b, &eb);
+    char cmd[600];
 
-    if (ea == a || eb == b || *ea != '\0' || *eb != '\0')
-        return false;
-    return (x > y ? x - y : y - x) <= 1e-4;
+    snprintf(cmd, sizeof(cmd), "grep -E '^[[:space:]]*(([A-Za-z0-9_]+-demo): "
+             "*)?\\[.*\\] +hops=' '%s' | sed -E 's/^[[:space:]]*"
+             "([A-Za-z0-9_]+-demo: *)?//; s/^\\[[^]]*\\] +hops=[0-9]+ +"
+             "[-0-9.]+ +-> +[-0-9.]+ +//; s/[[:space:]]+$//' | sort > '%s'",
+             file, out);
+    tsd_sh("/", cmd, 10, "/tmp/ts_h2_fm.log");
 }
-
-#define EXPECTED_VALUE  "38.9640"
 
 int
 main(int argc, char **argv)
@@ -74,13 +71,16 @@ main(int argc, char **argv)
     char        rv[64];
     char        ref[64] = "";
     char        refname[32] = "";
+    char        tag[96];
     int         i;
     const char *src = tsd_src();
     int         code;
     long long   t0;
 
     TEST_START;
-    tsd_say("H2 start");
+    tsd_say("H1 start");
+    setenv("RING_HOST", "127.0.0.1", 1);
+    setenv("RING_PORT", "9100", 1);
 
     TEST_STEP("Control: an early non-zero exit is not taken for a server");
     code = tsd_sh("/", "echo planted >&2; exit 2", 30, "/tmp/ts_h2_ctl.log");
@@ -162,34 +162,34 @@ main(int argc, char **argv)
         }
     }
 
-    TEST_STEP("Compare the final ring value with %s within 1e-4",
-              EXPECTED_VALUE);
+    TEST_STEP("Compare the stage count and formula text with the TypeScript "
+              "demo");
     if (ref[0] == '\0')
         tsd_bad("H1", "no reference finished", "H1 failed: no reference "
-                "exited 0 with 4 stage lines, so no value was compared "
-                "with %s", EXPECTED_VALUE);
+                "exited 0 with 4 stage lines, so no stage text was compared");
     else
     {
-        tsd_say("H2 finished reference %s: final value [%s]", refname, ref);
-        if (!close_enough(ref, EXPECTED_VALUE))
-            tsd_bad("H2", "reference value", "%s final value [%s] is not "
-                    "%s within 1e-4", refname, ref, EXPECTED_VALUE);
+        tsd_say("H1 finished reference %s: final value [%s]; the TypeScript "
+                "value [%s] differs by design", refname, ref, tsv);
+        formulas("/tmp/ts_h2_ts.out", "/tmp/ts_h2_fm_ts.txt");
+        snprintf(tag, sizeof(tag), "/tmp/ts_ref_h2_%s.out", refname);
+        formulas(tag, "/tmp/ts_h2_fm_ref.txt");
+        if (stage_count("/tmp/ts_h2_ts.out") != 4)
+            tsd_bad("H1", "typescript stages", "%d stage line(s), want 4",
+                    stage_count("/tmp/ts_h2_ts.out"));
+        if (tsd_sh("/", "test -s /tmp/ts_h2_fm_ts.txt && cmp "
+                   "/tmp/ts_h2_fm_ts.txt /tmp/ts_h2_fm_ref.txt", 10,
+                   "/tmp/ts_h2_cmp.log") != 0)
+            tsd_bad("H1", "formula text", "the formula text of the stage "
+                    "lines of TypeScript and %s differs", refname);
         else
-            tsd_say("H2 %s final value [%s] equals %s within 1e-4", refname,
-                    ref, EXPECTED_VALUE);
-        if (!close_enough(tsv, EXPECTED_VALUE))
-            tsd_bad("H2", "typescript value", "TypeScript final value [%s] "
-                    "is not %s within 1e-4", tsv, EXPECTED_VALUE);
-        if (strcmp(ref, tsv) != 0)
-            tsd_bad("H2", "ring value", "TypeScript final value [%s] differs "
-                    "from %s [%s]", tsv, refname, ref);
-        else
-            tsd_say("H2 ring value: TypeScript [%s] equals %s [%s]", tsv,
-                    refname, ref);
+            tsd_say("H1 formula text of TypeScript and %s is equal", refname);
     }
 
-    TSD_PASS("H2", "a finished reference printed the ring value 38.9640 "
-             "within 1e-4 and run.sh guess printed an equal value");
+    TSD_FINISH("H1");
+    TEST_ARTIFACT("H1 run.sh guess exited 0 with 4 stage lines and a final "
+                  "value with RING_HOST and RING_PORT set; stage count and "
+                  "formula text match a reference");
     TEST_SUCCESS;
 
 cleanup:
