@@ -23,12 +23,12 @@ int
 main(int argc, char **argv)
 {
     TEST_START;
-    tsd_say("H3 start");
+    tsd_say("H2 start");
     TEST_STEP("Control: the contract check rejects planted wrong replies");
-    tsd_contract_control("H3");
-    if (tsd_build_gate("H3"))
-        tsd_contract_run("H3");
-    TSD_PASS("H3", "the four inputs follow the documented contract");
+    tsd_contract_control("H2");
+    if (tsd_build_gate("H2"))
+        tsd_contract_run("H2");
+    TSD_PASS("H2", "the four inputs follow the documented contract");
     TEST_SUCCESS;
 
 cleanup:

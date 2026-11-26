@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief ts_example: the listen-address and reply scenarios (H3, H4)
+ * @brief ts_example: the listen-address, exit-time and reply scenarios (H2, H3)
  *
  * Nothing here ends a test: every step writes a verdict, a failed step is
  * recorded with tsd_bad() and the test fails once at its end.
@@ -168,7 +168,7 @@ tsd_listener_control(void)
     if (f1 < 0 || f2 < 0 || bind(f1, (void *)&a, sizeof(a)) != 0 ||
         listen(f1, 1) != 0)
     {
-        tsd_bad("H4", "listener control", "cannot plant a listener: %s",
+        tsd_bad("H3", "listener control", "cannot plant a listener: %s",
                 strerror(errno));
         return;
     }
@@ -176,7 +176,7 @@ tsd_listener_control(void)
     a.sin_port = 0;
     if (bind(f2, (void *)&a, sizeof(a)) != 0 || listen(f2, 1) != 0)
     {
-        tsd_bad("H4", "listener control", "cannot plant a second listener: "
+        tsd_bad("H3", "listener control", "cannot plant a second listener: "
                 "%s", strerror(errno));
         return;
     }
@@ -192,10 +192,10 @@ tsd_listener_control(void)
     close(f1);
     close(f2);
     if (n < 0 || !saw_lo || !saw_any)
-        tsd_bad("H4", "listener control", "planted listeners on 127.0.0.1 "
+        tsd_bad("H3", "listener control", "planted listeners on 127.0.0.1 "
                 "and 0.0.0.0 were reported as [%s] (n=%d)", txt, n);
     else
-        tsd_say("H4 listener control: planted listeners seen as [%s]", txt);
+        tsd_say("H3 listener control: planted listeners seen as [%s]", txt);
 }
 
 /** One request with value=<v> hops=0. */
@@ -217,7 +217,57 @@ tsd_ring(unsigned port, const char *value, char *out, size_t size)
 }
 
 /**
- * H4: start the example with the address variables set (@p set) or unset,
+ * Wait for the process @p pid to listen on @p port or to exit, at most
+ * @p secs. Logs what is waited for, and the time of the process start
+ * (@p t0), of its first output line (the log file gets a byte) and of its
+ * exit, all relative to the start. Returns 1 when the port accepts, 0 when
+ * the process exited (status in @p st), -1 at the limit.
+ */
+static inline int
+tsd_wait_up_or_exit(const char *id, pid_t pid, unsigned port, int secs,
+                    const char *log, long long t0, int *st)
+{
+    long long end = t0 + secs * 1000LL;
+    long long t_first = -1;
+    long long now;
+    struct stat sb;
+    int       r = -1;
+
+    tsd_say("%s waits for: 127.0.0.1:%u to accept, or the process to exit, "
+            "at most %d s; process started at +0 ms", id, port, secs);
+    while ((now = tsd_ms()) < end)
+    {
+        int fd;
+
+        if (t_first < 0 && stat(log, &sb) == 0 && sb.st_size > 0)
+        {
+            t_first = now - t0;
+            tsd_say("%s first output line at +%lld ms", id, t_first);
+        }
+        if (!tsd_alive(pid, st))
+        {
+            if (t_first < 0 && stat(log, &sb) == 0 && sb.st_size > 0)
+                t_first = now - t0;
+            tsd_say("%s process exited at +%lld ms, first output at %lld ms "
+                    "(-1: none)", id, now - t0, t_first);
+            return 0;
+        }
+        fd = tsd_connect(port);
+        if (fd >= 0)
+        {
+            close(fd);
+            tsd_say("%s listener accepts at +%lld ms", id, now - t0);
+            return 1;
+        }
+        usleep(20000);
+    }
+    tsd_say("%s neither a listener nor an exit within %d s: the delay is "
+            "in the service, not in the test wait", id, secs);
+    return r;
+}
+
+/**
+ * H3: start the example with the address variables set (@p set) or unset,
  * check where it listens, send empty, non-numeric and oversized input,
  * stop it with @p sig and require exit code 0. @p hostile adds raw garbage,
  * a bad method, a path walk and a silent peer.
@@ -244,6 +294,9 @@ tsd_h4_run(const char *id, bool set, unsigned port, int sig, bool hostile)
     bool        wild = false;
     bool        other = false;
     int         st = 0;
+    int         up;
+    long long   t_start;
+    long long   t_up;
 
     snprintf(ts, sizeof(ts), "%s/ts", tsd_src());
     snprintf(log, sizeof(log), "/tmp/%s_%u_%d.log", id, port, sig);
@@ -274,26 +327,45 @@ tsd_h4_run(const char *id, bool set, unsigned port, int sig, bool hostile)
     TEST_STEP("Start node dist/main.js (%s), expect 127.0.0.1:%u",
               set ? "EXAMPLE_PORT and EXAMPLE_HOST set" : "variables unset",
               port);
+    t_start = tsd_ms();
     tsd_child = tsd_spawn(ts, cmd, log);
-    if (!tsd_wait_port(port, 15) || !tsd_alive(tsd_child, &st))
+    up = tsd_wait_up_or_exit(id, tsd_child, port, 15, log, t_start, &st);
+    t_up = tsd_ms() - t_start;
+    if (up != 1)
     {
         tsd_tail(log, logtext, sizeof(logtext));
-        if (!set && !tsd_alive(tsd_child, &st) && tsd_code(st) == 1 &&
-            strstr(logtext, "\n    at ") == NULL &&
-            strchr(logtext, '\n') == strrchr(logtext, '\n'))
+        if (up == 0 && !set)
         {
-            /* the host and port setting is required: one line, exit 1 */
-            tsd_say("%s default port: no default, the process says so in "
-                    "one line and exits 1: [%s]", id, logtext);
+            /* the host and port setting is required: one line, exit 1, at once */
+            bool one = tsd_code(st) == 1 && strstr(logtext, "\n    at ") == NULL &&
+                       strchr(logtext, '\n') == strrchr(logtext, '\n');
+
+            tsd_say("%s unset variables: exit %d after %lld ms, output "
+                    "[%s]", id, tsd_code(st), t_up, logtext);
+            if (!one)
+                tsd_bad(id, "unset variables", "want exit 1 and one line "
+                        "without a trace, got exit %d: [%s]", tsd_code(st),
+                        logtext);
+            else if (t_up > 2000)
+                tsd_bad(id, "unset variables", "the service takes %lld ms "
+                        "to exit (limit 2000): the delay is in the service",
+                        t_up);
+            else
+                tsd_say("%s default port: no default, the process says so "
+                        "in one line and exits 1 after %lld ms; any wait "
+                        "beyond that was the test's, not the service's", id,
+                        t_up);
             tsd_child = 0;
             free(big);
             return;
         }
         tsd_bad(id, set ? "listens on configured port" : "default port",
-                "[%s] did not listen on port %u within 15 s (alive %d); "
-                "output: [%s]", cmd, port, tsd_alive(tsd_child, &st),
+                "[%s] did not listen on port %u (%s after %lld ms); "
+                "output: [%s]", cmd, port, up == 0 ? "exited" :
+                "still running, the delay is in the service", t_up,
                 logtext);
-        tsd_stop(tsd_child, SIGKILL, 5);
+        if (up != 0)
+            tsd_stop(tsd_child, SIGKILL, 5);
         tsd_child = 0;
         free(big);
         return;
@@ -415,7 +487,7 @@ tsd_h4_run(const char *id, bool set, unsigned port, int sig, bool hostile)
                 set ? "configured" : "default", port);
 }
 
-/** Full H4 scenario: four runs (set/unset, SIGTERM/SIGINT). */
+/** Full H3 scenario: four runs (set/unset, SIGTERM/SIGINT). */
 static inline void
 tsd_h4_scenario(const char *id, bool hostile)
 {

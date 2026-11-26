@@ -72,6 +72,61 @@ facts(const char *norm, int *stages, char *final, size_t size)
         snprintf(final, size, "none");
 }
 
+/** Path of the compared lines of a reference. */
+static const char *
+ref_cmp(const char *name)
+{
+    static char path[96];
+
+    snprintf(path, sizeof(path), "/tmp/ts_rg_%s.cmp", name);
+    return path;
+}
+
+/**
+ * Name the first stage whose line differs between the compared files @p a
+ * (TypeScript) and @p b (reference), with both lines; the final value line
+ * is named "final value". Writes the text to @p out.
+ */
+static void
+first_diff(const char *a, const char *b, char *out, size_t size)
+{
+    char  ta[2000];
+    char  tb[2000];
+    char *pa = ta;
+    char *pb = tb;
+
+    tsd_head(a, ta, sizeof(ta));
+    tsd_head(b, tb, sizeof(tb));
+    snprintf(out, size, "(no differing line found)");
+    for (;;)
+    {
+        char *ea = strchr(pa, '\n');
+        char *eb = strchr(pb, '\n');
+        char  la[300];
+        char  lb[300];
+
+        snprintf(la, sizeof(la), "%.*s", ea != NULL ? (int)(ea - pa) : (int)strlen(pa) > 290 ? 290 : (int)strlen(pa), pa);
+        snprintf(lb, sizeof(lb), "%.*s", eb != NULL ? (int)(eb - pb) : (int)strlen(pb) > 290 ? 290 : (int)strlen(pb), pb);
+        if (strcmp(la, lb) != 0)
+        {
+            char stage[120] = "final value";
+            const char *r = strstr(la[0] != '\0' ? la : lb, "] ");
+
+            if (la[0] == '[' || lb[0] == '[')
+                snprintf(stage, sizeof(stage), "%.*s",
+                         r != NULL ? (int)(r - (la[0] != '\0' ? la : lb)) + 1 :
+                         20, la[0] != '\0' ? la : lb);
+            snprintf(out, size, "differs at stage %s: typescript [%s] "
+                     "reference [%s]", stage, la, lb);
+            return;
+        }
+        if (ea == NULL || eb == NULL)
+            return;
+        pa = ea + 1;
+        pb = eb + 1;
+    }
+}
+
 int
 main(int argc, char **argv)
 {
@@ -159,9 +214,12 @@ main(int argc, char **argv)
     for (i = 0; i < NREF; i++)
     {
         char path[PATH_MAX];
+        char all[64];
+        char l5[601];
+        char hit[301];
         int  st;
 
-        TEST_STEP("Run the reference %s", refs[i].name);
+        TEST_STEP("Run the reference %s with the same input", refs[i].name);
         snprintf(path, sizeof(path), "%s/%s", src, refs[i].file);
         code[i] = -1;
         if (access(path, R_OK) != 0)
@@ -177,37 +235,63 @@ main(int argc, char **argv)
         code[i] = tsd_sh(src, cmd, 60, log);
         snprintf(cmd, sizeof(cmd), NORM("/tmp/ts_rg_%s.out",
                  "/tmp/ts_rg_%s.norm") "; " CMPF("/tmp/ts_rg_%s.norm",
-                 "/tmp/ts_rg_%s.cmp"), refs[i].name, refs[i].name,
+                 "/tmp/ts_rg_%s.cmp") "; cat /tmp/ts_rg_%s.out "
+                 "/tmp/ts_rg_%s.err > /tmp/ts_rg_%s.all", refs[i].name,
+                 refs[i].name, refs[i].name, refs[i].name, refs[i].name,
                  refs[i].name, refs[i].name);
         tsd_sh("/", cmd, 10, "/tmp/ts_rg_n.log");
-        snprintf(log, sizeof(log), "/tmp/ts_rg_%s.out", refs[i].name);
-        tsd_head(log, a, 401);
-        if (code[i] != 0)
-        {
-            char e[301];
 
-            snprintf(log, sizeof(log), "/tmp/ts_rg_%s.err", refs[i].name);
-            tsd_head(log, e, sizeof(e));
-            tsd_say("H1 reference %s inconclusive: exit %d, stdout [%.200s], "
-                    "stderr [%s]", refs[i].name, code[i], a, e);
+        /* exit code and the last 5 log lines of every reference */
+        snprintf(all, sizeof(all), "/tmp/ts_rg_%s.all", refs[i].name);
+        snprintf(cmd, sizeof(cmd), "tail -n 5 %s", all);
+        tsd_sh("/", cmd, 10, "/tmp/ts_rg_l5.log");
+        tsd_head("/tmp/ts_rg_l5.log", l5, sizeof(l5));
+        tsd_say("H1 reference %s: exit=%d, last 5 log lines: [%s]",
+                refs[i].name, code[i], l5);
+
+        snprintf(cmd, sizeof(cmd), "grep -m1 -iE 'libSystem|dlopen' %s",
+                 all);
+        if (tsd_sh("/", cmd, 10, "/tmp/ts_rg_hit.log") == 0)
+        {
+            char step[200];
+
+            tsd_head("/tmp/ts_rg_hit.log", hit, sizeof(hit));
+            hit[strcspn(hit, "\n")] = '\0';
+            snprintf(step, sizeof(step), "%s library load error [%.80s], "
+                     "H1 is open because of the build", refs[i].name, hit);
+            tsd_bad("H1", step, "%s exit %d prints a libSystem or dlopen "
+                    "error: [%s]; H1 is open because of the build, not "
+                    "inconclusive", refs[i].name, code[i], hit);
             continue;
         }
         snprintf(log, sizeof(log), "/tmp/ts_rg_%s.norm", refs[i].name);
         facts(log, &st, fin, sizeof(fin));
+        if (code[i] != 0)
+            tsd_say("H1 reference %s ended with exit %d", refs[i].name,
+                    code[i]);
         tsd_say("H1 reference %s: stages=%d final=%s%s", refs[i].name, st,
-                fin, st == HOPS + 1 && st >= ts_stages ? " (full ring)" :
-                " (inconclusive: fewer stages than the full ring)");
-        if (st == HOPS + 1 && st >= ts_stages)
+                fin, st == HOPS + 1 && strcmp(fin, "none") != 0 ?
+                " (all stages)" : " (inconclusive: stopped short)");
+        if (st == HOPS + 1 && strcmp(fin, "none") != 0)
         {
             kept[i] = true;
             nfull++;
         }
         else
-            tsd_say("H1 reference %s inconclusive, not passed: %d stage(s), "
-                    "stdout [%.300s]", refs[i].name, st, a);
+            tsd_say("H1 reference %s inconclusive, not passed: %d stage(s)",
+                    refs[i].name, st);
     }
 
-    TEST_STEP("Compare with every full-ring reference");
+    TEST_STEP("At least one reference ran all %d stages", HOPS + 1);
+    if (nfull == 0)
+        tsd_bad("H1", "reference", "no reference ran all %d stages with a "
+                "final value; the TypeScript output has nothing to be "
+                "compared with", HOPS + 1);
+    else
+        tsd_say("H1 %d reference(s) ran all %d stages", nfull, HOPS + 1);
+
+    TEST_STEP("Compare the stage lines and the final value with every "
+              "reference that ran all stages");
     for (i = 0; i < NREF; i++)
     {
         if (!kept[i])
@@ -222,13 +306,12 @@ main(int argc, char **argv)
         }
         else
         {
-            char d[401];
+            char d[601];
 
-            snprintf(cmd, sizeof(cmd), "diff /tmp/ts_rg_ts.cmp "
-                     "/tmp/ts_rg_%s.cmp | head -n 6", refs[i].name);
-            tsd_sh("/", cmd, 10, "/tmp/ts_rg_diff.log");
-            tsd_head("/tmp/ts_rg_diff.log", d, sizeof(d));
-            tsd_say("H1 TypeScript differs from %s: [%s]", refs[i].name, d);
+            first_diff("/tmp/ts_rg_ts.cmp", ref_cmp(refs[i].name), d,
+                       sizeof(d));
+            tsd_bad("H1", "value differs", "TypeScript and %s print "
+                    "different values: %s", refs[i].name, d);
         }
         if (firstfull[0] == '\0')
             snprintf(firstfull, sizeof(firstfull), "%s", refs[i].name);
@@ -237,25 +320,20 @@ main(int argc, char **argv)
             snprintf(cmd, sizeof(cmd), "cmp -s /tmp/ts_rg_%s.cmp "
                      "/tmp/ts_rg_%s.cmp", firstfull, refs[i].name);
             if (tsd_sh("/", cmd, 10, "/tmp/ts_rg_cmp.log") != 0)
-                tsd_say("H1 FINDING on the references: %s and %s run the "
-                        "full ring and disagree with each other (the "
-                        "TypeScript demo is not failed for it)", firstfull,
+                tsd_say("H1 FINDING on the references: %s and %s run all "
+                        "stages and disagree with each other", firstfull,
                         refs[i].name);
         }
     }
-    if (nfull == 0)
-        tsd_bad("H1", "reference", "inconclusive: no reference ran the full "
-                "%d stages; the TypeScript output has nothing to be "
-                "compared with", HOPS + 1);
-    else if (nmatch == 0)
+    if (nfull > 0 && nmatch == 0)
     {
         tsd_head("/tmp/ts_rg_ts.cmp", a, 601);
-        tsd_bad("H1", "stdout", "matches none of %d full-ring reference(s); "
-                "TypeScript [%s]", nfull, a);
+        tsd_bad("H1", "stdout", "matches none of %d reference(s) that "
+                "ran all stages; TypeScript [%s]", nfull, a);
     }
 
     TSD_PASS("H1", "the TypeScript stage lines and final value equal a "
-             "full-ring reference");
+             "reference that ran all stages");
     TEST_SUCCESS;
 
 cleanup:

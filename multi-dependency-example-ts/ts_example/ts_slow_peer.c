@@ -2,7 +2,7 @@
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
  * @brief ts_example: ts_slow_peer, the TypeScript service ends a request
- *        cleanly when its peer is silent, slow or refuses (settles H3)
+ *        cleanly when its peer is silent, slow or refuses (settles H2)
  *
  * The peer is a child of the test that binds port 0, reads the port from the
  * OS and logs every accepted connection with a monotonic time. The service
@@ -16,8 +16,12 @@
  * must answer or exit within 15 s with an error that names a timeout, and
  * the peer must have logged an accepted connection before the answer;
  * without one the reply came from input rejection and the case fails. For
- * (b) the error must name a refused connection. A stack trace or a leftover
- * process fails. The Go service timeout gap is an information line only.
+ * (b) the error must name a refused connection. The status and the body of
+ * every answer are checked: H2 passes when the status is not 200, or when
+ * the body has an explicit error field and no numeric value presented as a
+ * result. A 200 with a "fallback" flag in the body is accepted only when the
+ * README states that choice. A stack trace or a leftover process fails. The
+ * Go service timeout gap is an information line only.
  *
  * @author midair <midair@localhost>
  */
@@ -25,6 +29,8 @@
 #define TE_TEST_NAME    "ts_example/ts_slow_peer"
 
 #include "tsd.h"
+
+#include <regex.h>
 
 #define LIMIT_MS        15000
 #define SLOW_REPLY_MS   20000
@@ -39,6 +45,62 @@ has_trace(const char *t)
     return strstr(t, "\n    at ") != NULL || strstr(t, "node:internal") != NULL ||
            strstr(t, "Unhandled") != NULL || strstr(t, "UNHANDLED") != NULL ||
            strstr(t, "Traceback") != NULL || strstr(t, "    at ") == t;
+}
+
+/** True when the README of the project states a fallback reply. */
+static bool readme_fallback = false;
+
+/** True when @p t matches the extended regular expression @p re (no case). */
+static bool
+matches(const char *t, const char *re)
+{
+    regex_t r;
+    bool    m;
+
+    if (regcomp(&r, re, REG_EXTENDED | REG_ICASE | REG_NOSUB | REG_NEWLINE) != 0)
+        return false;
+    m = regexec(&r, t, 0, NULL, 0) == 0;
+    regfree(&r);
+    return m;
+}
+
+/**
+ * Shape of an answer to a valid request whose upstream failed. Returns NULL
+ * when the caller can tell the failure from a result, else the reason.
+ * @p by_flag is set when it was accepted by the fallback design.
+ */
+static const char *
+reply_shape(int status, const char *body, bool readme_fb, bool *by_flag)
+{
+    bool has_err;
+    bool has_num;
+    bool has_fb;
+
+    *by_flag = false;
+    if (status == 0)
+        return "no HTTP status in the answer";
+    if (status != 200)
+        return NULL;
+    has_err = matches(body, "\"error\" *:|^ *error *[:=]");
+    has_num = matches(body, "(value|result|ring)[^0-9a-z]{0,6}-?[0-9]");
+    has_fb = matches(body, "\"?fallback\"? *[:=] *\"?true");
+    if (has_fb)
+    {
+        if (!readme_fb)
+            return "200 with a fallback flag, but the README does not state "
+                   "that design";
+        *by_flag = true;
+        return NULL;
+    }
+    if (has_err && has_num)
+        return "200 with an error field and a numeric value presented as a "
+               "result";
+    if (has_num)
+        return "200 with a numeric value and no error field and no fallback "
+               "flag: a fake result";
+    if (!has_err)
+        return "200 without an error field";
+    return NULL;
 }
 
 /** Case-insensitive substring. */
@@ -187,12 +249,12 @@ finish_service(const char *name, pid_t pid)
     if (tsd_alive(pid, NULL))
     {
         code = tsd_stop(pid, SIGTERM, 10);
-        tsd_say("H3 %s: service stopped with SIGTERM, exit %d", name, code);
+        tsd_say("H2 %s: service stopped with SIGTERM, exit %d", name, code);
     }
     usleep(300000);
     if (kill(-pid, 0) == 0)
     {
-        tsd_bad("H3", name, "a process of the service group %d is left "
+        tsd_bad("H2", name, "a process of the service group %d is left "
                 "behind", (int)pid);
         kill(-pid, SIGKILL);
     }
@@ -232,25 +294,25 @@ one_case(const char *name, const char *svc, int peer_mode)
         pport = tsd_free_port();
         if (tsd_connect(pport) >= 0)
         {
-            tsd_bad("H3", name, "control: port %u accepts, it is not a "
+            tsd_bad("H2", name, "control: port %u accepts, it is not a "
                     "refusing peer", pport);
             return;
         }
-        tsd_say("H3 %s: the peer port %u refuses (control)", name, pport);
+        tsd_say("H2 %s: the peer port %u refuses (control)", name, pport);
     }
     else
     {
         peer = start_peer(&pport, plog, peer_mode == 2 ? SLOW_REPLY_MS : 0);
         if (peer < 0 || pport == 0)
         {
-            tsd_bad("H3", name, "the peer did not start");
+            tsd_bad("H2", name, "the peer did not start");
             return;
         }
-        tsd_say("H3 %s: peer bound port 0 and got port %u from the OS",
+        tsd_say("H2 %s: peer bound port 0 and got port %u from the OS",
                 name, pport);
     }
     own = other_port(pport, 0);
-    tsd_say("H3 %s: service on its own port %u, peer port %u", name, own,
+    tsd_say("H2 %s: service on its own port %u, peer port %u", name, own,
             pport);
 
     snprintf(cmd, sizeof(cmd), "RING_HOST=" LOOP " RING_PORT=%u "
@@ -260,7 +322,7 @@ one_case(const char *name, const char *svc, int peer_mode)
     {
         tsd_head(slog, text, sizeof(text));
         tsd_clean(text, shown, sizeof(shown));
-        tsd_bad("H3", name, "the service did not listen on port %u in 10 s: "
+        tsd_bad("H2", name, "the service did not listen on port %u in 10 s: "
                 "[%s]", own, shown);
         finish_service(name, pid);
         goto out;
@@ -275,13 +337,13 @@ one_case(const char *name, const char *svc, int peer_mode)
         seen = peer_seen(plog, &t_first);
         if (n <= 0 || tsd_status(reply) != 200 || seen != 0)
         {
-            tsd_bad("H3", name, "control: a request with hops=0 gave "
+            tsd_bad("H2", name, "control: a request with hops=0 gave "
                     "status %d, peer saw %d connection(s) (want 200, 0)",
                     tsd_status(reply), seen);
             finish_service(name, pid);
             goto out;
         }
-        tsd_say("H3 %s control: hops=0 answered 200, peer saw 0 connections",
+        tsd_say("H2 %s control: hops=0 answered 200, peer saw 0 connections",
                 name);
     }
 
@@ -293,13 +355,13 @@ one_case(const char *name, const char *svc, int peer_mode)
     {
         exited = true;
         tsd_head(slog, text, sizeof(text));
-        tsd_say("H3 %s: the service exited with code %d after %lld ms: [%.300s]",
+        tsd_say("H2 %s: the service exited with code %d after %lld ms: [%.300s]",
                 name, tsd_code(st), t_answer - t0, text);
         snprintf(reply, sizeof(reply), "%s", text);
     }
     else if (n <= 0)
     {
-        tsd_bad("H3", name, "no answer and no exit within %d s (read %zd): "
+        tsd_bad("H2", name, "no answer and no exit within %d s (read %zd): "
                 "a hang", LIMIT_MS / 1000, n);
         finish_service(name, pid);
         goto out;
@@ -307,48 +369,64 @@ one_case(const char *name, const char *svc, int peer_mode)
     else
     {
         tsd_clean(tsd_body(reply), text, sizeof(text));
-        tsd_say("H3 %s answered in %lld ms: status %d [%.300s]", name,
+        tsd_say("H2 %s answered in %lld ms: status %d [%.300s]", name,
                 t_answer - t0, tsd_status(reply), text);
     }
     if (t_answer - t0 > LIMIT_MS)
-        tsd_bad("H3", name, "took %lld ms (limit %d)", t_answer - t0,
+        tsd_bad("H2", name, "took %lld ms (limit %d)", t_answer - t0,
                 LIMIT_MS);
 
     seen = peer_seen(plog, &t_first);
     if (want_peer)
     {
         if (seen < 1)
-            tsd_bad("H3", name, "the peer saw no connection: the answer "
+            tsd_bad("H2", name, "the peer saw no connection: the answer "
                     "came from input rejection, not from the peer timeout");
         else if (!exited && t_first > t_answer)
-            tsd_bad("H3", name, "the peer logged its connection at %lld, "
+            tsd_bad("H2", name, "the peer logged its connection at %lld, "
                     "after the answer at %lld", t_first, t_answer);
         else
-            tsd_say("H3 %s: the peer logged %d accepted connection(s), the "
+            tsd_say("H2 %s: the peer logged %d accepted connection(s), the "
                     "first at %lld ms, before the answer at %lld ms", name,
                     seen, t_first, t_answer);
     }
     if (!exited && tsd_status(reply) == 400)
-        tsd_bad("H3", name, "status 400 on a valid request: input "
+        tsd_bad("H2", name, "status 400 on a valid request: input "
                 "rejection, not the peer");
     if (has_trace(reply))
-        tsd_bad("H3", name, "the answer holds a trace");
-    if (peer_mode == 1)
+        tsd_bad("H2", name, "the answer holds a trace");
     {
-        if (!names_refused(reply))
-            tsd_bad("H3", name, "the error does not name a refused "
+        bool        by_flag = false;
+        const char *why;
+
+        tsd_say("H2 %s: status %d, body [%.200s]", name, tsd_status(reply),
+                text);
+        why = exited ? "the service exited and sent no HTTP status" :
+              reply_shape(tsd_status(reply), tsd_body(reply), readme_fallback,
+                          &by_flag);
+        if (why != NULL)
+            tsd_bad("H2", name, "%s (status %d, body [%.200s])", why,
+                    tsd_status(reply), tsd_body(reply));
+        else if (by_flag)
+            tsd_say("H2 %s: 200 with a fallback flag, and the README states "
+                    "that choice", name);
+        else if (peer_mode == 1 && !names_refused(reply))
+            tsd_bad("H2", name, "the error does not name a refused "
                     "connection: [%.300s]", reply);
+        else if (peer_mode != 1 && !names_timeout(reply))
+            tsd_bad("H2", name, "the error does not name a timeout: "
+                    "[%.300s]", reply);
+        else
+            tsd_say("H2 %s: status %d with an error and no numeric "
+                    "fallback result", name, tsd_status(reply));
     }
-    else if (!names_timeout(reply))
-        tsd_bad("H3", name, "the error does not name a timeout: [%.300s]",
-                reply);
 
     if (!tsd_alive(pid, &st))
     {
         int code = tsd_code(st);
 
         if (code > 128)
-            tsd_bad("H3", name, "the service was killed by signal %d",
+            tsd_bad("H2", name, "the service was killed by signal %d",
                     code - 128);
     }
     else
@@ -357,12 +435,12 @@ one_case(const char *name, const char *svc, int peer_mode)
     if (has_trace(text))
     {
         tsd_clean(text, shown, sizeof(shown));
-        tsd_bad("H3", name, "stack trace or unhandled rejection in the "
+        tsd_bad("H2", name, "stack trace or unhandled rejection in the "
                 "service output: [%s]", shown);
     }
     if (kill(-pid, 0) == 0)
     {
-        tsd_bad("H3", name, "a process of the service group is left");
+        tsd_bad("H2", name, "a process of the service group is left");
         kill(-pid, SIGKILL);
     }
 
@@ -372,7 +450,7 @@ out:
         kill(peer, SIGKILL);
         waitpid(peer, NULL, 0);
         if (kill(peer, 0) == 0 || errno != ESRCH)
-            tsd_bad("H3", name, "the peer process %d is left behind",
+            tsd_bad("H2", name, "the peer process %d is left behind",
                     (int)peer);
     }
 }
@@ -405,31 +483,57 @@ main(int argc, char **argv)
         names_timeout("connect ECONNREFUSED 127.0.0.1:1") ||
         !names_refused("connect ECONNREFUSED 127.0.0.1:1") ||
         names_refused("read timed out"))
-        TEST_FAIL("H3 NOT SETTLED: a detector is wrong");
+        TEST_FAIL("H2 NOT SETTLED: a detector is wrong");
+
+    TEST_STEP("Control: the reply shape check rejects a fake result");
+    {
+        bool f;
+
+        if (reply_shape(200, "value=34.5\n[service-ts] upstream unreachable\n",
+                        false, &f) == NULL ||
+            reply_shape(200, "{\"value\":34.5}", true, &f) == NULL ||
+            reply_shape(200, "{\"error\":\"x\",\"value\":34.5}", true, &f) == NULL ||
+            reply_shape(200, "{\"value\":34.5,\"fallback\":true}", false, &f) == NULL ||
+            reply_shape(0, "", true, &f) == NULL ||
+            reply_shape(503, "error: upstream timed out\n", false, &f) != NULL ||
+            reply_shape(200, "error: upstream timed out\n", false, &f) != NULL ||
+            reply_shape(200, "{\"value\":34.5,\"fallback\":true}", true, &f) != NULL ||
+            !f)
+            TEST_FAIL("H2 NOT SETTLED: the reply shape check accepted a "
+                      "planted fake result or rejected a planted good one");
+        tsd_say("H2 control: planted fake results are rejected");
+    }
 
     TEST_STEP("The project root and the build");
     if (src[0] == '\0' || access(src, X_OK) != 0)
-        TEST_FAIL("H3 FAIL: TE_TS_MDE_SRC is [%s], not a directory", src);
+        TEST_FAIL("H2 FAIL: TE_TS_MDE_SRC is [%s], not a directory", src);
     if (!tsd_have_main(path, sizeof(path)))
-        TEST_FAIL("H3 blocked by H1: %s is missing, ./build.sh did not make "
+        TEST_FAIL("H2 blocked by H1: %s is missing, ./build.sh did not make "
                   "the TypeScript example", path);
     snprintf(svc, sizeof(svc), "%s/dist/bin/service-ts", src);
     if (access(svc, X_OK) != 0)
-        TEST_FAIL("H3 FAIL: %s does not exist, build.sh did not make the "
+        TEST_FAIL("H2 FAIL: %s does not exist, build.sh did not make the "
                   "TypeScript service", svc);
+
+    TEST_STEP("Does the README state a fallback reply design");
+    readme_fallback = tsd_sh(src, "grep -qiE 'fallback' README.md "
+                             "ts/README.md web/service-ts/README.md 2>/dev/null",
+                             10, "/tmp/ts_sp_readme.log") == 0;
+    tsd_say("H2 README states a fallback design: %s",
+            readme_fallback ? "yes" : "no");
 
     TEST_STEP("Control: the logging peer records a connection, the closed "
               "port refuses");
     cpeer = start_peer(&cport, "/tmp/ts_sp_ctl_peer.log", 0);
     if (cpeer < 0 || cport == 0)
-        TEST_FAIL("H3 NOT SETTLED: the local peer did not start");
+        TEST_FAIL("H2 NOT SETTLED: the local peer did not start");
     {
         int fd = tsd_connect(cport);
 
         usleep(300000);
         seen = peer_seen("/tmp/ts_sp_ctl_peer.log", &first);
         if (fd < 0 || seen != 1)
-            tsd_bad("H3", "control peer", "the peer logged %d connection(s) "
+            tsd_bad("H2", "control peer", "the peer logged %d connection(s) "
                     "for one connect (want 1)", seen);
         if (fd >= 0)
         {
@@ -437,7 +541,7 @@ main(int argc, char **argv)
                                      1000, reply, sizeof(reply));
 
             if (n != 0)
-                tsd_bad("H3", "control peer", "the planted peer is not "
+                tsd_bad("H2", "control peer", "the planted peer is not "
                         "silent");
             close(fd);
         }
@@ -445,7 +549,7 @@ main(int argc, char **argv)
     kill(cpeer, SIGKILL);
     waitpid(cpeer, NULL, 0);
     if (tsd_connect(tsd_free_port()) >= 0)
-        tsd_bad("H3", "control refused", "a free port is not closed");
+        tsd_bad("H2", "control refused", "a free port is not closed");
 
     TEST_STEP("Control: the ring server of the example, own port, answers");
     ownport = tsd_free_port();
@@ -454,20 +558,20 @@ main(int argc, char **argv)
     snprintf(path, sizeof(path), "%s/ts", src);
     ringpid = tsd_spawn(path, cmd, "/tmp/ts_sp_ring.log");
     if (!tsd_wait_port(ownport, 10))
-        tsd_bad("H3", "ring server", "no listener on its own port %u",
+        tsd_bad("H2", "ring server", "no listener on its own port %u",
                 ownport);
     else if (tsd_exchange(ownport, VALID_REQ, sizeof(VALID_REQ) - 1, 5000,
                           reply, sizeof(reply)) <= 0 ||
              tsd_status(reply) != 200)
-        tsd_bad("H3", "ring server", "no 200 for a valid request, status "
+        tsd_bad("H2", "ring server", "no 200 for a valid request, status "
                 "%d", tsd_status(reply));
     else
-        tsd_say("H3 ring server (no upstream) answers 200 on its own port %u",
+        tsd_say("H2 ring server (no upstream) answers 200 on its own port %u",
                 ownport);
     tsd_stop(ringpid, SIGTERM, 10);
     if (kill(-ringpid, 0) == 0)
     {
-        tsd_bad("H3", "ring server", "a process is left");
+        tsd_bad("H2", "ring server", "a process is left");
         kill(-ringpid, SIGKILL);
     }
 
@@ -483,12 +587,13 @@ main(int argc, char **argv)
     tsd_sh(src, "grep -n 'Timeout' web/service-go/main.go | head -n 4", 10,
            "/tmp/ts_sp_go.log");
     tsd_head("/tmp/ts_sp_go.log", text, sizeof(text));
-    tsd_say("H3 info only (not a check): the timeout lines of %s around "
+    tsd_say("H2 info only (not a check): the timeout lines of %s around "
             "main.go:54 (Go service timeout gap): [%s]", path, text);
 
-    TSD_PASS("H3", "a silent, slow or refusing peer gives an answer within "
-             "15 s naming a timeout or a refused connection, the peer saw "
-             "the connection, no trace, no leftover process");
+    TSD_PASS("H2", "a silent, slow or refusing peer gives, within 15 s, a "
+             "non-200 status or an explicit error with no numeric fallback "
+             "result (or a documented fallback flag); the peer saw the "
+             "connection, no trace, no leftover process");
     TEST_SUCCESS;
 
 cleanup:

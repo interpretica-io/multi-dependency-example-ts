@@ -3,7 +3,7 @@
     <description>TypeScript example tests</description>
 
     <!-- @page mde-ts_example TypeScript Example Tests
-          @objective Settle H1 to H4 about the TypeScript example. Every test
+          @objective Settle H1 to H3 about the TypeScript example. Every test
                      that runs a command logs it with its working directory,
                      exit code, elapsed time and the whole of stdout and
                      stderr, and a failing verdict names the failing step.
@@ -11,8 +11,8 @@
           @par Test Groups:
           - @ref mde-ts_example-ts_build - Build (H1, H4)
           - @ref mde-ts_example-ts_run_guess - Same ring result as the other demos (H1)
-          - @ref mde-ts_example-ts_contract - Own contract (H3)
-          - @ref mde-ts_example-ts_robust - Endpoint variable, no hardcoded URL, silent peer (H4)
+          - @ref mde-ts_example-ts_contract - Own contract (H2)
+          - @ref mde-ts_example-ts_robust - Endpoint variable, no hardcoded URL, silent peer (H3)
     -->
 
     <author mailto="midair@localhost" />
@@ -84,11 +84,11 @@
         -->
         <run name="ts_run_guess">
             <script name="ts_run_guess">
-                <objective>[H1] Fails with "reference not built" when dist/bin/go-demo or dist/bin/cs-demo is missing. Runs every reference for 42 3, counts stage lines; a reference with fewer stages than the TypeScript demo is inconclusive. PASSES only when at least one full-ring reference exists and the TypeScript stage lines and final value equal it (program names removed); each reference, its stage count and final value are logged; references that disagree with each other are logged as a finding on the references.</objective>
+                <objective>[H1] Fails with "reference not built" when dist/bin/go-demo or dist/bin/cs-demo is missing. Runs every reference for 42 3 and logs each exit code and last 5 log lines. A libSystem or dlopen error fails the test (H1 is open because of the build, not inconclusive). A reference that stops short is inconclusive; a step fails when no reference ran all 4 stages. PASSES only when the TypeScript stage lines and final value equal those of a reference that ran all 4 stages; on a difference both values and the differing stage are printed.</objective>
             </script>
         </run>
 
-        <!-- @page mde-ts_example-ts_bad_input Bad input and hardcoded addresses (H2, H4)
+        <!-- @page mde-ts_example-ts_bad_input Unset or bad RING_HOST and RING_PORT, README, hardcoded addresses (H3)
               @objective Empty, non-numeric and very long input under a 10 s timeout, and a source scan for literal addresses.
 
               @par Scenario:
@@ -99,11 +99,11 @@
         -->
         <run name="ts_bad_input">
             <script name="ts_bad_input">
-                <objective>[H2 H4] H2: strict scan of ts/src and web/service-ts/src for literal IPv4 addresses, localhost and http(s):// (comment-only lines excluded and each listed), every hit printed as file:line or "scan: 0 hits", with a planted-literal control. H4: with RING_HOST and RING_PORT unset, one unset, or RING_PORT non-numeric or out of range, the HTTP variant, run.sh guess serve and service-ts exit non-zero within 2 s with one line, no trace, naming the variable; bad demo arguments exit non-zero in 10 s with one line and no trace.</objective>
+                <objective>[H3] Demo started directly (no listener started or awaited) with RING_HOST unset, RING_PORT unset and both bad: exit code 1, one error line, no trace, under 2 s each. The README names RING_HOST and RING_PORT and does not contain 127.0.0.1:9100 (planted-README control). Strict scan of ts/src and web/service-ts/src for literal IPv4 addresses, localhost and http(s):// (comment-only lines excluded and each listed), every hit printed as file:line or "scan: 0 hits", with a planted-literal control. With RING_HOST and RING_PORT unset, one unset, or RING_PORT non-numeric or out of range, the HTTP variant, run.sh guess serve and service-ts exit with code 1 within 2 s with one line, no trace, naming the variable; bad demo arguments exit non-zero in 10 s with one line and no trace.</objective>
             </script>
         </run>
 
-        <!-- @page mde-ts_example-ts_slow_peer Silent, refused and slow peer (H3)
+        <!-- @page mde-ts_example-ts_slow_peer Silent, refused and slow peer (H2)
               @objective A peer that accepts and never replies, and a closed port; the TypeScript service answers or exits with a clear error within 15 s.
 
               @par Scenario:
@@ -113,11 +113,11 @@
         -->
         <run name="ts_slow_peer">
             <script name="ts_slow_peer">
-                <objective>[H3] service-ts on its own free port from the OS (RING_HOST, RING_PORT) with a peer on another port from the OS as upstream (SERVICE_TS_UPSTREAM): (a) accepts and never replies, (b) refuses, (c) replies after 20 s. Answer or exit within 15 s naming a timeout ((a), (c)) or a refused connection ((b)); the peer log must show an accepted connection before the answer, else the reply was input rejection and the case fails; FAIL on a trace or a leftover process. The Go timeout gap (main.go:54) is an information line.</objective>
+                <objective>[H2] service-ts on its own free port from the OS (RING_HOST, RING_PORT) with a peer on another port from the OS as upstream (SERVICE_TS_UPSTREAM): (a) accepts and never replies, (b) refuses, (c) replies after 20 s. The status and body of each answer are checked within 15 s: pass when the status is not 200, or the body has an explicit error field and no numeric fallback presented as a result (a 200 with a fallback flag only if the README states that design); the error names a timeout ((a), (c)) or a refused connection ((b)); the peer log must show an accepted connection before the answer, else the reply was input rejection and the case fails; FAIL on a trace or a leftover process. The Go timeout gap (main.go:54) is an information line.</objective>
             </script>
         </run>
 
-        <!-- @page mde-ts_example-ts_contract Contract (H3)
+        <!-- @page mde-ts_example-ts_contract Contract (H2)
               @objective Check the reply of the TypeScript example against its own documented contract.
 
               @par Scenario:
@@ -130,11 +130,11 @@
         -->
         <run name="ts_contract">
             <script name="ts_contract">
-                <objective>[H3] TypeScript service against its own documented contract for four inputs: 200 and a finite value (and the README formula if there is one) for a valid one, 400 with an error: line for empty, non-numeric and oversized input. The Go value is logged as information only.</objective>
+                <objective>[H2] TypeScript service against its own documented contract for four inputs: 200 and a finite value (and the README formula if there is one) for a valid one, 400 with an error: line for empty, non-numeric and oversized input. The Go value is logged as information only.</objective>
             </script>
         </run>
 
-        <!-- @page mde-ts_example-ts_robust Endpoint Variable and a Silent Peer (H4)
+        <!-- @page mde-ts_example-ts_robust Endpoint Variable and a Silent Peer (H3)
               @objective Three checks with their own messages, plus bad input.
 
               @par Scenario:
@@ -145,7 +145,7 @@
         -->
         <run name="ts_robust">
             <script name="ts_robust">
-                <objective>[H4] After ts_build passed (else blocked by H2): node dist/main.js with EXAMPLE_PORT=9101 EXAMPLE_HOST=127.0.0.1 listens on 127.0.0.1:9101 and not 0.0.0.0 (tapi_netexpose); with both unset on 127.0.0.1:9100; empty, non-numeric, 100000-character and hostile input get 4xx replies and the process lives; SIGTERM and SIGINT give exit code 0.</objective>
+                <objective>[H3] After ts_build passed (else blocked by H1): the process start, first output and exit times and what the test waits for are logged, so the 15 s is placed in the test or the service; node dist/main.js with EXAMPLE_PORT=9101 EXAMPLE_HOST=127.0.0.1 listens on 127.0.0.1:9101 and not 0.0.0.0 (tapi_netexpose); with both unset on 127.0.0.1:9100; empty, non-numeric, 100000-character and hostile input get 4xx replies and the process lives; SIGTERM and SIGINT give exit code 0.</objective>
             </script>
         </run>
 
@@ -164,7 +164,7 @@
             </script>
         </run>
 
-        <!-- @page mde-ts_example-ts_h2_build_guess Build and run (H2)
+        <!-- @page mde-ts_example-ts_h2_build_guess Build and run (H1)
               @objective build.sh exits 0 and compiles the JavaScript, then scripts/run.sh guess starts without a crash within 30 s.
 
               @par Scenario:
@@ -174,11 +174,11 @@
         -->
         <run name="ts_h2_build_guess">
             <script name="ts_h2_build_guess">
-                <objective>[H2] Verdict 'H2 guess alive' after scripts/run.sh guess for 30 s; PASS when still running or exit 0.</objective>
+                <objective>[H1] scripts/run.sh guess for 30 s must not fail early and must print a final ring value; the final value of guess 42 3 must equal that of the first reference that ran all 4 stages (planted-output control).</objective>
             </script>
         </run>
 
-        <!-- @page mde-ts_example-ts_h4_port_badinput Configured port and bad input (H4)
+        <!-- @page mde-ts_example-ts_h4_port_badinput Configured port and bad input (H3)
               @objective The example listens only on the configured address and port, answers empty and bad input with an error in 5 s and exits 0 on a normal stop.
 
               @par Scenario:
@@ -190,7 +190,7 @@
         -->
         <run name="ts_h4_port_badinput">
             <script name="ts_h4_port_badinput">
-                <objective>[H4] After ts_build passed (else blocked by H2): the configured and default listen address and port checked with tapi_netexpose, error replies to empty, non-numeric and 100000-character input with a live process after each, exit code 0 on SIGTERM and on SIGINT.</objective>
+                <objective>[H3] After ts_build passed (else blocked by H1): start, first output and exit times logged; the configured and default listen address and port checked with tapi_netexpose, error replies to empty, non-numeric and 100000-character input with a live process after each, exit code 0 on SIGTERM and on SIGINT.</objective>
             </script>
         </run>
     </session>

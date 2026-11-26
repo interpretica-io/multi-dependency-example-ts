@@ -1,15 +1,20 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief ts_example: ts_bad_input, a strict scan of the TypeScript source for
- *        literal addresses (settles H2) and the exit of the TypeScript
- *        programs when RING_HOST or RING_PORT is unset or bad (settles H4)
+ * @brief ts_example: ts_bad_input, the TypeScript demo exits at once with one
+ *        error line when RING_HOST or RING_PORT is unset or bad, the README
+ *        matches, and the source holds no literal address (settles H3)
  *
- * H2: searches ts/src and web/service-ts/src for a literal IPv4 address,
+ * The demo is started directly (no listener is started first and none is
+ * waited for) with RING_HOST unset, RING_PORT unset and both bad. Each must
+ * exit with code 1 in under 2 s with one error line and no stack trace. A
+ * text check requires the README to name RING_HOST and RING_PORT and not to
+ * contain 127.0.0.1:9100.
+ * Scan: searches ts/src and web/service-ts/src for a literal IPv4 address,
  * "localhost" and "http://" or "https://". A line that holds only a comment
  * is excluded and the test logs each such exclusion. Every hit is printed as
  * file:line, or "scan: 0 hits"; any hit fails.
- * H4: runs the HTTP variant (node dist/main.js and run.sh guess serve) and
+ * Exit cases: runs the HTTP variant (node dist/main.js and run.sh guess serve) and
  * service-ts with RING_HOST and RING_PORT unset, with one of them unset and
  * with a non-numeric or out-of-range RING_PORT. Each run must exit
  * within 2 s, non-zero, with exactly one output line and no stack trace and
@@ -70,20 +75,20 @@ one_case(const char *name, const char *prep, const char *arg_expr)
     tsd_clean(text, shown, sizeof(shown));
     snprintf(word, sizeof(word), "%s", name);
     if (code == 124 || code == 137 || code == 143 || tsd_ms() - t0 > 10500)
-        tsd_bad("H4", word, "killed by the 10 s timeout (exit %d): [%s]",
+        tsd_bad("H3", word, "killed by the 10 s timeout (exit %d): [%s]",
                 code, shown);
     else if (code == 0)
-        tsd_bad("H4", word, "exit 0 on bad input: [%s]", shown);
+        tsd_bad("H3", word, "exit 0 on bad input: [%s]", shown);
     else if (code > 128)
-        tsd_bad("H4", word, "killed by signal %d: [%s]", code - 128, shown);
+        tsd_bad("H3", word, "killed by signal %d: [%s]", code - 128, shown);
     else if (has_trace(text))
-        tsd_bad("H4", word, "prints a stack trace, exit %d: [%s]", code,
+        tsd_bad("H3", word, "prints a stack trace, exit %d: [%s]", code,
                 shown);
     else if (n == 0 || n > MAX_ERR_BYTES)
-        tsd_bad("H4", word, "message is %zu bytes (want 1 to %d), exit %d: "
+        tsd_bad("H3", word, "message is %zu bytes (want 1 to %d), exit %d: "
                 "[%s]", n, MAX_ERR_BYTES, code, shown);
     else
-        tsd_say("H4 %s ok: exit=%d after %lld ms, message [%s]", word, code,
+        tsd_say("H3 %s ok: exit=%d after %lld ms, message [%s]", word, code,
                 tsd_ms() - t0, shown);
 }
 
@@ -179,8 +184,32 @@ scan_source(const char *root, char *first, size_t fsize)
 }
 
 /**
+ * The README of the project names RING_HOST and RING_PORT and no README
+ * holds the default 127.0.0.1:9100. Returns true when so; @p why gets the
+ * reason otherwise.
+ */
+static bool
+readme_ok(const char *root, char *why, size_t size)
+{
+    int code = tsd_sh(root,
+        "[ -s README.md ] || { echo 'README.md is missing or empty'; exit 1; }; "
+        "grep -q RING_HOST README.md || { echo 'README.md does not name "
+        "RING_HOST'; exit 1; }; "
+        "grep -q RING_PORT README.md || { echo 'README.md does not name "
+        "RING_PORT'; exit 1; }; "
+        "f=$(grep -lF '127.0.0.1:9100' README.md ts/README.md "
+        "web/service-ts/README.md 2>/dev/null); "
+        "[ -z \"$f\" ] || { echo \"default 127.0.0.1:9100 stated in $f\"; "
+        "exit 1; }", 10, "/tmp/ts_bi_readme.log");
+
+    tsd_head("/tmp/ts_bi_readme.log", why, size);
+    why[strcspn(why, "\n")] = '\0';
+    return code == 0;
+}
+
+/**
  * Run the TypeScript program @p cmd (from @p cwd) with the environment
- * @p envp in front, and check H4: exit within 2 s, non-zero, one line, no
+ * @p envp in front, and check H3: exit within 2 s, non-zero, one line, no
  * trace, and @p must (a variable name) in the line.
  */
 static void
@@ -205,26 +234,28 @@ env_case(const char *name, const char *cwd, const char *envp, const char *cmd,
     tsd_clean(text, shown, sizeof(shown));
     lines = count_lines(text);
     if (code == 124 || code == 137 || code == 143)
-        tsd_bad("H4", name, "no exit before the 10 s limit (exit %d, %lld "
+        tsd_bad("H3", name, "no exit before the 10 s limit (exit %d, %lld "
                 "ms): [%s]", code, ms, shown);
     else if (ms > 2000)
-        tsd_bad("H4", name, "took %lld ms to exit (limit 2000), exit %d: "
+        tsd_bad("H3", name, "took %lld ms to exit (limit 2000), exit %d: "
                 "[%s]", ms, code, shown);
     else if (code == 0)
-        tsd_bad("H4", name, "exit 0 with a missing or bad variable: [%s]",
+        tsd_bad("H3", name, "exit 0 with a missing or bad variable: [%s]",
                 shown);
     else if (code > 128)
-        tsd_bad("H4", name, "killed by signal %d: [%s]", code - 128, shown);
+        tsd_bad("H3", name, "killed by signal %d: [%s]", code - 128, shown);
+    else if (code != 1)
+        tsd_bad("H3", name, "exit code %d, want 1: [%s]", code, shown);
     else if (has_trace(text))
-        tsd_bad("H4", name, "prints a stack trace, exit %d: [%s]", code,
+        tsd_bad("H3", name, "prints a stack trace, exit %d: [%s]", code,
                 shown);
     else if (lines != 1)
-        tsd_bad("H4", name, "%d output lines (want 1), exit %d: [%s]", lines,
+        tsd_bad("H3", name, "%d output lines (want 1), exit %d: [%s]", lines,
                 code, shown);
     else if (must != NULL && strstr(text, must) == NULL)
-        tsd_bad("H4", name, "the line does not name %s: [%s]", must, shown);
+        tsd_bad("H3", name, "the line does not name %s: [%s]", must, shown);
     else
-        tsd_say("H4 %s ok: exit=%d after %lld ms, one line [%s]", name, code,
+        tsd_say("H3 %s ok: exit=%d after %lld ms, one line [%s]", name, code,
                 ms, shown);
 }
 
@@ -245,10 +276,10 @@ main(int argc, char **argv)
     TEST_STEP("Control: the trace detector sees a planted trace");
     if (!has_trace("Error: boom\n    at f (x.js:1:1)\n") ||
         has_trace("ts-demo: error: usage: demo [value] [hops]\n"))
-        TEST_FAIL("H4 NOT SETTLED: the stack trace detector is wrong");
+        TEST_FAIL("H3 NOT SETTLED: the stack trace detector is wrong");
     if (count_lines("a\nb\n") != 2 || count_lines("one\n") != 1 ||
         count_lines("") != 0 || count_lines("one") != 1)
-        TEST_FAIL("H4 NOT SETTLED: the line counter is wrong");
+        TEST_FAIL("H3 NOT SETTLED: the line counter is wrong");
 
     TEST_STEP("Control: the address scan sees planted literals");
     system("rm -rf /tmp/ts_bi_plant; mkdir -p /tmp/ts_bi_plant/ts/src");
@@ -261,90 +292,128 @@ main(int argc, char **argv)
     if (hits != 4 || strstr(first, "a.ts") == NULL ||
         strstr(first, "b.ts") == NULL || strstr(first, "d.ts") == NULL ||
         strstr(first, "e.ts") == NULL || strstr(first, "c.ts") != NULL)
-        TEST_FAIL("H2 NOT SETTLED: the scan found %d hit(s) in the planted "
+        TEST_FAIL("H3 NOT SETTLED: the scan found %d hit(s) in the planted "
                   "files, want 4 (a.ts b.ts d.ts e.ts, not the comment in "
                   "c.ts): [%.200s]", hits, first);
-    tsd_say("H2 control: the scan sees every planted literal and excludes "
+    tsd_say("H3 control: the scan sees every planted literal and excludes "
             "only the listed comment");
+
+    TEST_STEP("Control: the README text check sees planted READMEs");
+    {
+        char why[200];
+
+        system("rm -rf /tmp/ts_bi_rd; mkdir -p /tmp/ts_bi_rd");
+        tsd_put("/tmp/ts_bi_rd/README.md", "Set RING_HOST and RING_PORT.\n");
+        if (!readme_ok("/tmp/ts_bi_rd", why, sizeof(why)))
+            TEST_FAIL("H3 NOT SETTLED: a good planted README was rejected: "
+                      "[%s]", why);
+        tsd_put("/tmp/ts_bi_rd/README.md", "RING_HOST RING_PORT default "
+                "127.0.0.1:9100\n");
+        if (readme_ok("/tmp/ts_bi_rd", why, sizeof(why)))
+            TEST_FAIL("H3 NOT SETTLED: a README with 127.0.0.1:9100 was "
+                      "accepted");
+        tsd_put("/tmp/ts_bi_rd/README.md", "Set RING_HOST only.\n");
+        if (readme_ok("/tmp/ts_bi_rd", why, sizeof(why)))
+            TEST_FAIL("H3 NOT SETTLED: a README without RING_PORT was "
+                      "accepted");
+        tsd_say("H3 control: planted READMEs are judged as expected");
+    }
 
     TEST_STEP("The project root and the build");
     if (src[0] == '\0' || access(src, X_OK) != 0)
-        TEST_FAIL("H4 FAIL: TE_TS_MDE_SRC is [%s], not a directory", src);
+        TEST_FAIL("H3 FAIL: TE_TS_MDE_SRC is [%s], not a directory", src);
 
-    TEST_STEP("H2: search the TypeScript source for a literal address");
+    TEST_STEP("H3: search the TypeScript source for a literal address");
     hits = scan_source(src, first, sizeof(first));
     if (hits > 0)
-        tsd_bad("H2", "address", "%d literal IPv4 address, localhost or URL "
+        tsd_bad("H3", "address", "%d literal IPv4 address, localhost or URL "
                 "hit(s): %s", hits, first);
     else if (hits < 0)
-        tsd_bad("H2", "address", "the scan could not run in %s", src);
+        tsd_bad("H3", "address", "the scan could not run in %s", src);
     else
-        tsd_say("H2 address ok: scan: 0 hits");
+        tsd_say("H3 address ok: scan: 0 hits");
 
-    TEST_STEP("H4: the build");
+    TEST_STEP("H3: the build");
     if (!tsd_have_main(out, sizeof(out)))
-        TEST_FAIL("H4 blocked by H1: %s is missing, ./build.sh did not make "
+        TEST_FAIL("H3 blocked by H1: %s is missing, ./build.sh did not make "
                   "the TypeScript example", out);
 
     snprintf(ts, sizeof(ts), "%s/ts", src);
     snprintf(svc, sizeof(svc), "%s/dist/bin/service-ts", src);
     port = tsd_free_port();
 
-    TEST_STEP("H4: HTTP variant, RING_HOST and RING_PORT unset");
+    TEST_STEP("H3: the README names RING_HOST and RING_PORT, no 127.0.0.1:9100");
+    if (!readme_ok(src, out, 300))
+        tsd_bad("H3", "README", "%s", out);
+    else
+        tsd_say("H3 README names RING_HOST and RING_PORT and states no "
+                "127.0.0.1:9100 default");
+
+    TEST_STEP("H3: demo started directly, RING_HOST unset, exit time");
+    env_case("direct_host_unset", ts, "env -u RING_HOST RING_PORT=9",
+             "node dist/main.js", "RING_HOST");
+    TEST_STEP("H3: demo started directly, RING_PORT unset, exit time");
+    env_case("direct_port_unset", ts, "env -u RING_PORT RING_HOST=127.0.0.1",
+             "node dist/main.js", "RING_PORT");
+    TEST_STEP("H3: demo started directly, both bad, exit time");
+    env_case("direct_both_bad", ts, "env RING_HOST= RING_PORT=abc",
+             "node dist/main.js", "RING_");
+
+    TEST_STEP("H3: HTTP variant, RING_HOST and RING_PORT unset");
     env_case("main_both_unset", ts, "env -u RING_HOST -u RING_PORT",
              "node dist/main.js", "RING_");
-    TEST_STEP("H4: HTTP variant, RING_HOST unset only");
+    TEST_STEP("H3: HTTP variant, RING_HOST unset only");
     snprintf(envp, sizeof(envp), "env -u RING_HOST RING_PORT=%u", port);
     env_case("main_host_unset", ts, envp, "node dist/main.js", "RING_HOST");
-    TEST_STEP("H4: HTTP variant, RING_PORT unset only");
+    TEST_STEP("H3: HTTP variant, RING_PORT unset only");
     env_case("main_port_unset", ts, "env -u RING_PORT RING_HOST=127.0.0.1",
              "node dist/main.js", "RING_PORT");
-    TEST_STEP("H4: HTTP variant, RING_PORT not a number");
+    TEST_STEP("H3: HTTP variant, RING_PORT not a number");
     env_case("main_port_abc", ts, "env RING_HOST=127.0.0.1 RING_PORT=abc",
              "node dist/main.js", "RING_PORT");
-    TEST_STEP("H4: HTTP variant, RING_PORT out of range");
+    TEST_STEP("H3: HTTP variant, RING_PORT out of range");
     env_case("main_port_big", ts, "env RING_HOST=127.0.0.1 RING_PORT=70000",
              "node dist/main.js", "RING_PORT");
 
-    TEST_STEP("H4: run.sh guess serve, RING_HOST and RING_PORT unset");
+    TEST_STEP("H3: run.sh guess serve, RING_HOST and RING_PORT unset");
     env_case("runsh_both_unset", src, "env -u RING_HOST -u RING_PORT",
              "./scripts/run.sh guess serve", "RING_");
-    TEST_STEP("H4: run.sh guess serve, RING_HOST unset only");
+    TEST_STEP("H3: run.sh guess serve, RING_HOST unset only");
     snprintf(envp, sizeof(envp), "env -u RING_HOST RING_PORT=%u", port);
     env_case("runsh_host_unset", src, envp, "./scripts/run.sh guess serve",
              "RING_HOST");
 
     if (access(svc, X_OK) == 0)
     {
-        TEST_STEP("H4: service-ts, RING_HOST and RING_PORT unset");
+        TEST_STEP("H3: service-ts, RING_HOST and RING_PORT unset");
         env_case("svc_both_unset", src, "env -u RING_HOST -u RING_PORT", svc,
                  "RING_");
-        TEST_STEP("H4: service-ts, RING_HOST unset only");
+        TEST_STEP("H3: service-ts, RING_HOST unset only");
         snprintf(envp, sizeof(envp), "env -u RING_HOST RING_PORT=%u", port);
         env_case("svc_host_unset", src, envp, svc, "RING_HOST");
-        TEST_STEP("H4: service-ts, RING_PORT unset only");
+        TEST_STEP("H3: service-ts, RING_PORT unset only");
         env_case("svc_port_unset", src, "env -u RING_PORT RING_HOST=127.0.0.1",
                  svc, "RING_PORT");
-        TEST_STEP("H4: service-ts, RING_PORT not a number");
+        TEST_STEP("H3: service-ts, RING_PORT not a number");
         env_case("svc_port_abc", src, "env RING_HOST=127.0.0.1 RING_PORT=abc",
                  svc, "RING_PORT");
     }
     else
-        tsd_bad("H4", "service-ts", "%s does not exist: build.sh did not "
+        tsd_bad("H3", "service-ts", "%s does not exist: build.sh did not "
                 "make the TypeScript web node", svc);
 
-    TEST_STEP("H4: what the documentation says about a default");
+    TEST_STEP("H3: what the documentation says about a default");
     tsd_sh(src, "grep -n -e 9100 -e 'RING_HOST' README.md | head -n 8", 10,
            "/tmp/ts_bi_doc.log");
     tsd_head("/tmp/ts_bi_doc.log", out, 500);
-    tsd_say("H4 info: README lines on RING_HOST and port 9100: [%s]", out);
+    tsd_say("H3 info: README lines on RING_HOST and port 9100: [%s]", out);
     tsd_sh(src, "env -u RING_HOST -u RING_PORT ./scripts/run.sh guess 42 3 "
            ">/dev/null 2>&1; echo demo exit $?", 30, "/tmp/ts_bi_demo.log");
     tsd_head("/tmp/ts_bi_demo.log", out, 100);
-    tsd_say("H4 info: the demo itself, with both unset, %s (it does not "
+    tsd_say("H3 info: the demo itself, with both unset, %s (it does not "
             "read them)", out);
 
-    TEST_STEP("H4: the demo with bad arguments");
+    TEST_STEP("H3: the demo with bad arguments");
     one_case("empty", "", "''");
     one_case("nonnumeric", "", "abc");
     one_case("long_text", "A=$(head -c 100000 /dev/zero | tr '\\0' a);",
@@ -352,7 +421,7 @@ main(int argc, char **argv)
     one_case("long_digits", "A=$(head -c 100000 /dev/zero | tr '\\0' 9);",
              "\"$A\" 3");
 
-    TSD_PASS("H2 H4", "scan: 0 hits in the TypeScript source; an unset or "
+    TSD_PASS("H3", "scan: 0 hits in the TypeScript source; an unset or "
              "bad RING_HOST or RING_PORT exits within 2 s with one line and "
              "no trace");
     TEST_SUCCESS;

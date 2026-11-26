@@ -1323,7 +1323,7 @@
               <notes/>
               <results>
                 <result value="PASSED">
-                  <verdict>H1 PASS: the TypeScript stage lines and final value equal a full-ring reference</verdict>
+                  <verdict>H1 PASS: the TypeScript stage lines and final value equal a reference that ran all stages</verdict>
                 </result>
               </results>
             </iter>
@@ -1335,7 +1335,7 @@
               <notes/>
               <results>
                 <result value="PASSED">
-                  <verdict>H2 H4 PASS: scan: 0 hits in the TypeScript source; an unset or bad RING_HOST or RING_PORT exits within 2 s with one line and no trace</verdict>
+                  <verdict>H3 PASS: scan: 0 hits in the TypeScript source; an unset or bad RING_HOST or RING_PORT exits with code 1 within 2 s with one line and no trace; the README matches</verdict>
                 </result>
               </results>
             </iter>
@@ -1347,7 +1347,7 @@
               <notes/>
               <results>
                 <result value="PASSED">
-                  <verdict>H3 PASS: the four inputs follow the documented contract</verdict>
+                  <verdict>H2 PASS: the four inputs follow the documented contract</verdict>
                 </result>
               </results>
             </iter>
@@ -1359,7 +1359,7 @@
               <notes/>
               <results>
                 <result value="PASSED">
-                  <verdict>H3 PASS: a silent, slow or refusing peer gives an answer within 15 s naming a timeout or a refused connection, the peer saw the connection, no trace, no leftover process</verdict>
+                  <verdict>H2 PASS: a silent, slow or refusing peer gives, within 15 s, a non-200 status or an explicit error with no numeric fallback result (or a documented fallback flag); the peer saw the connection, no trace, no leftover process</verdict>
                 </result>
               </results>
             </iter>
@@ -1371,7 +1371,7 @@
               <notes/>
               <results>
                 <result value="PASSED">
-                  <verdict>H4 PASS: listen address, bad input and signal exit as designed</verdict>
+                  <verdict>H3 PASS: listen address, bad input and signal exit as designed</verdict>
                 </result>
               </results>
             </iter>
@@ -1395,7 +1395,7 @@
               <notes/>
               <results>
                 <result value="PASSED">
-                  <verdict>H2 PASS: run.sh guess ended cleanly or was still running</verdict>
+                  <verdict>H1 PASS: run.sh guess printed a final ring value equal to the reference ring value</verdict>
                 </result>
               </results>
             </iter>
@@ -1407,7 +1407,7 @@
               <notes/>
               <results>
                 <result value="PASSED">
-                  <verdict>H4 PASS: listen address, bad input and signal exit as designed</verdict>
+                  <verdict>H3 PASS: listen address, bad input and signal exit as designed</verdict>
                 </result>
               </results>
             </iter>

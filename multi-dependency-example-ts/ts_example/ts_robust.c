@@ -1,10 +1,10 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
- * @brief ts_example: ts_robust, hostile input on top of the H4 checks, exit
- *        code (settles H4)
+ * @brief ts_example: ts_robust, hostile input on top of the H3 checks, exit
+ *        code (settles H3)
  *
- * Adds raw garbage, a bad method, a path walk, a huge hop count and a
+ * Logs the process start, first output line and exit time of each run and what the test waits for, so a delay is placed in the test or in the service. Adds raw garbage, a bad method, a path walk, a huge hop count and a
  * silent connection to every run.
  *
  * Starts node dist/main.js with EXAMPLE_PORT=9101 and EXAMPLE_HOST=
@@ -27,10 +27,10 @@ int
 main(int argc, char **argv)
 {
     TEST_START;
-    tsd_say("H4 start");
-    if (tsd_build_gate("H4"))
-        tsd_h4_scenario("H4", true);
-    TSD_PASS("H4", "listen address, bad input and signal exit as designed");
+    tsd_say("H3 start");
+    if (tsd_build_gate("H3"))
+        tsd_h4_scenario("H3", true);
+    TSD_PASS("H3", "listen address, bad input and signal exit as designed");
     TEST_SUCCESS;
 
 cleanup:

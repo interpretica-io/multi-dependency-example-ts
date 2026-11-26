@@ -2,8 +2,10 @@
 /* Copyright (C) 2026 midair <midair@localhost> */
 /** @file
  * @brief ts_example: ts_h4_port_badinput, address, port, bad input, exit
- *        code (settles H4)
+ *        code (settles H3)
  *
+ * Logs the process start, first output and exit times and what the test
+ * waits for (a listener or an exit), to place any delay on a side.
  * Starts node dist/main.js with EXAMPLE_PORT=9101 and EXAMPLE_HOST=
  * 127.0.0.1 and requires, with tapi_netexpose, that it listens on
  * 127.0.0.1:9101 only; then with both unset on 127.0.0.1:9100. Empty,
@@ -22,10 +24,10 @@ int
 main(int argc, char **argv)
 {
     TEST_START;
-    tsd_say("H4 start");
-    if (tsd_build_gate("H4"))
-        tsd_h4_scenario("H4", false);
-    TSD_PASS("H4", "listen address, bad input and signal exit as designed");
+    tsd_say("H3 start");
+    if (tsd_build_gate("H3"))
+        tsd_h4_scenario("H3", false);
+    TSD_PASS("H3", "listen address, bad input and signal exit as designed");
     TEST_SUCCESS;
 
 cleanup:
