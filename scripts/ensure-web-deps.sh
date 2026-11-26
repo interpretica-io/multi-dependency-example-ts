@@ -239,10 +239,23 @@ if want ts ; then
     fi
     command -v tsc >/dev/null 2>&1 || soft_die "tsc is still missing after the install"
     command -v ts-node >/dev/null 2>&1 || soft_die "ts-node is still missing after the install"
+    # The probe: ts-node first; its real error is printed. On a node where
+    # ts-node itself is broken (node 22 with an old ts-node), tsc then node
+    # on the compiled file is the check that matters for the example, which
+    # is built with tsc.
     TT="$(mktemp -d /tmp/mde-ts.XXXXXX)"
     echo 'const n: number = 41; console.log(n + 1);' > "${TT}/t.ts"
-    [ "$(cd "${TT}" && ts-node t.ts 2>&1)" = "42" ] ||
-        { rm -rf "${TT}"; soft_die "ts-node cannot run a trivial TypeScript file (node $(node --version 2>&1))"; }
+    TSN_OUT="$(cd "${TT}" && ts-node t.ts 2>&1)"
+    if [ "${TSN_OUT}" != "42" ] ; then
+        echo "ensure-web-deps: ts-node failed on a trivial file (node $(node --version 2>&1), ts-node $(ts-node --version 2>&1 | head -n 1), tsc $(tsc --version 2>&1 | head -n 1)): $(echo "${TSN_OUT}" | head -n 15 | tr '\n' '|')" >&2
+        TSC_OUT="$(cd "${TT}" && tsc --target es2020 --module commonjs --outDir out t.ts 2>&1 && node out/t.js 2>&1)"
+        if [ "${TSC_OUT}" = "42" ] ; then
+            echo "ensure-web-deps: WARNING: ts-node is broken on node $(node --version 2>&1) but tsc followed by node works; the example is built with tsc"
+        else
+            rm -rf "${TT}"
+            soft_die "neither ts-node nor tsc then node can run a trivial TypeScript file (node $(node --version 2>&1)); ts-node said: $(echo "${TSN_OUT}" | head -n 8 | tr '\n' '|') tsc/node said: $(echo "${TSC_OUT}" | head -n 8 | tr '\n' '|')"
+        fi
+    fi
     rm -rf "${TT}"
 fi
 
