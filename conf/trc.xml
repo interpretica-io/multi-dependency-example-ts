@@ -1430,6 +1430,46 @@
               </results>
             </iter>
           </test>
+          <test name="ts_demo_runs" type="script">
+            <objective/>
+            <notes/>
+            <iter result="PASSED">
+              <notes/>
+              <results>
+                <result value="PASSED"/>
+              </results>
+            </iter>
+          </test>
+          <test name="ts_env_failfast" type="script">
+            <objective/>
+            <notes/>
+            <iter result="PASSED">
+              <notes/>
+              <results>
+                <result value="PASSED"/>
+              </results>
+            </iter>
+          </test>
+          <test name="ts_ring_format" type="script">
+            <objective/>
+            <notes/>
+            <iter result="PASSED">
+              <notes/>
+              <results>
+                <result value="PASSED"/>
+              </results>
+            </iter>
+          </test>
+          <test name="ts_server_robust" type="script">
+            <objective/>
+            <notes/>
+            <iter result="PASSED">
+              <notes/>
+              <results>
+                <result value="PASSED"/>
+              </results>
+            </iter>
+          </test>
           <test name="ts_service_contract" type="script">
             <objective/>
             <notes/>

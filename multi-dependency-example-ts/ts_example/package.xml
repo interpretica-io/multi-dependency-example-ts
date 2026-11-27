@@ -20,6 +20,10 @@
           - @ref mde-ts_example-ts_guess_bad_input - Bad input is refused (H2)
           - @ref mde-ts_example-ts_serve_http - guess serve over HTTP (H3)
           - @ref mde-ts_example-service_ts_upstream_errors - service-ts upstream errors (H4)
+          - @ref mde-ts_example-ts_demo_runs - Demo runs (H1)
+          - @ref mde-ts_example-ts_env_failfast - Missing variable (H2)
+          - @ref mde-ts_example-ts_ring_format - Same format as Go (H3)
+          - @ref mde-ts_example-ts_server_robust - Malformed request, SIGTERM (H4)
     -->
 
     <author mailto="midair@localhost" />
@@ -294,6 +298,41 @@
         <run name="service_ts_upstream_errors">
             <script name="service_ts_upstream_errors">
                 <objective>[H4] service-ts answers 502 with a JSON error field for a closed upstream and 504 after about 5 s for a silent one; the 504 case is skipped without python3.</objective>
+            </script>
+        </run>
+        <!-- @page mde-ts_example-ts_demo_runs Demo runs from the run script (H1)
+              @objective `./scripts/run.sh guess` exits 0 and prints a result; the output is recorded as an artifact.
+        -->
+        <run name="ts_demo_runs">
+            <script name="ts_demo_runs">
+                <objective>[H1] `./scripts/run.sh guess` as a job exits 0 with a non-empty output, recorded as an artifact; missing node skips.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-ts_example-ts_env_failfast Missing ring variable fails at once (H2)
+              @objective `guess serve` with RING_HOST or RING_PORT unset exits 1 with an 'is not set' line; with both set it does not exit 1 at once.
+        -->
+        <run name="ts_env_failfast">
+            <script name="ts_env_failfast">
+                <objective>[H2] `guess serve` with RING_HOST unset and with RING_PORT unset exits 1 with an 'is not set' line; a run with both set does not exit 1 at once (control).</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-ts_example-ts_ring_format ts and Go answer GET /ring alike (H3)
+              @objective Field names and defaults (1.0, 6) of GET /ring on the ts server and service-go are the same.
+        -->
+        <run name="ts_ring_format">
+            <script name="ts_ring_format">
+                <objective>[H3] GET /ring with no query on `guess serve` and on service-go with tapi_http: both show hops= stage lines and a value= line, defaults hops 6 and value 1.0; skipped when service-go is not built.</objective>
+            </script>
+        </run>
+
+        <!-- @page mde-ts_example-ts_server_robust Malformed request and SIGTERM (H4)
+              @objective A malformed request gets 400 and the server lives; SIGTERM gives exit 0.
+        -->
+        <run name="ts_server_robust">
+            <script name="ts_server_robust">
+                <objective>[H4] A malformed request line gets 400 and the ts server still answers; tapi_netexpose finds it on loopback only (a finding fails); SIGTERM gives exit 0.</objective>
             </script>
         </run>
     </session>

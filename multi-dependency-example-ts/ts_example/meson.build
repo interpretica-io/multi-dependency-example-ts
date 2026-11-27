@@ -24,6 +24,10 @@ tests = [
     'ts_guess_bad_input',
     'ts_serve_http',
     'service_ts_upstream_errors',
+    'ts_demo_runs',
+    'ts_env_failfast',
+    'ts_ring_format',
+    'ts_server_robust',
 ]
 
 foreach test : tests

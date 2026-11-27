@@ -61,6 +61,9 @@ missing_pkgs() {
     done | sort -u
 }
 
+# The toolchains (C, Go, Rust, .NET) are for the base and build components;
+# the ts, exposure, fuzz, browser and docker components need none of them.
+if want base || want build ; then
 PKGS="$(missing_pkgs | tr '\n' ' ')"
 if [ -n "${PKGS}" ] ; then
     echo "ensure-web-deps: installing ${PKGS}"
@@ -135,6 +138,7 @@ if ! have_dotnet9 ; then
     have_dotnet9 || soft_die "no .NET 9 SDK after the install (dotnet --list-sdks: $(dotnet --list-sdks 2>&1 | tr '\n' ' '))"
 fi
 
+fi
 export DEBIAN_FRONTEND=noninteractive
 
 if want exposure ; then
