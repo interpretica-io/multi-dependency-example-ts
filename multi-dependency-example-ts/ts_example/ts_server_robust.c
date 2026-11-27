@@ -53,7 +53,6 @@ main(int argc, char **argv)
     int                     code;
     int                     n_find = 0;
     bool                    seen = false;
-    te_errno                rc;
 
     TEST_START;
 
